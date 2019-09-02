@@ -1,0 +1,22 @@
+{
+  "name": "psql-ts",
+  "version": "0.0.1",
+  "description": "Typed SQL queries in PostgreSQL",
+  "main": "index.js",
+  "repository": "https://github.com/akheron/psql-ts",
+  "author": "Petri Lehtinen <petri@digip.org>",
+  "license": "MIT",
+  "dependencies": {
+    "pg": "^7.12.1",
+    "ramda": "^0.26.1",
+    "typed-parser": "^0.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "^12.7.3",
+    "@types/pg": "^7.11.0",
+    "@types/ramda": "^0.26.21",
+    "prettier": "^1.18.2",
+    "ts-node": "^8.3.0",
+    "typescript": "^3.6.2"
+  }
+}
