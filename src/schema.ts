@@ -1,87 +1,75 @@
-import * as R from 'ramda'
-import { Pool } from 'pg'
+import { ClientBase } from 'pg'
 
-type Schema = {
-  tables: Map<string, Table>
-  types: Map<string, Enum>
-}
-
-type Table = {
+export type Table = {
   name: string
   columns: Column[]
 }
 
-type Column = {
+export type Column = {
   name: string
   nullable: boolean
   type: string
 }
 
-type Enum = {
+export type Enum = {
   name: string
   fields: string[]
 }
 
-export async function schema(connectionString: string): Promise<Schema> {
-  const client = new Pool({ connectionString })
+export type SchemaClient = ReturnType<typeof schemaClient>
 
-  const tables = await getTables(client)
-  const types = await getTypes(client)
-  client.end()
-
-  return { tables, types }
-}
-
-async function getTables(client: Pool): Promise<Map<string, Table>> {
-  const columns = (await client.query(
-    `
-SELECT table_name, column_name, is_nullable, udt_name
+export function schemaClient(pgClient: ClientBase) {
+  return {
+    async getTable(
+      schemaName: string,
+      tableName: string
+    ): Promise<Table | null> {
+      const result = await pgClient.query(
+        `
+SELECT column_name, is_nullable, udt_name
 FROM information_schema.columns
-WHERE table_schema = 'public'
-ORDER BY table_name
-`
-  )).rows as {
-    table_name: string
-    column_name: string
-    is_nullable: string
-    udt_name: string
-  }[]
-  return new Map(
-    R.groupWith(R.eqProps('table_name'), columns).map(rows => [
-      rows[0].table_name,
-      {
-        name: rows[0].table_name,
-        columns: rows.map(row => ({
-          name: row.column_name,
-          nullable: row.is_nullable === 'YES',
-          type: row.udt_name,
-        })),
-      },
-    ])
-  )
-}
-
-async function getTypes(client: Pool): Promise<Map<string, Enum>> {
-  const result = (await client.query(`
-SELECT oid, typname FROM pg_type WHERE typtype = 'e'
-`)).rows as {
-    oid: number
-    typname: string
-  }[]
-  return new Map(
-    await Promise.all(
-      result.map(
-        async (row): Promise<[string, Enum]> => [
-          row.typname,
-          {
-            name: row.typname,
-            fields: ((await client.query(
-              `SELECT enumlabel FROM pg_enum WHERE enumtypid = $1 ORDER BY enumsortorder`,
-              [row.oid]
-            )).rows as { enumlabel: string }[]).map(row => row.enumlabel),
-          },
-        ]
+WHERE table_schema = $1 AND table_name = $2
+`,
+        [schemaName, tableName]
       )
-    )
-  )
+      if (result.rowCount === 0) return null
+
+      const columns: {
+        column_name: string
+        is_nullable: string
+        udt_name: string
+      }[] = result.rows
+
+      return {
+        name: tableName,
+        columns: columns.map(col => ({
+          name: col.column_name,
+          nullable: col.is_nullable === 'YES',
+          type: col.udt_name,
+        })),
+      }
+    },
+
+    async getType(typeName: string): Promise<Enum | null> {
+      const result = await pgClient.query(
+        `
+SELECT oid FROM pg_type WHERE typtype = 'e' AND typname = $1
+`,
+        [typeName]
+      )
+      if (result.rowCount != 1) return null
+
+      const oid: number = result.rows[0].oid
+
+      const labels: { enumlabel: string }[] = (await pgClient.query(
+        `SELECT enumlabel FROM pg_enum WHERE enumtypid = $1 ORDER BY enumsortorder`,
+        [oid]
+      )).rows
+
+      return {
+        name: typeName,
+        fields: labels.map(row => row.enumlabel),
+      }
+    },
+  }
 }

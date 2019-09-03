@@ -34,7 +34,7 @@ export namespace Expression {
     return { kind: 'Literal', value }
   }
 
-  export function isLiteral(expr: Expression): expr is UserInput {
+  export function isLiteral(expr: Expression): expr is Literal {
     return expr.kind === 'Literal'
   }
 

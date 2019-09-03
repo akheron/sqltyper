@@ -46,7 +46,15 @@ function kw<A extends string>(op: A): Parser<A> {
   return keyword(op, op)
 }
 
-const reservedWords: string[] = ['AS', 'FROM', 'ON', 'ORDER']
+const reservedWords: string[] = [
+  'AS',
+  'FROM',
+  'LEFT',
+  'INNER',
+  'JOIN',
+  'ON',
+  'ORDER',
+]
 
 // TODO: support quoted names like "foo"
 const identifier = attempt(
