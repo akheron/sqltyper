@@ -1,35 +1,65 @@
 // $1 -> index 1, $2 -> index 2, ...
-export type Expression = Expression.Field | Expression.Op | Expression.UserInput
+export type Expression =
+  | Expression.Literal
+  | Expression.Field
+  | Expression.Op
+  | Expression.UserInput
 
 export namespace Expression {
+  export type Literal = {
+    kind: 'Literal'
+    value: string
+  }
+
   export type UserInput = {
-    kind: 'UserInputExpression'
+    kind: 'UserInput'
     index: number
   }
 
   export type Field = {
-    kind: 'FieldExpression'
-    table: string | null
-    field: string
+    kind: 'Field'
+    chain: string[]
   }
 
+  export type Operator = '=' | '<' | '>'
+
   export type Op = {
-    kind: 'OpExpression'
+    kind: 'Op'
     lhs: Expression
-    op: '='
+    op: Operator
     rhs: Expression
   }
 
+  export function createLiteral(value: string): Literal {
+    return { kind: 'Literal', value }
+  }
+
+  export function isLiteral(expr: Expression): expr is UserInput {
+    return expr.kind === 'Literal'
+  }
+
   export function createUserInput(index: number): UserInput {
-    return { kind: 'UserInputExpression', index }
+    return { kind: 'UserInput', index }
   }
 
-  export function createField(table: string | null, field: string): Field {
-    return { kind: 'FieldExpression', table, field }
+  export function isUserInput(expr: Expression): expr is UserInput {
+    return expr.kind === 'UserInput'
   }
 
-  export function createOp(lhs: Expression, op: '=', rhs: Expression): Op {
-    return { kind: 'OpExpression', lhs, op, rhs }
+  export function createField(chain: string[]): Field {
+    return { kind: 'Field', chain }
+  }
+
+  export function isField(expr: Expression): expr is Field {
+    return expr.kind === 'Field'
+  }
+
+  export function createOp(lhs: Expression, op: Operator, rhs: Expression): Op {
+    return { kind: 'Op', lhs, op, rhs }
+  }
+
+  export function isOp(expr: Expression): expr is Op {
+    return expr.kind === 'Op'
   }
 }
 
@@ -69,33 +99,41 @@ export namespace Join {
 }
 
 export type From = {
-  kind: 'FROM'
   table: string
+  as: string | null
   joins: Join[]
 }
 
 export namespace From {
-  export function create(table: string, joins: Join[]): From {
-    return { kind: 'FROM', table, joins }
+  export function create(
+    table: string,
+    as: string | null,
+    joins: Join[]
+  ): From {
+    return { table, as, joins }
   }
 }
 
 export type OrderBy = {
   expression: Expression
-  order: 'ASC' | 'DESC' | null
+  order: OrderBy.Order | null
+  nulls: OrderBy.Nulls | null
 }
 
 export namespace OrderBy {
+  export type Order = 'ASC' | 'DESC' | Expression.Operator
+  export type Nulls = 'FIRST' | 'LAST'
+
   export function create(
     expression: Expression,
-    order: 'ASC' | 'DESC' | null
+    order: Order | null,
+    nulls: Nulls | null
   ): OrderBy {
-    return { expression, order }
+    return { expression, order, nulls }
   }
 }
 
 export type Select = {
-  kind: 'SELECT'
   selectList: SelectField[]
   from: From | null
   orderBy: OrderBy[]
@@ -107,6 +145,8 @@ export namespace Select {
     from: From | null,
     orderBy: OrderBy[]
   ): Select {
-    return { kind: 'SELECT', selectList, from, orderBy }
+    return { selectList, from, orderBy }
   }
 }
+
+export type AST = Select

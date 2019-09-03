@@ -7,11 +7,15 @@
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
   "dependencies": {
+    "jest": "^24.9.0",
+    "jest-cli": "^24.9.0",
     "pg": "^7.12.1",
     "ramda": "^0.26.1",
+    "ts-jest": "^24.0.2",
     "typed-parser": "^0.1.4"
   },
   "devDependencies": {
+    "@types/jest": "^24.0.18",
     "@types/node": "^12.7.3",
     "@types/pg": "^7.11.0",
     "@types/ramda": "^0.26.21",
