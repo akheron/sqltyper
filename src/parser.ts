@@ -2,8 +2,12 @@ import {
   $1,
   $2,
   $null,
+  attempt,
   constant,
+  end,
+  int,
   keyword,
+  many,
   match,
   oneOf,
   ParseError,
@@ -13,11 +17,9 @@ import {
   seq,
   symbol,
   _,
-  many,
-  attempt,
-  end,
-  int,
 } from 'typed-parser'
+import { Expression, From, Join, OrderBy, Select, SelectField } from './ast'
+
 export { isParseError } from 'typed-parser'
 
 // Helpers
@@ -38,23 +40,11 @@ function op<A extends string>(op: A): Parser<A> {
 const identifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
 const itemSep = seq($null, symbol(','), _)
 
-// $1 -> index 1, $2 -> index 2, ...
-type UserInputExpression = {
-  kind: 'UserInputExpression'
-  index: number
-}
-
 const userInputExpression: Parser<Expression> = seq(
-  (_$, index) => ({ kind: 'UserInputExpression', index }),
+  (_$, index) => Expression.createUserInput(index),
   symbol('$'),
   int('[0-9]+')
 )
-
-type FieldExpression = {
-  kind: 'FieldExpression'
-  table: string | null
-  field: string
-}
 
 const tablePrefix: Parser<string | null> = seq(
   $1,
@@ -65,22 +55,15 @@ const tablePrefix: Parser<string | null> = seq(
 )
 
 const fieldExpression: Parser<Expression> = seq(
-  (table, _2, field) => ({ kind: 'FieldExpression', table, field }),
+  (table, _2, field) => Expression.createField(table, field),
   optional(tablePrefix),
   _,
   identifier
 )
 
-type OpExpression = {
-  kind: 'OpExpression'
-  lhs: Expression
-  op: '='
-  rhs: Expression
-}
-
 const opExpression: Parser<Expression> = seq(
   (lhs, _ws, rest) =>
-    rest != null ? { kind: 'OpExpression', lhs, ...rest } : lhs,
+    rest != null ? Expression.createOp(lhs, rest.op, rest.rhs) : lhs,
   oneOf(fieldExpression, userInputExpression),
   _,
   optional(
@@ -94,23 +77,7 @@ const opExpression: Parser<Expression> = seq(
   )
 )
 
-type Expression = FieldExpression | OpExpression | UserInputExpression
-
-const expression: Parser<Expression> = seq($2, _, opExpression)
-
-type SelectField = {
-  expression: Expression
-  as: string | null
-}
-
-namespace SelectField {
-  export function create(
-    expression: Expression,
-    as: string | null
-  ): SelectField {
-    return { expression, as }
-  }
-}
+const expression: Parser<Expression> = opExpression
 
 const as: Parser<string | null> = seq(
   (_as, _ws1, id, _ws2) => id,
@@ -132,26 +99,7 @@ const selectList: Parser<SelectField[]> = sepBy1(
   selectField
 )
 
-type Join = {
-  kind: 'JOIN'
-  type: 'INNER' | 'LEFT' | 'RIGHT' | 'FULL'
-  table: string
-  as: string | null
-  condition: Expression
-}
-
-namespace Join {
-  export function create(
-    type: 'INNER' | 'LEFT' | 'RIGHT' | 'FULL',
-    table: string,
-    as: string | null,
-    condition: Expression
-  ): Join {
-    return { kind: 'JOIN', type, table, as, condition }
-  }
-}
-
-const joinType: Parser<'INNER' | 'LEFT' | 'RIGHT' | 'FULL'> = oneOf(
+const joinType: Parser<Join.JoinType> = oneOf(
   typedKeyword('JOIN', 'INNER'),
   seq((..._args) => 'INNER', keyword('INNER'), _, keyword('JOIN')),
   seq(
@@ -196,18 +144,6 @@ const join: Parser<Join> = seq(
   _
 )
 
-type From = {
-  kind: 'FROM'
-  table: string
-  joins: Join[]
-}
-
-namespace From {
-  export function create(table: string, joins: Join[]): From {
-    return { kind: 'FROM', table, joins }
-  }
-}
-
 const from = seq(
   (_from, _ws1, table, _ws2, joins, _ws3) => From.create(table, joins),
   keyword('FROM'),
@@ -218,20 +154,6 @@ const from = seq(
   _
 )
 
-type OrderBy = {
-  expression: Expression
-  order: 'ASC' | 'DESC'
-}
-
-namespace OrderBy {
-  export function create(
-    expression: Expression,
-    order: 'ASC' | 'DESC'
-  ): OrderBy {
-    return { expression, order }
-  }
-}
-
 const orderBy = seq(
   (_order, _ws1, _by, _ws2, list) => list,
   keyword('ORDER'),
@@ -241,7 +163,7 @@ const orderBy = seq(
   sepBy1(
     itemSep,
     seq(
-      (expr, _ws1, order, _ws2) => OrderBy.create(expr, order || 'ASC'),
+      (expr, _ws1, order, _ws2) => OrderBy.create(expr, order),
       expression,
       _,
       optional(oneOf(op('ASC'), op('DESC'))),
@@ -250,36 +172,18 @@ const orderBy = seq(
   )
 )
 
-type Select = {
-  kind: 'SELECT'
-  selectList: SelectField[]
-  from: From | null
-  orderBy: OrderBy[]
-}
-
-namespace Select {
-  export function create(
-    selectList: SelectField[],
-    from: From | null,
-    orderBy: OrderBy[]
-  ): Select {
-    return { kind: 'SELECT', selectList, from, orderBy }
-  }
-}
-
 const select: Parser<Select> = seq(
   (_select, list, _ws1, from, _ws2, orderBy) =>
-    Select.create(list, from, orderBy),
+    Select.create(list, from, orderBy || []),
   keyword('SELECT'),
   selectList,
   _,
   from,
   _,
-  orderBy,
-  _
+  optional(orderBy)
 )
 
-export const statementParser = seq($2, _, select, end)
+const statementParser = seq($2, _, select, end)
 
 export function parse(source: string): Select | ParseError {
   try {
