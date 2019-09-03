@@ -1,9 +1,10 @@
 // $1 -> index 1, $2 -> index 2, ...
 export type Expression =
   | Expression.Literal
-  | Expression.Field
-  | Expression.Op
   | Expression.UserInput
+  | Expression.Field
+  | Expression.UnaryOp
+  | Expression.BinaryOp
 
 export namespace Expression {
   export type Literal = {
@@ -21,12 +22,16 @@ export namespace Expression {
     chain: string[]
   }
 
-  export type Operator = '=' | '<' | '>'
+  export type UnaryOp = {
+    kind: 'UnaryOp'
+    op: string
+    expression: Expression
+  }
 
-  export type Op = {
-    kind: 'Op'
+  export type BinaryOp = {
+    kind: 'BinaryOp'
     lhs: Expression
-    op: Operator
+    op: string
     rhs: Expression
   }
 
@@ -54,12 +59,24 @@ export namespace Expression {
     return expr.kind === 'Field'
   }
 
-  export function createOp(lhs: Expression, op: Operator, rhs: Expression): Op {
-    return { kind: 'Op', lhs, op, rhs }
+  export function createUnaryOp(op: string, expression: Expression): UnaryOp {
+    return { kind: 'UnaryOp', op, expression }
   }
 
-  export function isOp(expr: Expression): expr is Op {
-    return expr.kind === 'Op'
+  export function isUnaryOp(expr: Expression): expr is UnaryOp {
+    return expr.kind === 'UnaryOp'
+  }
+
+  export function createBinaryOp(
+    lhs: Expression,
+    op: string,
+    rhs: Expression
+  ): BinaryOp {
+    return { kind: 'BinaryOp', lhs, op, rhs }
+  }
+
+  export function isBinaryOp(expr: Expression): expr is BinaryOp {
+    return expr.kind === 'BinaryOp'
   }
 }
 
@@ -121,7 +138,7 @@ export type OrderBy = {
 }
 
 export namespace OrderBy {
-  export type Order = 'ASC' | 'DESC' | Expression.Operator
+  export type Order = 'ASC' | 'DESC' | ['USING', string]
   export type Nulls = 'FIRST' | 'LAST'
 
   export function create(
