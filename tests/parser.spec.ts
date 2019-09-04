@@ -6,7 +6,94 @@ describe('select', () => {
 SELECT 1
 `
     expect(parse(sql)).toEqual({
-      selectList: [{ expression: { kind: 'Literal', value: '1' }, as: null }],
+      selectList: [{ expression: { kind: 'Constant', value: '1' }, as: null }],
+      from: null,
+      orderBy: [],
+    })
+  })
+  it('Operators & precedence', () => {
+    const sql = `
+SELECT -1 [234 :: pg_foo.real] ^ 22 * 9 + 4 @#%% 6 < 3 IS NULL AND NOT NOT 2 OR 1
+`
+    expect(parse(sql)).toEqual({
+      selectList: [
+        {
+          expression: {
+            kind: 'BinaryOp',
+            lhs: {
+              kind: 'BinaryOp',
+              lhs: {
+                kind: 'UnaryOp',
+                op: 'IS NULL',
+                expression: {
+                  kind: 'BinaryOp',
+                  lhs: {
+                    kind: 'BinaryOp',
+                    lhs: {
+                      kind: 'BinaryOp',
+                      lhs: {
+                        kind: 'BinaryOp',
+                        lhs: {
+                          kind: 'BinaryOp',
+                          lhs: {
+                            kind: 'UnaryOp',
+                            op: '-',
+                            expression: {
+                              kind: 'BinaryOp',
+                              lhs: { kind: 'Constant', value: '1' },
+                              op: '[]',
+                              rhs: {
+                                kind: 'BinaryOp',
+                                lhs: { kind: 'Constant', value: '234' },
+                                op: '::',
+                                rhs: {
+                                  kind: 'BinaryOp',
+                                  lhs: {
+                                    kind: 'Identifier',
+                                    identifier: 'pg_foo',
+                                  },
+                                  op: '.',
+                                  rhs: {
+                                    kind: 'Identifier',
+                                    identifier: 'real',
+                                  },
+                                },
+                              },
+                            },
+                          },
+                          op: '^',
+                          rhs: { kind: 'Constant', value: '22' },
+                        },
+                        op: '*',
+                        rhs: { kind: 'Constant', value: '9' },
+                      },
+                      op: '+',
+                      rhs: { kind: 'Constant', value: '4' },
+                    },
+                    op: '@#%%',
+                    rhs: { kind: 'Constant', value: '6' },
+                  },
+                  op: '<',
+                  rhs: { kind: 'Constant', value: '3' },
+                },
+              },
+              op: 'AND',
+              rhs: {
+                kind: 'UnaryOp',
+                op: 'NOT',
+                expression: {
+                  kind: 'UnaryOp',
+                  op: 'NOT',
+                  expression: { kind: 'Constant', value: '2' },
+                },
+              },
+            },
+            op: 'OR',
+            rhs: { kind: 'Constant', value: '1' },
+          },
+          as: null,
+        },
+      ],
       from: null,
       orderBy: [],
     })
@@ -17,14 +104,14 @@ SELECT 1 one, 2 AS two
 `
     expect(parse(sql)).toEqual({
       selectList: [
-        { expression: { kind: 'Literal', value: '1' }, as: 'one' },
-        { expression: { kind: 'Literal', value: '2' }, as: 'two' },
+        { expression: { kind: 'Constant', value: '1' }, as: 'one' },
+        { expression: { kind: 'Constant', value: '2' }, as: 'two' },
       ],
       from: null,
       orderBy: [],
     })
   })
-  it('FROM/JOIN', () => {
+  it.only('FROM/JOIN', () => {
     const sql = `
 SELECT
     f.bar foo_bar,

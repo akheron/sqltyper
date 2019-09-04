@@ -39,62 +39,126 @@ function optional<A>(parser: Parser<A>): Parser<A | null> {
   return oneOf(parser, seq($null, constant('')))
 }
 
-function kw<A extends string>(op: A): Parser<A> {
-  return keyword(op, op)
-}
+// Token parsers etc.
+
+const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
 
 const reservedWords: string[] = [
+  'AND',
   'AS',
+  'ASC',
+  'BETWEEN',
+  'BY',
+  'DESC',
+  'FALSE',
+  'FIRST',
   'FROM',
-  'LEFT',
+  'FULL',
+  'ILIKE',
+  'IN',
   'INNER',
+  'IS',
+  'ISNULL',
   'JOIN',
+  'LEFT',
+  'LAST',
+  'LIKE',
+  'NOT',
+  'NOTNULL',
+  'NULL',
+  'NULLS',
   'ON',
+  'OR',
   'ORDER',
+  'OUTER',
+  'RIGHT',
+  'SELECT',
+  'SIMILAR',
+  'TRUE',
+  'UNKNOWN',
+  'USING',
 ]
 
-// TODO: support quoted names like "foo"
 const identifier = attempt(
   map(
     (identifier, toError) =>
-      reservedWords.indexOf(identifier) != -1
-        ? toError('not an identifier')
+      reservedWords.includes(identifier)
+        ? toError(`Expected an identifier, got reserved word ${identifier}`)
         : identifier,
-    match('[a-zA-Z_][a-zA-Z0-9_]*')
+    matchIdentifier
   )
 )
 
-const reserved = (word: string): Parser<string> =>
-  attempt(
+const reservedWord = <A extends string>(word: A): Parser<A> => {
+  if (!reservedWords.includes(word))
+    throw new Error(`INTERNAL ERROR: ${word} is not included in reservedWords`)
+  return attempt(
     map(
-      (identifier, toError) =>
-        identifier !== word ? toError(`${word} expected`) : word,
-      match('[a-zA-Z_][a-zA-Z0-9_]*')
+      (match, toError) =>
+        match !== word ? toError(`Expected ${word}, got ${match}`) : word,
+      matchIdentifier
+    )
+  )
+}
+
+const sepReserveds = (words: string): Parser<string> =>
+  attempt(
+    seq(
+      _ => words,
+      ...words.split(/\s+/).map(word => seq($1, reservedWord(word), _))
     )
   )
 
-const operator = match('[-+*/<>=~!@#%^&|`?]{1,63}')
+const anyOperator = match('[-+*/<>=~!@#%^&|`?]{1,63}')
 
-const fieldSep = seq($null, symbol('.'), _)
+const operator = (op: string) =>
+  attempt(
+    map(
+      (match, toError) =>
+        match != op ? toError(`Operator ${op} expected`) : match,
+      anyOperator
+    )
+  )
+
+const anyOperatorExcept = (exclude: string[]) =>
+  attempt(
+    map(
+      (match, toError) =>
+        exclude.includes(match)
+          ? toError(`Operator other than ${exclude.join(' ')} expected`)
+          : match,
+      anyOperator
+    )
+  )
+
 const itemSep = seq($null, symbol(','), _)
 
-const literalExpression: Parser<Expression> = seq(
-  Expression.createLiteral,
+const as: Parser<string | null> = seq(
+  (_as, id, _ws1) => id,
+  optional(seq($null, reservedWord('AS'), _)),
+  identifier,
+  _
+)
+
+// Expressions
+
+const identifierExpr: Parser<Expression> = seq(
+  Expression.createIdentifier,
+  identifier
+)
+
+const constantExpr: Parser<Expression> = seq(
+  Expression.createConstant,
   match('[0-9]+')
 )
 
-const userInputExpression: Parser<Expression> = seq(
-  (_$, index) => Expression.createUserInput(index),
+const userInputExpr: Parser<Expression> = seq(
+  (_$, index) => Expression.createPositional(index),
   symbol('$'),
   int('[0-9]+')
 )
 
-const fieldExpression: Parser<Expression.Field> = seq(
-  Expression.createField,
-  sepBy1(fieldSep, seq($1, identifier, _))
-)
-
-const parenthesizedExpression: Parser<Expression> = seq(
+const parenthesizedExpr: Parser<Expression> = seq(
   $3,
   symbol('('),
   _,
@@ -104,74 +168,134 @@ const parenthesizedExpression: Parser<Expression> = seq(
   _
 )
 
-const primaryExpression = oneOf(
-  literalExpression,
-  userInputExpression,
-  fieldExpression,
-  parenthesizedExpression
+const primaryExpr = oneOf(
+  identifierExpr,
+  constantExpr,
+  userInputExpr,
+  parenthesizedExpr
 )
 
-// Hard-coded to only allow the ! operator
-const unaryOpExpression: Parser<Expression> = seq(
-  (op, expr, _ws1) => (op ? Expression.createUnaryOp('!', expr) : expr),
-  optional(seq((_excl, _ws) => true, symbol('!'), _)),
-  primaryExpression,
-  _
+function makeUnaryOp(
+  oper: Parser<string>,
+  nextExpr: Parser<Expression>
+): Parser<Expression> {
+  return seq(
+    (ops, next) =>
+      ops.length > 0
+        ? ops.reduceRight((acc, op) => Expression.createUnaryOp(op, acc), next)
+        : next,
+    many(seq((op, _ws) => op, oper, _)),
+    nextExpr
+  )
+}
+
+function makeBinaryOp(
+  oper: Parser<string>,
+  nextExpr: Parser<Expression>
+): Parser<Expression> {
+  return seq(
+    (first, _ws1, rest, _ws2) =>
+      rest.reduce(
+        (acc, val) => Expression.createBinaryOp(acc, val.op, val.next),
+        first
+      ),
+    nextExpr,
+    _,
+    many(seq((op, _ws, next) => ({ op, next }), oper, _, nextExpr)),
+    _
+  )
+}
+
+const oneOfOperators = (...ops: string[]): Parser<string> =>
+  oneOf(...ops.map(operator))
+
+const fieldExpr = makeBinaryOp(seq(_ => '.', symbol('.')), primaryExpr)
+const typeCastExpr = makeBinaryOp(seq(_ => '::', symbol('::')), fieldExpr)
+const subscriptExpr = seq(
+  (next, _ws, subs) =>
+    subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next),
+  typeCastExpr,
+  _,
+  many(seq($3, symbol('['), _, lazy(() => expression), symbol(']'), _))
+)
+const unaryPlusMinus = makeUnaryOp(oneOfOperators('+', '-'), subscriptExpr)
+const expExpr = makeBinaryOp(operator('^'), unaryPlusMinus)
+const mulDivModExpr = makeBinaryOp(oneOfOperators('*', '/', '%'), expExpr)
+const addSubExpr = makeBinaryOp(oneOfOperators('+', '-'), mulDivModExpr)
+const otherOpExpr = makeBinaryOp(
+  anyOperatorExcept([
+    '<',
+    '>',
+    '=',
+    '<=',
+    '>=',
+    '<>',
+    '+',
+    '-',
+    '*',
+    '/',
+    '%',
+    '^',
+  ]),
+  addSubExpr
+)
+const comparisonExpr = makeBinaryOp(
+  oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
+  otherOpExpr
 )
 
-const binaryOpExpression: Parser<Expression> = seq(
-  (lhs, rest) =>
-    rest != null ? Expression.createBinaryOp(lhs, rest.op, rest.rhs) : lhs,
-  unaryOpExpression,
+const isExpr = seq(
+  (next, op) => (op ? Expression.createUnaryOp(op, next) : next),
+  comparisonExpr,
   optional(
-    seq((op, _ws1, rhs) => ({ op, rhs }), operator, _, unaryOpExpression, _)
+    oneOf(
+      sepReserveds('IS NULL'),
+      sepReserveds('IS NOT NULL'),
+      reservedWord('ISNULL'),
+      reservedWord('NOTNULL'),
+      sepReserveds('IS TRUE'),
+      sepReserveds('IS NOT TRUE'),
+      sepReserveds('IS FALSE'),
+      sepReserveds('IS NOT FALSE'),
+      sepReserveds('IS UNKNOWN'),
+      sepReserveds('IS NOT UNKNOWN')
+    )
   )
 )
+const notExpr = makeUnaryOp(reservedWord('NOT'), isExpr)
+const andExpr = makeBinaryOp(reservedWord('AND'), notExpr)
+const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
 
-const expression: Parser<Expression> = binaryOpExpression
+const expression: Parser<Expression> = orExpr
 
-const as: Parser<string | null> = seq(
-  (_as, id, _ws1) => id,
-  optional(seq($null, reserved('AS'), _)),
-  identifier,
-  _
-)
-
-const selectField: Parser<SelectField> = seq(
-  (expr, as, _ws1) => SelectField.create(expr, as),
-  expression,
-  optional(as),
-  _
-)
-
-const selectList: Parser<SelectField[]> = sepBy1(itemSep, selectField)
+// JOIN
 
 const joinType: Parser<Join.JoinType> = oneOf(
-  seq((..._args) => 'INNER', reserved('JOIN')),
-  seq((..._args) => 'INNER', reserved('INNER'), _, reserved('JOIN')),
+  seq((..._args) => 'INNER', reservedWord('JOIN')),
+  seq((..._args) => 'INNER', reservedWord('INNER'), _, reservedWord('JOIN')),
   seq(
     (..._args) => 'LEFT',
-    reserved('LEFT'),
+    reservedWord('LEFT'),
     _,
-    optional(reserved('OUTER')),
+    optional(reservedWord('OUTER')),
     _,
-    reserved('JOIN')
+    reservedWord('JOIN')
   ),
   seq(
     (..._args) => 'RIGHT',
-    reserved('RIGHT'),
+    reservedWord('RIGHT'),
     _,
-    optional(reserved('OUTER')),
+    optional(reservedWord('OUTER')),
     _,
-    reserved('JOIN')
+    reservedWord('JOIN')
   ),
   seq(
     (..._args) => 'FULL',
-    reserved('FULL'),
+    reservedWord('FULL'),
     _,
-    optional(reserved('OUTER')),
+    optional(reservedWord('OUTER')),
     _,
-    reserved('JOIN')
+    reservedWord('JOIN')
   )
 )
 
@@ -183,32 +307,35 @@ const join: Parser<Join> = seq(
   identifier,
   _,
   optional(as),
-  reserved('ON'),
+  reservedWord('ON'),
   _,
   expression
 )
 
+// FROM
+
 const from = seq(
-  (_from, _ws1, table, _ws2, as, joins, _ws3) => From.create(table, as, joins),
-  reserved('FROM'),
+  (_from, _ws1, table, _ws2, as, joins) => From.create(table, as, joins),
+  reservedWord('FROM'),
   _,
   identifier,
   _,
   optional(as),
-  many(join),
-  _
+  many(join)
 )
+
+// ORDER BY
 
 const orderByOrder: Parser<OrderBy.Order> = seq(
   $1,
   oneOf<OrderBy.Order>(
-    kw('ASC'),
-    kw('DESC'),
+    reservedWord('ASC'),
+    reservedWord('DESC'),
     seq(
       (_using, _ws1, op, _ws2) => ['USING', op],
-      reserved('USING'),
+      reservedWord('USING'),
       _,
-      operator,
+      anyOperator,
       _
     )
   ),
@@ -217,9 +344,9 @@ const orderByOrder: Parser<OrderBy.Order> = seq(
 
 const orderByNulls: Parser<OrderBy.Nulls> = seq(
   $3,
-  reserved('NULLS'),
+  reservedWord('NULLS'),
   _,
-  oneOf(kw('FIRST'), kw('LAST')),
+  oneOf(reservedWord('FIRST'), reservedWord('LAST')),
   _
 )
 
@@ -233,22 +360,35 @@ const orderByItem: Parser<OrderBy> = seq(
 
 const orderBy: Parser<OrderBy[]> = seq(
   (_order, _ws1, _by, _ws2, list) => list,
-  reserved('ORDER'),
+  reservedWord('ORDER'),
   _,
-  reserved('BY'),
+  reservedWord('BY'),
   _,
   sepBy1(itemSep, orderByItem)
 )
 
+// SELECT
+
+const selectField: Parser<SelectField> = seq(
+  (expr, as, _ws1) => SelectField.create(expr, as),
+  expression,
+  optional(as),
+  _
+)
+
+const selectList: Parser<SelectField[]> = sepBy1(itemSep, selectField)
+
 const select: Parser<Select> = seq(
   (_select, _ws1, list, from, orderBy) =>
     Select.create(list, from, orderBy || []),
-  reserved('SELECT'),
+  reservedWord('SELECT'),
   _,
   selectList,
   optional(from),
   optional(orderBy)
 )
+
+// parse
 
 const statementParser: Parser<Select> = seq($2, _, select, end)
 

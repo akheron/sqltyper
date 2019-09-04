@@ -58,7 +58,7 @@ function selectListTarget(
   index: number
 ): string {
   if (as) return as
-  if (ast.Expression.isField(expr)) return expr.chain[expr.chain.length - 1]
+  //if (ast.Expression.isField(expr)) return expr.chain[expr.chain.length - 1]
   return `_${index}`
 }
 
@@ -107,12 +107,14 @@ function inferExpressionType(
   expression: ast.Expression,
   sources: Sources
 ): TsType | InferError {
-  if (ast.Expression.isLiteral(expression)) {
-    // TODO: We only support literal numbers now
+  if (ast.Expression.isConstant(expression)) {
+    // TODO: We only support number literals now
     return 'number'
-  } else if (ast.Expression.isUserInput(expression)) {
-    return error('User input not allowed here')
-  } else if (ast.Expression.isField(expression)) {
+  } else if (ast.Expression.isPositional(expression)) {
+    return error('Positional parameter not allowed here')
+  } else if (ast.Expression.isIdentifier(expression)) {
+    return error('TODO: identifiers')
+    /*
     const chain = expression.chain
     if (chain.length === 1) {
       const columnName = chain[0]
@@ -133,6 +135,7 @@ function inferExpressionType(
       const chainStr = chain.join('.')
       return error(`Unsupported identifier chain longer than 2: ${chainStr}`)
     }
+    */
   } else {
     return error('TODO: operators')
   }

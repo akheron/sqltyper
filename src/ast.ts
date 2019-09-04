@@ -1,25 +1,25 @@
 // $1 -> index 1, $2 -> index 2, ...
 export type Expression =
-  | Expression.Literal
-  | Expression.UserInput
-  | Expression.Field
+  | Expression.Identifier
+  | Expression.Constant
+  | Expression.Positional
   | Expression.UnaryOp
   | Expression.BinaryOp
 
 export namespace Expression {
-  export type Literal = {
-    kind: 'Literal'
+  export type Identifier = {
+    kind: 'Identifier'
+    identifier: string
+  }
+
+  export type Constant = {
+    kind: 'Constant'
     value: string
   }
 
-  export type UserInput = {
-    kind: 'UserInput'
+  export type Positional = {
+    kind: 'Positional'
     index: number
-  }
-
-  export type Field = {
-    kind: 'Field'
-    chain: string[]
   }
 
   export type UnaryOp = {
@@ -35,28 +35,28 @@ export namespace Expression {
     rhs: Expression
   }
 
-  export function createLiteral(value: string): Literal {
-    return { kind: 'Literal', value }
+  export function createIdentifier(identifier: string): Identifier {
+    return { kind: 'Identifier', identifier }
   }
 
-  export function isLiteral(expr: Expression): expr is Literal {
-    return expr.kind === 'Literal'
+  export function isIdentifier(expr: Expression): expr is Identifier {
+    return expr.kind === 'Identifier'
   }
 
-  export function createUserInput(index: number): UserInput {
-    return { kind: 'UserInput', index }
+  export function createConstant(value: string): Constant {
+    return { kind: 'Constant', value }
   }
 
-  export function isUserInput(expr: Expression): expr is UserInput {
-    return expr.kind === 'UserInput'
+  export function isConstant(expr: Expression): expr is Constant {
+    return expr.kind === 'Constant'
   }
 
-  export function createField(chain: string[]): Field {
-    return { kind: 'Field', chain }
+  export function createPositional(index: number): Positional {
+    return { kind: 'Positional', index }
   }
 
-  export function isField(expr: Expression): expr is Field {
-    return expr.kind === 'Field'
+  export function isPositional(expr: Expression): expr is Positional {
+    return expr.kind === 'Positional'
   }
 
   export function createUnaryOp(op: string, expression: Expression): UnaryOp {
