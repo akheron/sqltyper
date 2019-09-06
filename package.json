@@ -7,6 +7,7 @@
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
   "dependencies": {
+    "fp-ts": "^2.0.5",
     "jest": "^24.9.0",
     "jest-cli": "^24.9.0",
     "pg": "^7.12.1",

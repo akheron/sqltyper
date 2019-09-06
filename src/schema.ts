@@ -1,4 +1,5 @@
 import { ClientBase } from 'pg'
+import * as ast from './ast'
 
 export type Table = {
   name: string
@@ -20,17 +21,14 @@ export type SchemaClient = ReturnType<typeof schemaClient>
 
 export function schemaClient(pgClient: ClientBase) {
   return {
-    async getTable(
-      schemaName: string,
-      tableName: string
-    ): Promise<Table | null> {
+    async getTable(tableRef: ast.TableRef): Promise<Table | null> {
       const result = await pgClient.query(
         `
 SELECT column_name, is_nullable, udt_name
 FROM information_schema.columns
 WHERE table_schema = $1 AND table_name = $2
 `,
-        [schemaName, tableName]
+        [tableRef.schema || 'public', tableRef.table]
       )
       if (result.rowCount === 0) return null
 
@@ -41,7 +39,7 @@ WHERE table_schema = $1 AND table_name = $2
       }[] = result.rows
 
       return {
-        name: tableName,
+        name: tableRef.table,
         columns: columns.map(col => ({
           name: col.column_name,
           nullable: col.is_nullable === 'YES',
