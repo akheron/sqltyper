@@ -1,5 +1,7 @@
-import { ClientBase } from 'pg'
+import * as R from 'ramda'
+import { Client } from './pg'
 import * as ast from './ast'
+import { Oid } from './types'
 
 export type Table = {
   name: string
@@ -9,7 +11,37 @@ export type Table = {
 export type Column = {
   name: string
   nullable: boolean
-  type: string
+  type: Oid
+}
+
+export type PGFunction = {
+  name: string
+  kind: 'function' | 'procedure' | 'aggregate' | 'window'
+  signatures: {
+    paramTypes: Oid[]
+    paramsWithDefaults: number
+    returnType: Oid
+  }[]
+}
+
+export type OperatorSignature =
+  | {
+      kind: 'infix'
+      leftType: Oid
+      rightType: Oid
+    }
+  | {
+      kind: 'prefix'
+      rightType: Oid
+    }
+  | {
+      kind: 'postfix'
+      leftType: Oid
+    }
+
+export type Operator = {
+  name: string
+  signatures: OperatorSignature[]
 }
 
 export type Enum = {
@@ -19,33 +51,124 @@ export type Enum = {
 
 export type SchemaClient = ReturnType<typeof schemaClient>
 
-export function schemaClient(pgClient: ClientBase) {
+export function schemaClient(pgClient: Client) {
   return {
     async getTable(tableRef: ast.TableRef): Promise<Table | null> {
-      const result = await pgClient.query(
+      const tblResult = await pgClient.query(
         `
-SELECT column_name, is_nullable, udt_name
-FROM information_schema.columns
-WHERE table_schema = $1 AND table_name = $2
+SELECT c.oid
+FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE
+    c.relkind = 'r'
+    AND n.nspname = $1
+    AND c.relname = $2
 `,
         [tableRef.schema || 'public', tableRef.table]
       )
-      if (result.rowCount === 0) return null
+      if (tblResult.rowCount === 0) return null
+      const tableOid = tblResult.rows[0].oid
+
+      const colResult = await pgClient.query(
+        `
+SELECT attname, atttypid, attnotnull
+FROM pg_attribute
+WHERE
+    attrelid = $1
+    AND attnum > 0
+ORDER BY attnum
+`,
+        [tableOid]
+      )
 
       const columns: {
-        column_name: string
-        is_nullable: string
-        udt_name: string
-      }[] = result.rows
+        attname: string
+        atttypid: Oid
+        attnotnull: boolean
+      }[] = colResult.rows
 
       return {
         name: tableRef.table,
         columns: columns.map(col => ({
-          name: col.column_name,
-          nullable: col.is_nullable === 'YES',
-          type: col.udt_name,
+          name: col.attname,
+          nullable: !col.attnotnull,
+          type: col.atttypid,
         })),
       }
+    },
+
+    async getFunctions(): Promise<PGFunction[]> {
+      const { rows } = await pgClient.query<{
+        proname: string
+        nspname: string
+        prokind: 'f' | 'p' | 'a' | 'w'
+        prorettype: Oid
+        pronargdefaults: number
+        proargtypes: string
+      }>(
+        `
+SELECT
+    proname,
+    prokind,
+    prorettype,
+    pronargs,
+    pronargdefaults,
+    proargtypes
+FROM pg_catalog.pg_proc p
+ORDER BY proname
+`
+      )
+
+      return R.groupWith(R.eqProps('proname'), rows).map(funcs => ({
+        name: funcs[0].proname,
+        kind: toFunctionKind(funcs[0].prokind),
+        signatures: funcs.map(func => ({
+          paramTypes: func.proargtypes.split(/\s+/).map(Number),
+          paramsWithDefaults: func.pronargdefaults,
+          returnType: func.prorettype,
+        })),
+      }))
+    },
+
+    async getOperators(): Promise<Operator[]> {
+      const { rows } = await pgClient.query<{
+        oprname: string
+        oprkind: 'b' | 'l' | 'r'
+        oprleft: Oid | null
+        oprright: Oid | null
+        oprresult: Oid
+      }>(`
+SELECT
+  oprname,
+  oprkind,
+  oprleft,
+  oprright,
+  oprresult
+FROM pg_operator
+`)
+      return R.groupWith(R.eqProps('oprname'), rows).map(opers => ({
+        name: opers[0].oprname,
+        signatures: opers.map(oper => {
+          switch (oper.oprkind) {
+            case 'b':
+              return {
+                kind: 'infix',
+                leftType: oper.oprleft as Oid,
+                rightType: oper.oprright as Oid,
+              }
+            case 'l':
+              return {
+                kind: 'prefix',
+                rightType: oper.oprright as Oid,
+              }
+            case 'r':
+              return {
+                kind: 'postfix',
+                leftType: oper.oprleft as Oid,
+              }
+          }
+        }),
+      }))
     },
 
     async getType(typeName: string): Promise<Enum | null> {
@@ -69,5 +192,18 @@ SELECT oid FROM pg_type WHERE typtype = 'e' AND typname = $1
         fields: labels.map(row => row.enumlabel),
       }
     },
+  }
+}
+
+function toFunctionKind(kind: 'f' | 'p' | 'a' | 'w'): PGFunction['kind'] {
+  switch (kind) {
+    case 'f':
+      return 'function'
+    case 'p':
+      return 'procedure'
+    case 'a':
+      return 'aggregate'
+    case 'w':
+      return 'window'
   }
 }

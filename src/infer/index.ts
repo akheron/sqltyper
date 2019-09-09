@@ -5,18 +5,10 @@ import { SchemaClient, Table, Column } from '../schema'
 import { InferError, error, isInferError } from './error'
 import { getSourceTables } from './source'
 
-export type TsType = 'number' | 'string' | 'boolean'
-export type OutputTypes = { name: string; tsType: TsType }
-
-export type InferResult = {
-  output: OutputTypes
-  input: TsType[]
-}
-
 export async function inferTypes(
   client: SchemaClient,
   statement: ast.AST
-): Promise<InferResult | InferError> {
+): Promise<Either<InferError, StatementType>> {
   const sourceTables = await getSourceTables(client, statement.from)
   if (isInferError(sourceTables)) return sourceTables
 

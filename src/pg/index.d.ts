@@ -62,7 +62,12 @@ export class Client {
   constructor(config?: string | ClientConfig)
   connect(): Promise<void>
   end(): Promise<void>
+
   query<R extends QueryResultRow = any, I extends any[] = any[]>(
     queryConfig: QueryConfig<I>
+  ): Promise<QueryResult<R>>
+  query<R extends QueryResultRow = any, I extends any[] = any[]>(
+    queryTextOrConfig: string | QueryConfig<I>,
+    values?: I
   ): Promise<QueryResult<R>>
 }

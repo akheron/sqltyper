@@ -1,14 +1,27 @@
 import { Either, left, right } from 'fp-ts/lib/Either'
 import { Client, QueryResult } from './pg'
+import { StatementType } from './types'
 
 export async function describeStatement(
   client: Client,
   sql: string
-): Promise<Either<string, QueryResult<any>>> {
+): Promise<Either<string, StatementType>> {
   try {
-    return right(await client.query({ text: sql, describe: true }))
+    const queryResult = await client.query({ text: sql, describe: true })
+    return right(describeResult(queryResult))
   } catch (error) {
-    throw left(describeError(error, sql))
+    return left(describeError(error, sql))
+  }
+}
+
+function describeResult(queryResult: QueryResult<any>): StatementType {
+  return {
+    columns: queryResult.fields.map(field => ({
+      name: field.name,
+      type: field.dataTypeID,
+      nullable: true,
+    })),
+    params: queryResult.params,
   }
 }
 
