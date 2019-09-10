@@ -6,9 +6,15 @@ export type StatementColumn = {
   nullable: boolean
 }
 
-export type StatementType = {
+export type Parameter = {
+  name: string
+  type: Oid
+}
+
+export type Statement = {
+  sql: string
   columns: StatementColumn[]
-  params: Oid[]
+  params: Parameter[]
 }
 
 export type TsType = string

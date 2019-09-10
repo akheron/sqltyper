@@ -1,7 +1,9 @@
-import { promises as fs } from 'fs'
+import { promises as fs, Dirent } from 'fs'
 import * as path from 'path'
 
-import { chain, isRight } from 'fp-ts/lib/Either'
+import * as Task from 'fp-ts/lib/Task'
+import * as TaskEither from 'fp-ts/lib/TaskEither'
+import * as Either from 'fp-ts/lib/Either'
 import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
 import * as yargs from 'yargs'
@@ -9,6 +11,7 @@ import * as yargs from 'yargs'
 import { Client } from './pg'
 //import { schemaClient } from './schema'
 import { describeStatement } from './describe'
+import { preprocessSQL } from './preprocess'
 import { validateStatement, generateTypeScript } from './codegen'
 
 function parseArgs() {
@@ -83,15 +86,13 @@ async function processDirectory(
   dirPath: string,
   fileExtensions: string[]
 ): Promise<boolean> {
-  for (let dirent of await fs.readdir(dirPath, {
+  for (const dirent of await fs.readdir(dirPath, {
     encoding: 'utf-8',
     withFileTypes: true,
   })) {
-    const fileName = dirent.name
-    if (!dirent.isFile() || !hasOneOfExtensions(fileExtensions, fileName))
-      continue
+    if (!isSQLFile(fileExtensions, dirent)) continue
 
-    const filePath = path.join(dirPath, fileName)
+    const filePath = path.join(dirPath, dirent.name)
     if (!(await processSQLFile(client, filePath))) return false
   }
   return true
@@ -104,22 +105,29 @@ async function processSQLFile(
   const tsPath = getOutputPath(filePath)
   console.log(`${filePath} => ${tsPath}`)
 
-  const sql = (await fs.readFile(filePath)).toString('utf-8')
-
-  const result = pipe(
-    await describeStatement(client, sql),
-    chain(validateStatement)
+  return Either.isRight(
+    await pipe(
+      Task.of(fs.readFile(filePath)),
+      Task.map(s => s.toString()),
+      Task.map(preprocessSQL),
+      TaskEither.chain(processed => () =>
+        describeStatement(client, processed.sql, processed.paramNames)
+      ),
+      TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
+      TaskEither.map(stmt => generateTypeScript(filePath, stmt)),
+      TaskEither.chain(tsCode => () =>
+        fs.writeFile(tsPath, tsCode).then(Either.right)
+      ),
+      TaskEither.mapLeft(errorMessage => {
+        console.error(underlined(`Error processing ${filePath}`))
+        console.error(errorMessage)
+      })
+    )()
   )
+}
 
-  if (isRight(result)) {
-    const tsCode = generateTypeScript(filePath, sql, result.right)
-    await fs.writeFile(tsPath, tsCode)
-    return true
-  }
-
-  console.error(underlined(`Error processing ${filePath}`))
-  console.error(result.left)
-  return false
+function isSQLFile(fileExtensions: string[], dirent: Dirent): boolean {
+  return dirent.isFile() && hasOneOfExtensions(fileExtensions, dirent.name)
 }
 
 function getOutputPath(filePath: string): string {

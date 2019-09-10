@@ -1,27 +1,38 @@
+import * as R from 'ramda'
 import { Either, left, right } from 'fp-ts/lib/Either'
 import { Client, QueryResult } from './pg'
-import { StatementType } from './types'
+import { Statement } from './types'
 
 export async function describeStatement(
   client: Client,
-  sql: string
-): Promise<Either<string, StatementType>> {
+  sql: string,
+  paramNames: string[]
+): Promise<Either<string, Statement>> {
   try {
     const queryResult = await client.query({ text: sql, describe: true })
-    return right(describeResult(queryResult))
+    return right(describeResult(sql, paramNames, queryResult))
   } catch (error) {
     return left(describeError(error, sql))
   }
 }
 
-function describeResult(queryResult: QueryResult<any>): StatementType {
+function describeResult(
+  sql: string,
+  paramNames: string[],
+  queryResult: QueryResult<any>
+): Statement {
   return {
+    sql,
     columns: queryResult.fields.map(field => ({
       name: field.name,
       type: field.dataTypeID,
       nullable: true,
     })),
-    params: queryResult.params,
+    params: R.zipWith(
+      (name, type) => ({ name, type }),
+      paramNames,
+      queryResult.params
+    ),
   }
 }
 

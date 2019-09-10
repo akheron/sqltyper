@@ -2,12 +2,10 @@ import * as path from 'path'
 import { Either, left, right } from 'fp-ts/lib/Either'
 import camelCase = require('camelcase')
 
-import { StatementType } from './types'
+import { Statement } from './types'
 import { columnType, tsType } from './tstype'
 
-export function validateStatement(
-  stmt: StatementType
-): Either<string, StatementType> {
+export function validateStatement(stmt: Statement): Either<string, Statement> {
   const columnNames: Set<string> = new Set()
   const conflicts: Set<string> = new Set()
 
@@ -24,22 +22,23 @@ export function validateStatement(
   return right(stmt)
 }
 
-export function generateTypeScript(
-  fileName: string,
-  sql: string,
-  stmt: StatementType
-): string {
+export function generateTypeScript(fileName: string, stmt: Statement): string {
+  const positionalOnly = hasOnlyPositionalParams(stmt)
   return `\
 import { ClientBase } from 'pg'
 
 export async function ${funcName(fileName)}(
-  client: ClientBase${namedParams(stmt)}
+  client: ClientBase${funcParams(stmt, positionalOnly)}
 ): Promise<${outputType(stmt)}> {
     const result = await client.query(\`\\
-${sql}\`${queryValues(stmt)})
+${stmt.sql}\`${queryValues(stmt, positionalOnly)})
     return result.rows
 }
 `
+}
+
+function hasOnlyPositionalParams(stmt: Statement) {
+  return stmt.params.every(param => !!param.name.match(/\$\d+/))
 }
 
 function funcName(fileName: string) {
@@ -47,7 +46,7 @@ function funcName(fileName: string) {
   return camelCase(parsed.name)
 }
 
-function outputType(stmt: StatementType) {
+function outputType(stmt: Statement) {
   return (
     '{ ' +
     stmt.columns
@@ -56,7 +55,7 @@ function outputType(stmt: StatementType) {
         return `${stringLiteral(name)}: ${type}`
       })
       .join('; ') +
-    '}[]'
+    ' }[]'
   )
 }
 
@@ -64,19 +63,29 @@ function stringLiteral(str: string): string {
   return "'" + str.replace('\\', '\\\\').replace("'", "\\'") + "'"
 }
 
-function namedParams(stmt: StatementType) {
-  return stmt.params.length
-    ? ', ' +
-        stmt.params
-          .map(
-            (paramType, index) => `_${index + 1}: ${tsType(paramType, false)}`
-          )
-          .join(', ')
-    : ''
+function funcParams(stmt: Statement, positionalOnly: boolean) {
+  if (!stmt.params.length) return ''
+
+  return (
+    ', ' + (positionalOnly ? positionalFuncParams(stmt) : namedFuncParams(stmt))
+  )
 }
 
-function queryValues(stmt: StatementType) {
-  return stmt.params.length
-    ? ', [ ' + stmt.params.map((_, index) => `_${index + 1}`).join(', ') + ' ]'
-    : ''
+function positionalFuncParams(stmt: Statement) {
+  return stmt.params
+    .map(param => `${param.name}: ${tsType(param.type, false)}`)
+    .join(', ')
+}
+
+function namedFuncParams(stmt: Statement) {
+  return 'params: { ' + positionalFuncParams(stmt) + ' }'
+}
+
+function queryValues(stmt: Statement, positionalOnly: boolean) {
+  if (!stmt.params.length) return ''
+
+  const prefix = positionalOnly ? '' : 'params.'
+  return (
+    ', [ ' + stmt.params.map(param => prefix + param.name).join(', ') + ' ]'
+  )
 }
