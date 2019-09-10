@@ -35,7 +35,8 @@ import { ClientBase } from 'pg'
 export async function ${funcName(fileName)}(
   client: ClientBase${namedParams(stmt)}
 ): Promise<${outputType(stmt)}> {
-    const result = await client.query(\`${sql}\`${queryValues(stmt)})
+    const result = await client.query(\`\\
+${sql}\`${queryValues(stmt)})
     return result.rows
 }
 `
@@ -60,7 +61,7 @@ function outputType(stmt: StatementType) {
 }
 
 function stringLiteral(str: string): string {
-  return "'" + str.replace('\\', '\\\\').replace("'", "\\'")
+  return "'" + str.replace('\\', '\\\\').replace("'", "\\'") + "'"
 }
 
 function namedParams(stmt: StatementType) {
