@@ -1,10 +1,14 @@
 export type Oid = number
 
+export type StatementColumn = {
+  name: string
+  type: Oid
+  nullable: boolean
+}
+
 export type StatementType = {
-  columns: {
-    name: string
-    type: Oid
-    nullable: boolean
-  }[]
+  columns: StatementColumn[]
   params: Oid[]
 }
+
+export type TsType = string

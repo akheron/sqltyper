@@ -2,14 +2,15 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { promisify } from 'util'
 
-import { isRight } from 'fp-ts/lib/Either'
+import { isRight, chain } from 'fp-ts/lib/Either'
+import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
 import * as yargs from 'yargs'
 
 import { Client } from './pg'
 //import { schemaClient } from './schema'
 import { describeStatement } from './describe'
-import { generateTypeScript } from './codegen'
+import { validateStatement, generateTypeScript } from './codegen'
 
 function parseArgs() {
   return yargs
@@ -79,10 +80,13 @@ async function processSQLFile(
   console.log(`${filePath} => ${tsPath}`)
   const sql = (await promisify(fs.readFile)(filePath)).toString('utf-8')
 
-  const result = await describeStatement(client, sql)
+  const result = pipe(
+    await describeStatement(client, sql),
+    chain(validateStatement)
+  )
 
   if (isRight(result)) {
-    const tsCode = generateTypeScript(filePath, result.right)
+    const tsCode = generateTypeScript(filePath, sql, result.right)
     await promisify(fs.writeFile)(tsPath, tsCode)
     return true
   }
