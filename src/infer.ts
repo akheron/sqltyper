@@ -127,6 +127,14 @@ function inferExpressionNullability(
       inferExpressionNullability(sourceTables, expression.lhs) ||
       inferExpressionNullability(sourceTables, expression.lhs)
     )
+  } else if (ast.Expression.isFunctionCall(expression)) {
+    return pipe(
+      expression.argList.map(arg =>
+        inferExpressionNullability(sourceTables, arg)
+      ),
+      array.sequence(Either.either),
+      Either.map(R.any(R.identity))
+    )
   } else {
     throw new Error('never reached')
   }

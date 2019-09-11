@@ -15,11 +15,13 @@ import {
   ParseError,
   Parser,
   run,
+  sepBy,
   sepBy1,
   seq,
   symbol,
   _,
   lazy,
+  noop,
 } from 'typed-parser'
 import {
   AST,
@@ -144,28 +146,27 @@ const as: Parser<string | null> = seq(
 
 // Expressions
 
-const tableColumnExpr: Parser<Expression> = seq(
-  (table, _ws1, _p1, _ws2, column) =>
-    Expression.createTableColumnRef(table, column),
+const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
+  (ident, _ws1, rest, _ws2) =>
+    rest == null
+      ? Expression.createColumnRef(ident)
+      : typeof rest === 'string'
+      ? Expression.createTableColumnRef(ident, rest)
+      : Expression.createFunctionCall(ident, rest),
   identifier,
   _,
-  symbol('.'),
-  _,
-  identifier,
+  oneOf<string | Expression[] | null>(
+    seq($3, symbol('.'), _, identifier),
+    seq(
+      $3,
+      symbol('('),
+      _,
+      sepBy(itemSep, lazy(() => expression)),
+      symbol(')')
+    ),
+    () => null
+  ),
   _
-)
-
-const columnExpr: Parser<Expression> = seq(
-  column => Expression.createColumnRef(column),
-  identifier,
-  _
-)
-
-const columnRefExpr: Parser<Expression> = oneOf(
-  attempt(tableColumnExpr),
-  attempt(columnExpr)
-  // TODO: Composite column reference, see
-  // https://www.postgresql.org/docs/11/sql-expressions.html#FIELD-SELECTION
 )
 
 const constantExpr: Parser<Expression> = seq(
@@ -190,7 +191,7 @@ const parenthesizedExpr: Parser<Expression> = seq(
 )
 
 const primaryExpr = oneOf(
-  columnRefExpr,
+  columnRefOrFunctionCallExpr,
   constantExpr,
   userInputExpr,
   parenthesizedExpr
@@ -230,8 +231,7 @@ function makeBinaryOp(
 const oneOfOperators = (...ops: string[]): Parser<string> =>
   oneOf(...ops.map(operator))
 
-const fieldExpr = makeBinaryOp(seq(_ => '.', symbol('.')), primaryExpr)
-const typeCastExpr = makeBinaryOp(seq(_ => '::', symbol('::')), fieldExpr)
+const typeCastExpr = makeBinaryOp(seq(_ => '::', symbol('::')), primaryExpr)
 const subscriptExpr = seq(
   (next, _ws, subs) =>
     subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next),

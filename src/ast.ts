@@ -6,6 +6,7 @@ export type Expression =
   | Expression.Positional
   | Expression.UnaryOp
   | Expression.BinaryOp
+  | Expression.FunctionCall
 
 export namespace Expression {
   export type ColumnRef = {
@@ -101,6 +102,23 @@ export namespace Expression {
 
   export function isBinaryOp(expr: Expression): expr is BinaryOp {
     return expr.kind === 'BinaryOp'
+  }
+
+  export type FunctionCall = {
+    kind: 'FunctionCall'
+    funcName: string
+    argList: Expression[]
+  }
+
+  export function createFunctionCall(
+    funcName: string,
+    argList: Expression[]
+  ): FunctionCall {
+    return { kind: 'FunctionCall', funcName, argList }
+  }
+
+  export function isFunctionCall(expr: Expression): expr is FunctionCall {
+    return expr.kind === 'FunctionCall'
   }
 }
 
