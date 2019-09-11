@@ -82,7 +82,7 @@ const reservedWords: string[] = [
 const identifier = attempt(
   map(
     (identifier, toError) =>
-      reservedWords.includes(identifier)
+      reservedWords.includes(identifier.toUpperCase())
         ? toError(`Expected an identifier, got reserved word ${identifier}`)
         : identifier,
     matchIdentifier
@@ -95,7 +95,9 @@ const reservedWord = <A extends string>(word: A): Parser<A> => {
   return attempt(
     map(
       (match, toError) =>
-        match !== word ? toError(`Expected ${word}, got ${match}`) : word,
+        match.toUpperCase() !== word
+          ? toError(`Expected ${word}, got ${match}`)
+          : word,
       matchIdentifier
     )
   )
