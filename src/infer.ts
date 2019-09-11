@@ -106,28 +106,36 @@ function inferExpressionNullability(
   expression: ast.Expression
 ): Either.Either<string, boolean> {
   if (ast.Expression.isConstant(expression)) {
-    // TODO: We only support number literals now
+    // A constant is never NULL
     return Either.right(false)
   } else if (ast.Expression.isPositional(expression)) {
-    return Either.right(false)
+    // A positional parameter can be NULL
+    return Either.right(true)
   } else if (ast.Expression.isTableColumnRef(expression)) {
+    // A column reference may evaluate to NULL if the column doesn't
+    // have a NOT NULL constraint
     return pipe(
       findSourceTableColumn(sourceTables, expression.table, expression.column),
       Either.map(column => column.nullable)
     )
   } else if (ast.Expression.isColumnRef(expression)) {
+    // A column reference may evaluate to NULL if the column doesn't
+    // have a NOT NULL constraint
     return pipe(
       findSourceColumn(sourceTables, expression.column),
       Either.map(column => column.nullable)
     )
   } else if (ast.Expression.isUnaryOp(expression)) {
+    // A unary operator returns NULL if its operand is NULL
     return inferExpressionNullability(sourceTables, expression.expression)
   } else if (ast.Expression.isBinaryOp(expression)) {
+    // A binary operator returns NULL if any of its operands is NULL
     return (
       inferExpressionNullability(sourceTables, expression.lhs) ||
       inferExpressionNullability(sourceTables, expression.lhs)
     )
   } else if (ast.Expression.isFunctionCall(expression)) {
+    // A function call returns NULL if any of its arguments is NULL
     return pipe(
       expression.argList.map(arg =>
         inferExpressionNullability(sourceTables, arg)
