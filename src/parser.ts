@@ -144,21 +144,6 @@ const as: Parser<string | null> = seq(
 
 // Expressions
 
-const schemaTableColumnExpr: Parser<Expression> = seq(
-  (schema, _ws1, _p1, _ws2, table, _ws3, _p2, _ws4, column) =>
-    Expression.createSchemaTableColumnRef(schema, table, column),
-  identifier,
-  _,
-  symbol('.'),
-  _,
-  identifier,
-  _,
-  symbol('.'),
-  _,
-  identifier,
-  _
-)
-
 const tableColumnExpr: Parser<Expression> = seq(
   (table, _ws1, _p1, _ws2, column) =>
     Expression.createTableColumnRef(table, column),
@@ -177,7 +162,6 @@ const columnExpr: Parser<Expression> = seq(
 )
 
 const columnRefExpr: Parser<Expression> = oneOf(
-  attempt(schemaTableColumnExpr),
   attempt(tableColumnExpr),
   attempt(columnExpr)
   // TODO: Composite column reference, see

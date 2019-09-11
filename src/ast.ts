@@ -2,7 +2,6 @@
 export type Expression =
   | Expression.ColumnRef
   | Expression.TableColumnRef
-  | Expression.SchemaTableColumnRef
   | Expression.Constant
   | Expression.Positional
   | Expression.UnaryOp
@@ -39,35 +38,10 @@ export namespace Expression {
     return expr.kind === 'TableColumnRef'
   }
 
-  export type SchemaTableColumnRef = {
-    kind: 'SchemaTableColumnRef'
-    schema: string
-    table: string
-    column: string
-  }
-
-  export function createSchemaTableColumnRef(
-    schema: string,
-    table: string,
-    column: string
-  ): SchemaTableColumnRef {
-    return { kind: 'SchemaTableColumnRef', schema, table, column }
-  }
-
-  export function isSchemaTableColumnRef(
-    expr: Expression
-  ): expr is SchemaTableColumnRef {
-    return expr.kind === 'SchemaTableColumnRef'
-  }
-
-  export type AnyColumnRef = SchemaTableColumnRef | TableColumnRef | ColumnRef
+  export type AnyColumnRef = TableColumnRef | ColumnRef
 
   export function isAnyColumnRef(expr: Expression): expr is AnyColumnRef {
-    return (
-      isSchemaTableColumnRef(expr) ||
-      isTableColumnRef(expr) ||
-      isColumnRef(expr)
-    )
+    return isTableColumnRef(expr) || isColumnRef(expr)
   }
 
   export type Constant = {
@@ -149,6 +123,12 @@ export namespace SelectListItem {
     return { kind: 'SelectListExpression', expression, as }
   }
 
+  export function isSelectListExpression(
+    item: SelectListItem
+  ): item is SelectListExpression {
+    return item.kind === 'SelectListExpression'
+  }
+
   export type AllTableFields = {
     kind: 'AllTableFields'
     tableName: string
@@ -158,12 +138,22 @@ export namespace SelectListItem {
     return { kind: 'AllTableFields', tableName }
   }
 
+  export function isAllTableFields(
+    item: SelectListItem
+  ): item is AllTableFields {
+    return item.kind === 'AllTableFields'
+  }
+
   export type AllFields = {
     kind: 'AllFields'
   }
 
   export function createAllFields(): AllFields {
     return { kind: 'AllFields' }
+  }
+
+  export function isAllFields(item: SelectListItem): item is AllFields {
+    return item.kind === 'AllFields'
   }
 }
 
