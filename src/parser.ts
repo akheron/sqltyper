@@ -7,6 +7,7 @@ import {
   attempt,
   constant,
   end,
+  keyword,
   int,
   many,
   map,
@@ -21,7 +22,7 @@ import {
   symbol,
   _,
   lazy,
-  noop,
+  stringBefore,
 } from 'typed-parser'
 import {
   AST,
@@ -81,13 +82,31 @@ const reservedWords: string[] = [
   'USING',
 ]
 
+const quotedEscape = seq(
+  $2,
+  symbol('\\'),
+  oneOf(keyword('"', '"'), keyword('\\', '\\'))
+)
+const quotedInner: Parser<string> = seq(
+  (s, tail) => s + tail,
+  stringBefore('[\\"]'),
+  oneOf(
+    seq((e, t) => e + t, quotedEscape, lazy(() => quotedInner)),
+    constant('')
+  )
+)
+const quotedIdentifier = seq($2, symbol('"'), quotedInner, symbol('"'), _)
+
 const identifier = attempt(
-  map(
-    (identifier, toError) =>
-      reservedWords.includes(identifier.toUpperCase())
-        ? toError(`Expected an identifier, got reserved word ${identifier}`)
-        : identifier,
-    matchIdentifier
+  oneOf(
+    map(
+      (identifier, toError) =>
+        reservedWords.includes(identifier.toUpperCase())
+          ? toError(`Expected an identifier, got reserved word ${identifier}`)
+          : identifier,
+      matchIdentifier
+    ),
+    quotedIdentifier
   )
 )
 
@@ -169,9 +188,31 @@ const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
   _
 )
 
+const strEscape = seq(
+  $2,
+  symbol('\\'),
+  oneOf(
+    keyword("'", "'"),
+    keyword('\\', '\\'),
+    keyword('/', '/'),
+    keyword('b', '\b'),
+    keyword('f', '\f'),
+    keyword('n', '\n'),
+    keyword('r', '\r'),
+    keyword('t', '\t')
+  )
+)
+const strInner: Parser<string> = seq(
+  (s, tail) => s + tail,
+  stringBefore("[\\']"),
+  oneOf(seq((e, t) => e + t, strEscape, lazy(() => strInner)), constant(''))
+)
+
+const stringConstant = seq($2, symbol("'"), strInner, symbol("'"), _)
+
 const constantExpr: Parser<Expression> = seq(
   Expression.createConstant,
-  match('[0-9]+')
+  oneOf(match("[0-9]+|' '"), stringConstant)
 )
 
 const userInputExpr: Parser<Expression> = seq(

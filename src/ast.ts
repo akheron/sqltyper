@@ -47,11 +47,11 @@ export namespace Expression {
 
   export type Constant = {
     kind: 'Constant'
-    value: string
+    valueText: string
   }
 
-  export function createConstant(value: string): Constant {
-    return { kind: 'Constant', value }
+  export function createConstant(valueText: string): Constant {
+    return { kind: 'Constant', valueText }
   }
 
   export function isConstant(expr: Expression): expr is Constant {
