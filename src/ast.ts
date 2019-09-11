@@ -130,17 +130,40 @@ export namespace Expression {
   }
 }
 
-export type SelectListItem = {
-  expression: Expression
-  as: string | null
-}
+export type SelectListItem =
+  | SelectListItem.SelectListExpression // SELECT expr [ AS name ]
+  | SelectListItem.AllTableFields // SELECT tbl.*
+  | SelectListItem.AllFields // SELECT *
 
 export namespace SelectListItem {
-  export function create(
+  export type SelectListExpression = {
+    kind: 'SelectListExpression'
+    expression: Expression
+    as: string | null
+  }
+
+  export function createSelectListExpression(
     expression: Expression,
     as: string | null
-  ): SelectListItem {
-    return { expression, as }
+  ): SelectListExpression {
+    return { kind: 'SelectListExpression', expression, as }
+  }
+
+  export type AllTableFields = {
+    kind: 'AllTableFields'
+    tableName: string
+  }
+
+  export function createAllTableFields(tableName: string): AllTableFields {
+    return { kind: 'AllTableFields', tableName }
+  }
+
+  export type AllFields = {
+    kind: 'AllFields'
+  }
+
+  export function createAllFields(): AllFields {
+    return { kind: 'AllFields' }
   }
 }
 

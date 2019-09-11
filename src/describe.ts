@@ -103,10 +103,13 @@ function formatError(
   sourceLines: string[]
 ) {
   const result = []
-  const lineNoStr = `LINE ${errorPos.line}: `
   result.push(`${error.severity}:  ${error.message}`)
-  result.push(`${lineNoStr}${sourceLines[errorPos.line - 1]}`)
-  result.push(errorMarker(errorPos.column + lineNoStr.length))
+  result.push('')
+  let line: number
+  for (line = Math.max(errorPos.line - 19, 1); line <= errorPos.line; line++) {
+    result.push(`${leftPad(String(line), 5)}| ${sourceLines[line - 1]}`)
+  }
+  result.push(errorMarker(errorPos.column + 7))
   if (error.hint) result.push(`HINT:  ${error.hint}`)
   return result.join('\n')
 }
@@ -116,4 +119,9 @@ function errorMarker(column: number): string {
   for (let i = 0; i < column - 1; i++) arr.push(' ')
   arr.push('^')
   return arr.join('')
+}
+
+function leftPad(s: string, width: number) {
+  while (s.length < width) s = ' ' + s
+  return s
 }

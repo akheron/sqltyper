@@ -1,45 +1,46 @@
 import { SchemaClient, Table } from '../schema'
 import * as ast from '../ast'
-import { InferError, error, isInferError, Failable } from './error'
+import { InferError, fail, ok } from './error'
+import { TaskEither, taskEither } from 'fp-ts/lib/TaskEither'
+import { array } from 'fp-ts/lib/Array'
 
 export type SourceTable = {
   table: Table
-  aliases: string[]
+  as: string
 }
 
 function tableRefToString(tableRef: ast.TableRef) {
   return `${tableRef.schema || 'public'}.{tableRef.table}`
 }
 
-export async function getSourceTables(
+export function getSourceTables(
   client: SchemaClient,
   from: ast.From | null
-): Promise<SourceTable[] | InferError> {
-  if (!from) return []
-
-  const sources = await Promise.all(
-    [from, ...from.joins].map(s => getSourceTable(client, s))
-  )
-
-  const errors = sources.filter(isInferError)
-  if (errors.length > 0) return error(errors.map(e => e.message).join(', '))
-
-  return sources as SourceTable[]
+): TaskEither<InferError, SourceTable[]> {
+  if (from) {
+    return array.traverse(taskEither)([from, ...from.joins], s =>
+      getSourceTable(client, s)
+    )
+  }
+  return async () => ok([])
 }
 
-async function getSourceTable(
+function getSourceTable(
   client: SchemaClient,
   source: ast.From | ast.Join
-): Promise<SourceTable | InferError> {
-  const table = await client.getTable(source.table)
-  if (!table) return error(tableRefToString(source.table))
+): TaskEither<InferError, SourceTable> {
+  return async () => {
+    const table = await client.getTable(source.table)
+    if (!table) return fail(tableRefToString(source.table))
 
-  return {
-    table,
-    aliases: [table.name, ...(source.as ? [source.as] : [])],
+    return ok({
+      table,
+      as: source.as ? source.as : table.name,
+    })
   }
 }
 
+/*
 export function findColumns(
   ref: ast.Expression.AnyColumnRef
 ): Failable<string[]> {
@@ -50,3 +51,4 @@ export function findColumns(
   //     return error(`Unknown or ambiguous column: ${expression.column}`)
   //   return pgTypeToTsType(column.type)
 }
+*/

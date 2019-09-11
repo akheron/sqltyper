@@ -1,3 +1,4 @@
+import { Either, tryCatch } from 'fp-ts/lib/Either'
 import {
   $1,
   $2,
@@ -7,7 +8,6 @@ import {
   constant,
   end,
   int,
-  keyword,
   many,
   map,
   match,
@@ -142,177 +142,166 @@ const as: Parser<string | null> = seq(
 
 // Expressions
 
-function makeExpression(allowMultipleColumns: boolean) {
-  const schemaTableColumnExpr: Parser<Expression> = seq(
-    (schema, _ws1, _p1, _ws2, table, _ws3, _p2, _ws4, column) =>
-      Expression.createSchemaTableColumnRef(schema, table, column || '*'),
-    identifier,
-    _,
-    symbol('.'),
-    _,
-    identifier,
-    _,
-    symbol('.'),
-    _,
-    allowMultipleColumns ? oneOf(identifier, symbol('*')) : identifier,
-    _
+const schemaTableColumnExpr: Parser<Expression> = seq(
+  (schema, _ws1, _p1, _ws2, table, _ws3, _p2, _ws4, column) =>
+    Expression.createSchemaTableColumnRef(schema, table, column),
+  identifier,
+  _,
+  symbol('.'),
+  _,
+  identifier,
+  _,
+  symbol('.'),
+  _,
+  identifier,
+  _
+)
+
+const tableColumnExpr: Parser<Expression> = seq(
+  (table, _ws1, _p1, _ws2, column) =>
+    Expression.createTableColumnRef(table, column),
+  identifier,
+  _,
+  symbol('.'),
+  _,
+  identifier,
+  _
+)
+
+const columnExpr: Parser<Expression> = seq(
+  column => Expression.createColumnRef(column),
+  identifier,
+  _
+)
+
+const columnRefExpr: Parser<Expression> = oneOf(
+  attempt(schemaTableColumnExpr),
+  attempt(tableColumnExpr),
+  attempt(columnExpr)
+  // TODO: Composite column reference, see
+  // https://www.postgresql.org/docs/11/sql-expressions.html#FIELD-SELECTION
+)
+
+const constantExpr: Parser<Expression> = seq(
+  Expression.createConstant,
+  match('[0-9]+')
+)
+
+const userInputExpr: Parser<Expression> = seq(
+  (_$, index) => Expression.createPositional(index),
+  symbol('$'),
+  int('[0-9]+')
+)
+
+const parenthesizedExpr: Parser<Expression> = seq(
+  $3,
+  symbol('('),
+  _,
+  lazy(() => expression),
+  _,
+  symbol(')'),
+  _
+)
+
+const primaryExpr = oneOf(
+  columnRefExpr,
+  constantExpr,
+  userInputExpr,
+  parenthesizedExpr
+)
+
+function makeUnaryOp(
+  oper: Parser<string>,
+  nextExpr: Parser<Expression>
+): Parser<Expression> {
+  return seq(
+    (ops, next) =>
+      ops.length > 0
+        ? ops.reduceRight((acc, op) => Expression.createUnaryOp(op, acc), next)
+        : next,
+    many(seq((op, _ws) => op, oper, _)),
+    nextExpr
   )
-
-  const tableColumnExpr: Parser<Expression> = seq(
-    (table, _ws1, _p1, _ws2, column) =>
-      Expression.createTableColumnRef(table, column || '*'),
-    identifier,
-    _,
-    symbol('.'),
-    _,
-    allowMultipleColumns ? oneOf(identifier, symbol('*')) : identifier,
-    _
-  )
-
-  const columnExpr: Parser<Expression> = seq(
-    column => Expression.createColumnRef(column || '*'),
-    allowMultipleColumns ? oneOf(identifier, symbol('*')) : identifier,
-    _
-  )
-
-  const columnRefExpr: Parser<Expression> = oneOf(
-    attempt(schemaTableColumnExpr),
-    attempt(tableColumnExpr),
-    attempt(columnExpr)
-    // TODO: Composite column reference, see
-    // https://www.postgresql.org/docs/11/sql-expressions.html#FIELD-SELECTION
-  )
-
-  const constantExpr: Parser<Expression> = seq(
-    Expression.createConstant,
-    match('[0-9]+')
-  )
-
-  const userInputExpr: Parser<Expression> = seq(
-    (_$, index) => Expression.createPositional(index),
-    symbol('$'),
-    int('[0-9]+')
-  )
-
-  const parenthesizedExpr: Parser<Expression> = seq(
-    $3,
-    symbol('('),
-    _,
-    lazy(() => expression),
-    _,
-    symbol(')'),
-    _
-  )
-
-  const primaryExpr = oneOf(
-    columnRefExpr,
-    constantExpr,
-    userInputExpr,
-    parenthesizedExpr
-  )
-
-  function makeUnaryOp(
-    oper: Parser<string>,
-    nextExpr: Parser<Expression>
-  ): Parser<Expression> {
-    return seq(
-      (ops, next) =>
-        ops.length > 0
-          ? ops.reduceRight(
-              (acc, op) => Expression.createUnaryOp(op, acc),
-              next
-            )
-          : next,
-      many(seq((op, _ws) => op, oper, _)),
-      nextExpr
-    )
-  }
-
-  function makeBinaryOp(
-    oper: Parser<string>,
-    nextExpr: Parser<Expression>
-  ): Parser<Expression> {
-    return seq(
-      (first, _ws1, rest, _ws2) =>
-        rest.reduce(
-          (acc, val) => Expression.createBinaryOp(acc, val.op, val.next),
-          first
-        ),
-      nextExpr,
-      _,
-      many(seq((op, _ws, next) => ({ op, next }), oper, _, nextExpr)),
-      _
-    )
-  }
-
-  const oneOfOperators = (...ops: string[]): Parser<string> =>
-    oneOf(...ops.map(operator))
-
-  const fieldExpr = makeBinaryOp(seq(_ => '.', symbol('.')), primaryExpr)
-  const typeCastExpr = makeBinaryOp(seq(_ => '::', symbol('::')), fieldExpr)
-  const subscriptExpr = seq(
-    (next, _ws, subs) =>
-      subs.reduce(
-        (acc, val) => Expression.createBinaryOp(acc, '[]', val),
-        next
-      ),
-    typeCastExpr,
-    _,
-    many(seq($3, symbol('['), _, lazy(() => expression), symbol(']'), _))
-  )
-  const unaryPlusMinus = makeUnaryOp(oneOfOperators('+', '-'), subscriptExpr)
-  const expExpr = makeBinaryOp(operator('^'), unaryPlusMinus)
-  const mulDivModExpr = makeBinaryOp(oneOfOperators('*', '/', '%'), expExpr)
-  const addSubExpr = makeBinaryOp(oneOfOperators('+', '-'), mulDivModExpr)
-  const otherOpExpr = makeBinaryOp(
-    anyOperatorExcept([
-      '<',
-      '>',
-      '=',
-      '<=',
-      '>=',
-      '<>',
-      '+',
-      '-',
-      '*',
-      '/',
-      '%',
-      '^',
-    ]),
-    addSubExpr
-  )
-  const comparisonExpr = makeBinaryOp(
-    oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
-    otherOpExpr
-  )
-
-  const isExpr = seq(
-    (next, op) => (op ? Expression.createUnaryOp(op, next) : next),
-    comparisonExpr,
-    optional(
-      oneOf(
-        sepReserveds('IS NULL'),
-        sepReserveds('IS NOT NULL'),
-        reservedWord('ISNULL'),
-        reservedWord('NOTNULL'),
-        sepReserveds('IS TRUE'),
-        sepReserveds('IS NOT TRUE'),
-        sepReserveds('IS FALSE'),
-        sepReserveds('IS NOT FALSE'),
-        sepReserveds('IS UNKNOWN'),
-        sepReserveds('IS NOT UNKNOWN')
-      )
-    )
-  )
-  const notExpr = makeUnaryOp(reservedWord('NOT'), isExpr)
-  const andExpr = makeBinaryOp(reservedWord('AND'), notExpr)
-  const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
-
-  return orExpr
 }
 
-const expression: Parser<Expression> = makeExpression(false)
-const selectListExpression: Parser<Expression> = makeExpression(true)
+function makeBinaryOp(
+  oper: Parser<string>,
+  nextExpr: Parser<Expression>
+): Parser<Expression> {
+  return seq(
+    (first, _ws1, rest, _ws2) =>
+      rest.reduce(
+        (acc, val) => Expression.createBinaryOp(acc, val.op, val.next),
+        first
+      ),
+    nextExpr,
+    _,
+    many(seq((op, _ws, next) => ({ op, next }), oper, _, nextExpr)),
+    _
+  )
+}
+
+const oneOfOperators = (...ops: string[]): Parser<string> =>
+  oneOf(...ops.map(operator))
+
+const fieldExpr = makeBinaryOp(seq(_ => '.', symbol('.')), primaryExpr)
+const typeCastExpr = makeBinaryOp(seq(_ => '::', symbol('::')), fieldExpr)
+const subscriptExpr = seq(
+  (next, _ws, subs) =>
+    subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next),
+  typeCastExpr,
+  _,
+  many(seq($3, symbol('['), _, lazy(() => expression), symbol(']'), _))
+)
+const unaryPlusMinus = makeUnaryOp(oneOfOperators('+', '-'), subscriptExpr)
+const expExpr = makeBinaryOp(operator('^'), unaryPlusMinus)
+const mulDivModExpr = makeBinaryOp(oneOfOperators('*', '/', '%'), expExpr)
+const addSubExpr = makeBinaryOp(oneOfOperators('+', '-'), mulDivModExpr)
+const otherOpExpr = makeBinaryOp(
+  anyOperatorExcept([
+    '<',
+    '>',
+    '=',
+    '<=',
+    '>=',
+    '<>',
+    '+',
+    '-',
+    '*',
+    '/',
+    '%',
+    '^',
+  ]),
+  addSubExpr
+)
+const comparisonExpr = makeBinaryOp(
+  oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
+  otherOpExpr
+)
+
+const isExpr = seq(
+  (next, op) => (op ? Expression.createUnaryOp(op, next) : next),
+  comparisonExpr,
+  optional(
+    oneOf(
+      sepReserveds('IS NULL'),
+      sepReserveds('IS NOT NULL'),
+      reservedWord('ISNULL'),
+      reservedWord('NOTNULL'),
+      sepReserveds('IS TRUE'),
+      sepReserveds('IS NOT TRUE'),
+      sepReserveds('IS FALSE'),
+      sepReserveds('IS NOT FALSE'),
+      sepReserveds('IS UNKNOWN'),
+      sepReserveds('IS NOT UNKNOWN')
+    )
+  )
+)
+const notExpr = makeUnaryOp(reservedWord('NOT'), isExpr)
+const andExpr = makeBinaryOp(reservedWord('AND'), notExpr)
+const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
+
+const expression: Parser<Expression> = orExpr
 
 // FROM & JOIN
 
@@ -419,14 +408,36 @@ const orderBy: Parser<OrderBy[]> = seq(
 
 // SELECT
 
-const selectField: Parser<SelectListItem> = seq(
-  (expr, as, _ws1) => SelectListItem.create(expr, as),
-  selectListExpression,
+const allFields: Parser<SelectListItem> = seq(
+  _a => SelectListItem.createAllFields(),
+  symbol('*'),
+  _
+)
+
+const allTableFields: Parser<SelectListItem> = seq(
+  (table, _ws1, _p, _ws2, _a) => SelectListItem.createAllTableFields(table),
+  identifier,
+  _,
+  symbol('.'),
+  _,
+  symbol('*'),
+  _
+)
+
+const selectListExpression: Parser<SelectListItem> = seq(
+  (expr, as, _ws1) => SelectListItem.createSelectListExpression(expr, as),
+  expression,
   optional(as),
   _
 )
 
-const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectField)
+const selectListItem = oneOf(
+  allFields,
+  attempt(allTableFields),
+  selectListExpression
+)
+
+const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectListItem)
 
 const select: Parser<Select> = seq(
   (_select, _ws1, list, from, orderBy) =>
@@ -442,10 +453,6 @@ const select: Parser<Select> = seq(
 
 const statementParser: Parser<Select> = seq($2, _, select, end)
 
-export function parse(source: string): AST | ParseError {
-  try {
-    return run(statementParser, source)
-  } catch (e) {
-    return e as ParseError
-  }
+export function parse(source: string): Either<ParseError, AST> {
+  return tryCatch(() => run(statementParser, source), e => e as ParseError)
 }
