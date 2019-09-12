@@ -29,6 +29,7 @@ import {
   Expression,
   From,
   Join,
+  Limit,
   OrderBy,
   Select,
   SelectListItem,
@@ -37,6 +38,10 @@ import {
 export { ParseError, isParseError } from 'typed-parser'
 
 // Helpers
+
+function $5<T>(_1: any, _2: any, _3: any, _4: any, _5: T): T {
+  return _5
+}
 
 function optional<A>(parser: Parser<A>): Parser<A | null> {
   return oneOf(parser, seq($null, constant('')))
@@ -47,6 +52,7 @@ function optional<A>(parser: Parser<A>): Parser<A | null> {
 const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
 
 const reservedWords: string[] = [
+  'ALL',
   'AND',
   'AS',
   'ASC',
@@ -57,19 +63,22 @@ const reservedWords: string[] = [
   'FIRST',
   'FROM',
   'FULL',
+  'GROUP',
   'ILIKE',
   'IN',
   'INNER',
   'IS',
   'ISNULL',
   'JOIN',
-  'LEFT',
   'LAST',
+  'LEFT',
   'LIKE',
+  'LIMIT',
   'NOT',
   'NOTNULL',
   'NULL',
   'NULLS',
+  'OFFSET',
   'ON',
   'OR',
   'ORDER',
@@ -80,6 +89,7 @@ const reservedWords: string[] = [
   'TRUE',
   'UNKNOWN',
   'USING',
+  'WHERE',
 ]
 
 const quotedEscape = seq(
@@ -396,6 +406,21 @@ const from: Parser<From> = seq(
   many(join)
 )
 
+// WHERE
+
+const where: Parser<Expression> = seq($3, reservedWord('WHERE'), _, expression)
+
+// GROUP BY
+
+const groupBy: Parser<Expression[]> = seq(
+  $5,
+  reservedWord('GROUP'),
+  _,
+  reservedWord('BY'),
+  _,
+  sepBy1(itemSep, expression)
+)
+
 // ORDER BY
 
 const orderByOrder: Parser<OrderBy.Order> = seq(
@@ -439,6 +464,16 @@ const orderBy: Parser<OrderBy[]> = seq(
   sepBy1(itemSep, orderByItem)
 )
 
+// LIMIT
+
+const limit: Parser<Limit> = seq(
+  (_l, _ws, count, offset) => Limit.create(count, offset),
+  reservedWord('LIMIT'),
+  _,
+  oneOf(seq($null, reservedWord('ALL'), _), expression),
+  optional(seq($null, reservedWord('OFFSET'), _, expression))
+)
+
 // SELECT
 
 const allFields: Parser<SelectListItem> = seq(
@@ -473,13 +508,16 @@ const selectListItem = oneOf(
 const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectListItem)
 
 const select: Parser<Select> = seq(
-  (_select, _ws1, list, from, orderBy) =>
-    Select.create(list, from, orderBy || []),
+  (_select, _ws1, list, from, where, groupBy, orderBy, limit) =>
+    Select.create(list, from, where, groupBy || [], orderBy || [], limit),
   reservedWord('SELECT'),
   _,
   selectList,
   optional(from),
-  optional(orderBy)
+  optional(where),
+  optional(groupBy),
+  optional(orderBy),
+  optional(limit)
 )
 
 // parse

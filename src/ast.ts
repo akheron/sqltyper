@@ -233,19 +233,39 @@ export namespace OrderBy {
   }
 }
 
+export type Limit = {
+  count: Expression | null // null mean LIMIT ALL
+  offset: Expression | null
+}
+
+export namespace Limit {
+  export function create(
+    count: Expression | null,
+    offset: Expression | null
+  ): Limit {
+    return { count, offset }
+  }
+}
+
 export type Select = {
   selectList: SelectListItem[]
   from: From | null
+  where: Expression | null
+  groupBy: Expression[]
   orderBy: OrderBy[]
+  limit: Limit | null
 }
 
 export namespace Select {
   export function create(
     selectList: SelectListItem[],
     from: From | null,
-    orderBy: OrderBy[]
+    where: Expression | null,
+    groupBy: Expression[],
+    orderBy: OrderBy[],
+    limit: Limit | null
   ): Select {
-    return { selectList, from, orderBy }
+    return { selectList, from, where, groupBy, orderBy, limit }
   }
 }
 
