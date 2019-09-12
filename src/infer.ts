@@ -6,21 +6,20 @@ import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 
 import * as ast from './ast'
-import { Client } from './pg'
 import { parse } from './parser'
-import { SchemaClient, schemaClient } from './schema'
+import { SchemaClient } from './schema'
 import { Statement } from './types'
 
 import { SourceTable, getSourceTables } from './source'
 
 export function inferStatementNullability(
-  pgClient: Client,
+  schemaClient: SchemaClient,
   stmt: Statement
 ): TaskEither.TaskEither<string, Statement> {
   const parseResult = parse(stmt.sql)
   if (Either.isRight(parseResult)) {
     return pipe(
-      inferColumnNullability(schemaClient(pgClient), parseResult.right),
+      inferColumnNullability(schemaClient, parseResult.right),
       TaskEither.chain(columnNullability =>
         Task.of(applyColumnNullability(stmt, columnNullability))
       )

@@ -8,7 +8,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
 import * as yargs from 'yargs'
 
-import { Client } from './pg'
+import { Clients, connect, disconnect } from './clients'
 import { preprocessSQL } from './preprocess'
 import { inferStatementNullability } from './infer'
 import { describeStatement } from './describe'
@@ -29,23 +29,24 @@ async function main(): Promise<number> {
     }
     dirPaths.push(dirPath)
   }
-
   const fileExtensions = extensions(args.e)
 
-  const client = new Client(args.d ? { connectionString: args.d } : undefined)
-  try {
-    await client.connect()
-  } catch (err) {
-    console.error(`Error connecting to database: ${err.message}`)
-    return 1
+  const clients = await connect(args.d)
+  if (Either.isLeft(clients)) {
+    console.error(clients.left)
+    throw process.exit(1)
   }
 
   for (let dirPath of dirPaths) {
-    const success = await processDirectory(client, dirPath, fileExtensions)
+    const success = await processDirectory(
+      clients.right,
+      dirPath,
+      fileExtensions
+    )
     if (!success) break
   }
 
-  await client.end()
+  await disconnect(clients.right)
   return 0
 }
 
@@ -82,7 +83,7 @@ the SQL queries, so it's safe to run against any database.
 }
 
 async function processDirectory(
-  client: Client,
+  clients: Clients,
   dirPath: string,
   fileExtensions: string[]
 ): Promise<boolean> {
@@ -93,13 +94,13 @@ async function processDirectory(
     if (!isSQLFile(fileExtensions, dirent)) continue
 
     const filePath = path.join(dirPath, dirent.name)
-    if (!(await processSQLFile(client, filePath))) return false
+    if (!(await processSQLFile(clients, filePath))) return false
   }
   return true
 }
 
 async function processSQLFile(
-  client: Client,
+  clients: Clients,
   filePath: string
 ): Promise<boolean> {
   const tsPath = getOutputPath(filePath)
@@ -112,11 +113,11 @@ async function processSQLFile(
       Task.map(s => s.toString()),
       Task.map(preprocessSQL),
       TaskEither.chain(processed => () =>
-        describeStatement(client, processed.sql, processed.paramNames)
+        describeStatement(clients.pg, processed.sql, processed.paramNames)
       ),
       TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
-      TaskEither.chain(stmt => inferStatementNullability(client, stmt)),
-      TaskEither.map(stmt => generateTypeScript(filePath, stmt)),
+      TaskEither.chain(stmt => inferStatementNullability(clients.schema, stmt)),
+      TaskEither.map(stmt => generateTypeScript(clients.types, filePath, stmt)),
       TaskEither.chain(tsCode => () =>
         fs.writeFile(tsPath, tsCode).then(Either.right)
       ),
@@ -145,10 +146,6 @@ function extensions(e: string): string[] {
 
 function hasOneOfExtensions(extensions: string[], fileName: string): boolean {
   return extensions.includes(path.parse(fileName).ext)
-}
-
-function underlined(str: string): string {
-  return str + '\n' + R.repeat('=', str.length).join('')
 }
 
 main()

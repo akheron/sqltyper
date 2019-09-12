@@ -45,8 +45,9 @@ export type Operator = {
 }
 
 export type Enum = {
+  oid: Oid
   name: string
-  fields: string[]
+  labels: string[]
 }
 
 export type SchemaClient = ReturnType<typeof schemaClient>
@@ -171,26 +172,32 @@ FROM pg_operator
       }))
     },
 
-    async getType(typeName: string): Promise<Enum | null> {
-      const result = await pgClient.query(
+    async getEnums(): Promise<Enum[]> {
+      const result = await pgClient.query<{
+        oid: number
+        typname: string
+        labels: string[]
+      }>(
         `
-SELECT oid FROM pg_type WHERE typtype = 'e' AND typname = $1
-`,
-        [typeName]
+SELECT
+  oid,
+  typname,
+  array(
+    SELECT enumlabel
+    FROM pg_enum e
+    WHERE e.enumtypid = t.oid
+    ORDER BY e.enumsortorder
+  )::text[] AS labels
+FROM pg_type t
+WHERE t.typtype = 'e'
+`
       )
-      if (result.rowCount != 1) return null
 
-      const oid: number = result.rows[0].oid
-
-      const labels: { enumlabel: string }[] = (await pgClient.query(
-        `SELECT enumlabel FROM pg_enum WHERE enumtypid = $1 ORDER BY enumsortorder`,
-        [oid]
-      )).rows
-
-      return {
-        name: typeName,
-        fields: labels.map(row => row.enumlabel),
-      }
+      return result.rows.map(row => ({
+        oid: row.oid,
+        name: row.typname,
+        labels: row.labels,
+      }))
     },
   }
 }

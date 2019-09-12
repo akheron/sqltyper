@@ -1,25 +1,36 @@
 // Mimics the default type conversion of node-postgres:
 // https://github.com/brianc/node-pg-types/blob/master/lib/textParsers.js
 
-import { Oid, TsType } from './types'
+import * as ts from 'typescript'
+import { Oid, TsType, StatementColumn } from './types'
+import { Client } from './pg'
+import { schemaClient } from './schema'
 
-export function tsType(pgType: Oid, nullable: boolean): TsType {
-  const result = typeMap.get(pgType) || defaultType
-  return nullable ? `${result} | null` : result
-}
+type UnPromise<T extends Promise<any>> = T extends Promise<infer U> ? U : never
+export type TypeClient = UnPromise<ReturnType<typeof typeClient>>
 
-export function columnType(column: {
-  name: string
-  type: Oid
-  nullable: boolean
-}): { name: string; type: TsType } {
+export async function typeClient(pgClient: Client) {
+  const enums = await makeEnumMap(pgClient)
+
+  function tsType(pgType: Oid, nullable: boolean): TsType {
+    const result = builtinTypes.get(pgType) || enums.get(pgType) || defaultType
+    return nullable ? `${result} | null` : result
+  }
+
+  function columnType(column: StatementColumn): { name: string; type: TsType } {
+    return {
+      name: column.name,
+      type: tsType(column.type, column.nullable),
+    }
+  }
+
   return {
-    name: column.name,
-    type: tsType(column.type, column.nullable),
+    tsType,
+    columnType,
   }
 }
 
-export const typeMap = new Map<Oid, TsType>([
+export const builtinTypes = new Map<Oid, TsType>([
   [20, 'string'], // int8
   [21, 'number'], // int2
   [23, 'number'], // int4
@@ -68,4 +79,28 @@ export const typeMap = new Map<Oid, TsType>([
   [1270, 'string[]'], // timetz[]
 ])
 
+async function makeEnumMap(pgClient: Client): Promise<Map<Oid, TsType>> {
+  const enums = await schemaClient(pgClient).getEnums()
+  return new Map(
+    enums.map(enumType => [
+      enumType.oid,
+      tsUnion(enumType.labels.map(tsStringLiteral)),
+    ])
+  )
+}
+
 export const defaultType: TsType = 'string'
+
+function tsUnion(arr: TsType[]): TsType {
+  return arr.join(' | ')
+}
+
+function tsStringLiteral(str: string): string {
+  return ts
+    .createPrinter()
+    .printNode(
+      ts.EmitHint.Expression,
+      ts.createStringLiteral(str),
+      ts.createSourceFile('', '', ts.ScriptTarget.Latest)
+    )
+}
