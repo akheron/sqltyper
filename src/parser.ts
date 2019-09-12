@@ -165,6 +165,18 @@ const as: Parser<string | null> = seq(
 
 // Expressions
 
+const functionArguments: Parser<Expression[]> = seq(
+  $3,
+  symbol('('),
+  _,
+  oneOf(
+    // func(*} means no arguments
+    seq((_a, _ws) => [], symbol('*'), _),
+    sepBy(itemSep, lazy(() => expression))
+  ),
+  symbol(')')
+)
+
 const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
   (ident, _ws1, rest, _ws2) =>
     rest == null
@@ -176,13 +188,7 @@ const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
   _,
   oneOf<string | Expression[] | null>(
     seq($3, symbol('.'), _, identifier),
-    seq(
-      $3,
-      symbol('('),
-      _,
-      sepBy(itemSep, lazy(() => expression)),
-      symbol(')')
-    ),
+    functionArguments,
     () => null
   ),
   _
