@@ -1,5 +1,6 @@
 // tslint:disable:no-console
 import { Dirent, promises as fs } from 'fs'
+import { watch as fsWatch } from 'fs'
 import * as path from 'path'
 
 import * as Either from 'fp-ts/lib/Either'
@@ -37,15 +38,10 @@ async function main(): Promise<number> {
     throw process.exit(1)
   }
 
-  for (const dirPath of dirPaths) {
-    const success = await processDirectory(
-      clients.right,
-      dirPath,
-      fileExtensions
-    )
-    if (!success) {
-      break
-    }
+  if (args.w) {
+    await watchDirectories(clients.right, fileExtensions, dirPaths)
+  } else {
+    await processDirectories(clients.right, fileExtensions, dirPaths)
   }
 
   await disconnect(clients.right)
@@ -67,6 +63,11 @@ function parseArgs() {
       describe: 'File extensions to consider, e.g. -e sql,psql',
       type: 'string',
     })
+    .option('w', {
+      alias: 'watch',
+      description: 'Watch files and run the conversion when something changes',
+      type: 'boolean',
+    })
     .epilogue(
       `\
 Generate TypeScript functions for SQL statements in all files in the \
@@ -84,6 +85,36 @@ the SQL queries, so it's safe to run against any database.
     .help().argv
 }
 
+async function watchDirectories(
+  clients: Clients,
+  fileExtensions: string[],
+  dirPaths: string[]
+) {
+  await processDirectories(clients, fileExtensions, dirPaths)
+  dirPaths.forEach(dirPath =>
+    fsWatch(dirPath, async (_eventType, fileName) => {
+      if (!(await isSQLFile(fileExtensions, dirPath, fileName))) {
+        return
+      }
+      processSQLFile(clients, path.join(dirPath, fileName))
+    })
+  )
+  return new Promise(() => {})
+}
+
+async function processDirectories(
+  clients: Clients,
+  fileExtensions: string[],
+  dirPaths: string[]
+) {
+  for (const dirPath of dirPaths) {
+    const success = await processDirectory(clients, dirPath, fileExtensions)
+    if (!success) {
+      break
+    }
+  }
+}
+
 async function processDirectory(
   clients: Clients,
   dirPath: string,
@@ -93,7 +124,7 @@ async function processDirectory(
     encoding: 'utf-8',
     withFileTypes: true,
   })) {
-    if (!isSQLFile(fileExtensions, dirent)) {
+    if (!(await isSQLFile(fileExtensions, dirPath, dirent.name))) {
       continue
     }
 
@@ -134,10 +165,6 @@ async function processSQLFile(
   )
 }
 
-function isSQLFile(fileExtensions: string[], dirent: Dirent): boolean {
-  return dirent.isFile() && hasOneOfExtensions(fileExtensions, dirent.name)
-}
-
 function getOutputPath(filePath: string): string {
   return path.format({
     ...path.parse(filePath),
@@ -148,6 +175,20 @@ function getOutputPath(filePath: string): string {
 
 function extensions(e: string): string[] {
   return e.split(',').map(ext => `.${ext}`)
+}
+
+async function isSQLFile(
+  extensions: string[],
+  dirPath: string,
+  fileName: string
+) {
+  let stats
+  try {
+    stats = await fs.stat(path.join(dirPath, fileName))
+  } catch (_err) {
+    return false
+  }
+  return stats.isFile() && hasOneOfExtensions(extensions, fileName)
 }
 
 function hasOneOfExtensions(exts: string[], fileName: string): boolean {
