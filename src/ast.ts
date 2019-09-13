@@ -268,6 +268,8 @@ export namespace Select {
   }
 }
 
+// ---------------------------------------------------------------------
+
 export type Values = Values.DefaultValues | Values.ExpressionValues
 
 export namespace Values {
@@ -308,16 +310,52 @@ export namespace Insert {
   }
 }
 
-export type AST = Select | Insert
+// ---------------------------------------------------------------------
+
+export type UpdateAssignment = {
+  columnName: string
+  value: Expression | null // null means DEFAULT
+}
+
+export type Update = {
+  kind: 'Update'
+  table: string
+  as: string | null
+  updates: UpdateAssignment[]
+  from: From | null
+  where: Expression | null
+  returning: SelectListItem[]
+}
+
+export namespace Update {
+  export function create(
+    table: string,
+    as: string | null,
+    updates: UpdateAssignment[],
+    from: From | null,
+    where: Expression | null,
+    returning: SelectListItem[]
+  ): Update {
+    return { kind: 'Update', table, as, updates, from, where, returning }
+  }
+}
+
+export type AST = Select | Insert | Update
 
 export function walk<T>(
   ast: AST,
-  handlers: { select: (node: Select) => T; insert: (node: Insert) => T }
+  handlers: {
+    select: (node: Select) => T
+    insert: (node: Insert) => T
+    update: (node: Update) => T
+  }
 ): T {
   switch (ast.kind) {
     case 'Select':
       return handlers.select(ast)
     case 'Insert':
       return handlers.insert(ast)
+    case 'Update':
+      return handlers.update(ast)
   }
 }

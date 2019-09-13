@@ -4,37 +4,39 @@ import {
   $2,
   $3,
   $null,
+  ParseError,
+  Parser,
+  _,
   attempt,
   constant,
   end,
-  keyword,
   int,
+  keyword,
+  lazy,
   many,
   map,
   match,
   oneOf,
-  ParseError,
-  Parser,
   run,
   sepBy,
   sepBy1,
   seq,
-  symbol,
-  _,
-  lazy,
   stringBefore,
+  symbol,
 } from 'typed-parser'
 import {
   AST,
   Expression,
   From,
+  Insert,
   Join,
   Limit,
   OrderBy,
   Select,
   SelectListItem,
-  Insert,
+  UpdateAssignment,
   Values,
+  Update,
 } from './ast'
 
 export { ParseError, isParseError } from 'typed-parser'
@@ -91,9 +93,11 @@ const reservedWords: string[] = [
   'RETURNING',
   'RIGHT',
   'SELECT',
+  'SET',
   'SIMILAR',
   'TRUE',
   'UNKNOWN',
+  'UPDATE',
   'USING',
   'VALUES',
   'WHERE',
@@ -594,9 +598,47 @@ const insert: Parser<AST> = seq(
   optional(returning)
 )
 
+// UPDATE
+
+const updateAssignments: Parser<UpdateAssignment[]> = seq(
+  $3,
+  reservedWord('SET'),
+  _,
+  sepBy1(
+    itemSep,
+    seq(
+      (columnName, _ws1, _eq, _ws2, value) => ({ columnName, value }),
+      identifier,
+      _,
+      symbol('='),
+      _,
+      expression
+    )
+  )
+)
+
+const update: Parser<AST> = seq(
+  (_upd, _ws1, table, _ws2, as, updates, from, where, returning) =>
+    Update.create(table, as, updates, from, where, returning || []),
+  reservedWord('UPDATE'),
+  _,
+  identifier,
+  _,
+  optional(reqAs),
+  updateAssignments,
+  optional(from),
+  optional(where),
+  optional(returning)
+)
+
 // parse
 
-const statementParser: Parser<AST> = seq($2, _, oneOf(select, insert), end)
+const statementParser: Parser<AST> = seq(
+  $2,
+  _,
+  oneOf(select, insert, update),
+  end
+)
 
 export function parse(source: string): Either<ParseError, AST> {
   return tryCatch(() => run(statementParser, source), e => e as ParseError)

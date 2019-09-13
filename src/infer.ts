@@ -55,6 +55,19 @@ export function inferColumnNullability(
           Task.of(inferSelectListNullability([sourceTable], returning))
         )
       ),
+    update: ({ table, as, from, returning }) =>
+      pipe(
+        getSourceTables(client, from),
+        TaskEither.chain(sourceTables =>
+          pipe(
+            getSourceTable(client, null, table, as),
+            TaskEither.map(t => [t, ...sourceTables])
+          )
+        ),
+        TaskEither.chain(sourceTables =>
+          Task.of(inferSelectListNullability(sourceTables, returning))
+        )
+      ),
   })
 }
 
