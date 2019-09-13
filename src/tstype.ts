@@ -1,6 +1,3 @@
-// Mimics the default type conversion of node-postgres:
-// https://github.com/brianc/node-pg-types/blob/master/lib/textParsers.js
-
 import * as ts from 'typescript'
 import { Oid, TsType, StatementColumn } from './types'
 import { Client } from './pg'
@@ -30,6 +27,8 @@ export async function typeClient(pgClient: Client) {
   }
 }
 
+// Equals to default type conversion of node-postgres:
+// https://github.com/brianc/node-pg-types/blob/master/lib/textParsers.js
 export const builtinTypes = new Map<Oid, TsType>([
   [20, 'string'], // int8
   [21, 'number'], // int2

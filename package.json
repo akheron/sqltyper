@@ -1,9 +1,9 @@
 {
-  "name": "psql-ts",
+  "name": "sqltyper",
   "version": "0.0.1",
   "description": "Typed SQL queries in PostgreSQL",
   "main": "index.js",
-  "repository": "https://github.com/akheron/psql-ts",
+  "repository": "https://github.com/akheron/sqltyper",
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
   "dependencies": {
