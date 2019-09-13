@@ -1,18 +1,18 @@
-import { promises as fs, Dirent } from 'fs'
+// tslint:disable:no-console
+import { Dirent, promises as fs } from 'fs'
 import * as path from 'path'
 
+import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import * as Either from 'fp-ts/lib/Either'
 import { pipe } from 'fp-ts/lib/pipeable'
-import * as R from 'ramda'
 import * as yargs from 'yargs'
 
 import { Clients, connect, disconnect } from './clients'
-import { preprocessSQL } from './preprocess'
-import { inferStatementNullability } from './infer'
+import { generateTypeScript, validateStatement } from './codegen'
 import { describeStatement } from './describe'
-import { validateStatement, generateTypeScript } from './codegen'
+import { inferStatementNullability } from './infer'
+import { preprocessSQL } from './preprocess'
 
 async function main(): Promise<number> {
   const args = parseArgs()
@@ -22,7 +22,7 @@ async function main(): Promise<number> {
   }
 
   const dirPaths: string[] = []
-  for (let dirPath of args._) {
+  for (const dirPath of args._) {
     if (!(await fs.stat(dirPath)).isDirectory()) {
       console.error(`Not a directory: ${dirPath}`)
       return 1
@@ -37,13 +37,15 @@ async function main(): Promise<number> {
     throw process.exit(1)
   }
 
-  for (let dirPath of dirPaths) {
+  for (const dirPath of dirPaths) {
     const success = await processDirectory(
       clients.right,
       dirPath,
       fileExtensions
     )
-    if (!success) break
+    if (!success) {
+      break
+    }
   }
 
   await disconnect(clients.right)
@@ -55,15 +57,15 @@ function parseArgs() {
     .usage('Usage: $0 [options] DIRECTORY...')
     .option('d', {
       alias: 'database',
-      type: 'string',
       describe:
         'Database URI to connect to, e.g. -d postgres://user:pass@localhost/mydb',
+      type: 'string',
     })
     .option('e', {
       alias: 'ext',
-      type: 'string',
-      describe: 'File extensions to consider, e.g. -e sql,psql',
       default: 'sql',
+      describe: 'File extensions to consider, e.g. -e sql,psql',
+      type: 'string',
     })
     .epilogue(
       `\
@@ -91,10 +93,14 @@ async function processDirectory(
     encoding: 'utf-8',
     withFileTypes: true,
   })) {
-    if (!isSQLFile(fileExtensions, dirent)) continue
+    if (!isSQLFile(fileExtensions, dirent)) {
+      continue
+    }
 
     const filePath = path.join(dirPath, dirent.name)
-    if (!(await processSQLFile(clients, filePath))) return false
+    if (!(await processSQLFile(clients, filePath))) {
+      return false
+    }
   }
   return true
 }
@@ -144,8 +150,8 @@ function extensions(e: string): string[] {
   return e.split(',').map(ext => `.${ext}`)
 }
 
-function hasOneOfExtensions(extensions: string[], fileName: string): boolean {
-  return extensions.includes(path.parse(fileName).ext)
+function hasOneOfExtensions(exts: string[], fileName: string): boolean {
+  return exts.includes(path.parse(fileName).ext)
 }
 
 main()

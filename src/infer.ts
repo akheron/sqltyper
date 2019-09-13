@@ -25,10 +25,12 @@ export function inferStatementNullability(
       )
     )
   } else {
+    // tslint-disable-next-line no-console
     console.warn(
       `WARNING: The internal SQL parser failed to parse the SQL \
 statement. The inferred types may be inaccurate with respect to nullability.`
     )
+    // tslint-disable-next-line no-console
     console.warn(`Parse error: ${parseResult.left.explain()}`)
     return Task.of(Either.right(stmt))
   }

@@ -1,17 +1,21 @@
 import * as path from 'path'
-import { Either, left, right } from 'fp-ts/lib/Either'
-import camelCase = require('camelcase')
 
-import { Statement } from './types'
+import camelCase = require('camelcase')
+import { Either, left, right } from 'fp-ts/lib/Either'
+
 import { TypeClient } from './tstype'
+import { Statement } from './types'
 
 export function validateStatement(stmt: Statement): Either<string, Statement> {
   const columnNames: Set<string> = new Set()
   const conflicts: Set<string> = new Set()
 
   stmt.columns.forEach(({ name }) => {
-    if (columnNames.has(name)) conflicts.add(name)
-    else columnNames.add(name)
+    if (columnNames.has(name)) {
+      conflicts.add(name)
+    } else {
+      columnNames.add(name)
+    }
   })
 
   if (conflicts.size) {
@@ -52,14 +56,14 @@ function funcName(fileName: string) {
 
 function outputType(types: TypeClient, stmt: Statement) {
   return (
-    '{ ' +
+    'Array<{ ' +
     stmt.columns
       .map(column => {
         const { name, type } = types.columnType(column)
         return `${stringLiteral(name)}: ${type}`
       })
       .join('; ') +
-    ' }[]'
+    ' }>'
   )
 }
 
@@ -72,7 +76,9 @@ function funcParams(
   stmt: Statement,
   positionalOnly: boolean
 ) {
-  if (!stmt.params.length) return ''
+  if (!stmt.params.length) {
+    return ''
+  }
 
   return (
     ', ' +
@@ -93,7 +99,9 @@ function namedFuncParams(types: TypeClient, stmt: Statement) {
 }
 
 function queryValues(stmt: Statement, positionalOnly: boolean) {
-  if (!stmt.params.length) return ''
+  if (!stmt.params.length) {
+    return ''
+  }
 
   const prefix = positionalOnly ? '' : 'params.'
   return (

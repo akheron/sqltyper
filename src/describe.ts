@@ -1,5 +1,6 @@
-import * as R from 'ramda'
 import { Either, left, right } from 'fp-ts/lib/Either'
+import * as R from 'ramda'
+
 import { Client, QueryResult } from './pg'
 import { Statement } from './types'
 
@@ -22,17 +23,17 @@ function describeResult(
   queryResult: QueryResult<any>
 ): Statement {
   return {
-    sql,
     columns: queryResult.fields.map(field => ({
       name: field.name,
-      type: field.dataTypeID,
       nullable: true,
+      type: field.dataTypeID,
     })),
     params: R.zipWith(
       (name, type) => ({ name, type }),
       paramNames,
       queryResult.params
     ),
+    sql,
   }
 }
 
@@ -82,10 +83,10 @@ function findPositionInFile(
   }
 
   const init: Acc = { offset: 0, lineNo: 1, result: null }
-  const { result } = sourceLines.reduce(
+  const final = sourceLines.reduce(
     ({ offset, lineNo, result }, line) => ({
-      offset: offset + line.length + 1, // +1 for '\n' that was removed by .split('\n')
       lineNo: lineNo + 1,
+      offset: offset + line.length + 1, // +1 for '\n' that was removed by .split('\n')
       result:
         offset <= characterOffset && characterOffset < offset + line.length + 1
           ? { line: lineNo, column: characterOffset - offset }
@@ -94,7 +95,7 @@ function findPositionInFile(
     init
   )
 
-  return result
+  return final.result
 }
 
 function formatError(
@@ -110,18 +111,24 @@ function formatError(
     result.push(`${leftPad(String(line), 5)}| ${sourceLines[line - 1]}`)
   }
   result.push(errorMarker(errorPos.column + 7))
-  if (error.hint) result.push(`HINT:  ${error.hint}`)
+  if (error.hint) {
+    result.push(`HINT:  ${error.hint}`)
+  }
   return result.join('\n')
 }
 
 function errorMarker(column: number): string {
   const arr = []
-  for (let i = 0; i < column - 1; i++) arr.push(' ')
+  for (let i = 0; i < column - 1; i++) {
+    arr.push(' ')
+  }
   arr.push('^')
   return arr.join('')
 }
 
 function leftPad(s: string, width: number) {
-  while (s.length < width) s = ' ' + s
+  while (s.length < width) {
+    s = ' ' + s
+  }
   return s
 }
