@@ -78,73 +78,74 @@ function inferSelectListItemNullability(
   sourceTables: SourceTable[],
   selectListItem: ast.SelectListItem
 ): Either.Either<string, ColumnNullability> {
-  if (ast.SelectListItem.isAllFields(selectListItem)) {
-    return Either.right(
+  return ast.SelectListItem.walk(selectListItem, {
+    allFields: () =>
+      Either.right(
+        pipe(
+          sourceTables.map(sourceTable => sourceTable.table.columns),
+          R.flatten,
+          R.map(column => column.nullable)
+        )
+      ),
+
+    allTableFields: ({ tableName }) =>
       pipe(
-        sourceTables.map(sourceTable => sourceTable.table.columns),
-        R.flatten,
-        R.map(column => column.nullable)
-      )
-    )
-  } else if (ast.SelectListItem.isAllTableFields(selectListItem)) {
-    return pipe(
-      findSourceTable(sourceTables, selectListItem.tableName),
-      Either.map(sourceTable => sourceTable.table.columns),
-      Either.map(columns => columns.map(column => column.nullable))
-    )
-  } else {
-    return pipe(
-      inferExpressionNullability(sourceTables, selectListItem.expression),
-      Either.map(x => [x])
-    )
-  }
+        findSourceTable(sourceTables, tableName),
+        Either.map(sourceTable => sourceTable.table.columns),
+        Either.map(columns => columns.map(column => column.nullable))
+      ),
+
+    selectListExpression: ({ expression }) =>
+      pipe(
+        inferExpressionNullability(sourceTables, expression),
+        Either.map(x => [x])
+      ),
+  })
 }
 
 function inferExpressionNullability(
   sourceTables: SourceTable[],
   expression: ast.Expression
 ): Either.Either<string, boolean> {
-  if (ast.Expression.isConstant(expression)) {
-    // A constant is never NULL
-    return Either.right(false)
-  } else if (ast.Expression.isPositional(expression)) {
-    // A positional parameter can be NULL
-    return Either.right(true)
-  } else if (ast.Expression.isTableColumnRef(expression)) {
+  return ast.Expression.walk<Either.Either<string, boolean>>(expression, {
     // A column reference may evaluate to NULL if the column doesn't
     // have a NOT NULL constraint
-    return pipe(
-      findSourceTableColumn(sourceTables, expression.table, expression.column),
-      Either.map(column => column.nullable)
-    )
-  } else if (ast.Expression.isColumnRef(expression)) {
-    // A column reference may evaluate to NULL if the column doesn't
-    // have a NOT NULL constraint
-    return pipe(
-      findSourceColumn(sourceTables, expression.column),
-      Either.map(column => column.nullable)
-    )
-  } else if (ast.Expression.isUnaryOp(expression)) {
-    // A unary operator returns NULL if its operand is NULL
-    return inferExpressionNullability(sourceTables, expression.expression)
-  } else if (ast.Expression.isBinaryOp(expression)) {
-    // A binary operator returns NULL if any of its operands is NULL
-    return (
-      inferExpressionNullability(sourceTables, expression.lhs) ||
-      inferExpressionNullability(sourceTables, expression.lhs)
-    )
-  } else if (ast.Expression.isFunctionCall(expression)) {
-    // A function call returns NULL if any of its arguments is NULL
-    return pipe(
-      expression.argList.map(arg =>
-        inferExpressionNullability(sourceTables, arg)
+    tableColumnRef: ({ table, column }) =>
+      pipe(
+        findSourceTableColumn(sourceTables, table, column),
+        Either.map(column => column.nullable)
       ),
-      array.sequence(Either.either),
-      Either.map(R.any(R.identity))
-    )
-  } else {
-    throw new Error('never reached')
-  }
+
+    // A column reference may evaluate to NULL if the column doesn't
+    // have a NOT NULL constraint
+    columnRef: ({ column }) =>
+      pipe(
+        findSourceColumn(sourceTables, column),
+        Either.map(column => column.nullable)
+      ),
+
+    // A unary operator returns NULL if its operand is NULL
+    unaryOp: ({ operand }) => inferExpressionNullability(sourceTables, operand),
+
+    // A binary operator returns NULL if any of its operands is NULL
+    binaryOp: ({ lhs, rhs }) =>
+      inferExpressionNullability(sourceTables, lhs) ||
+      inferExpressionNullability(sourceTables, rhs),
+
+    // A function call returns NULL if any of its arguments is NULL
+    functionCall: ({ argList }) =>
+      pipe(
+        argList.map(arg => inferExpressionNullability(sourceTables, arg)),
+        array.sequence(Either.either),
+        Either.map(R.any(R.identity))
+      ),
+
+    // A constant is never NULL
+    constant: () => Either.right(false),
+
+    // A positional parameter can be NULL
+    positional: () => Either.right(true),
+  })
 }
 
 function findSourceTable(sourceTables: SourceTable[], tableName: string) {

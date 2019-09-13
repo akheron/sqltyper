@@ -18,10 +18,6 @@ export namespace Expression {
     return { kind: 'ColumnRef', column }
   }
 
-  export function isColumnRef(expr: Expression): expr is ColumnRef {
-    return expr.kind === 'ColumnRef'
-  }
-
   export type TableColumnRef = {
     kind: 'TableColumnRef'
     table: string
@@ -35,16 +31,6 @@ export namespace Expression {
     return { kind: 'TableColumnRef', table, column }
   }
 
-  export function isTableColumnRef(expr: Expression): expr is TableColumnRef {
-    return expr.kind === 'TableColumnRef'
-  }
-
-  export type AnyColumnRef = TableColumnRef | ColumnRef
-
-  export function isAnyColumnRef(expr: Expression): expr is AnyColumnRef {
-    return isTableColumnRef(expr) || isColumnRef(expr)
-  }
-
   export type Constant = {
     kind: 'Constant'
     valueText: string
@@ -52,10 +38,6 @@ export namespace Expression {
 
   export function createConstant(valueText: string): Constant {
     return { kind: 'Constant', valueText }
-  }
-
-  export function isConstant(expr: Expression): expr is Constant {
-    return expr.kind === 'Constant'
   }
 
   export type Positional = {
@@ -67,22 +49,14 @@ export namespace Expression {
     return { kind: 'Positional', index }
   }
 
-  export function isPositional(expr: Expression): expr is Positional {
-    return expr.kind === 'Positional'
-  }
-
   export type UnaryOp = {
     kind: 'UnaryOp'
     op: string
-    expression: Expression
+    operand: Expression
   }
 
-  export function createUnaryOp(op: string, expression: Expression): UnaryOp {
-    return { kind: 'UnaryOp', op, expression }
-  }
-
-  export function isUnaryOp(expr: Expression): expr is UnaryOp {
-    return expr.kind === 'UnaryOp'
+  export function createUnaryOp(op: string, operand: Expression): UnaryOp {
+    return { kind: 'UnaryOp', op, operand }
   }
 
   export type BinaryOp = {
@@ -100,10 +74,6 @@ export namespace Expression {
     return { kind: 'BinaryOp', lhs, op, rhs }
   }
 
-  export function isBinaryOp(expr: Expression): expr is BinaryOp {
-    return expr.kind === 'BinaryOp'
-  }
-
   export type FunctionCall = {
     kind: 'FunctionCall'
     funcName: string
@@ -117,8 +87,34 @@ export namespace Expression {
     return { kind: 'FunctionCall', funcName, argList }
   }
 
-  export function isFunctionCall(expr: Expression): expr is FunctionCall {
-    return expr.kind === 'FunctionCall'
+  export function walk<T>(
+    expr: Expression,
+    handlers: {
+      columnRef: (value: ColumnRef) => T
+      tableColumnRef: (value: TableColumnRef) => T
+      constant: (value: Constant) => T
+      positional: (value: Positional) => T
+      unaryOp: (value: UnaryOp) => T
+      binaryOp: (value: BinaryOp) => T
+      functionCall: (value: FunctionCall) => T
+    }
+  ): T {
+    switch (expr.kind) {
+      case 'ColumnRef':
+        return handlers.columnRef(expr)
+      case 'TableColumnRef':
+        return handlers.tableColumnRef(expr)
+      case 'Constant':
+        return handlers.constant(expr)
+      case 'Positional':
+        return handlers.positional(expr)
+      case 'UnaryOp':
+        return handlers.unaryOp(expr)
+      case 'BinaryOp':
+        return handlers.binaryOp(expr)
+      case 'FunctionCall':
+        return handlers.functionCall(expr)
+    }
   }
 }
 
@@ -141,12 +137,6 @@ export namespace SelectListItem {
     return { kind: 'SelectListExpression', expression, as }
   }
 
-  export function isSelectListExpression(
-    item: SelectListItem
-  ): item is SelectListExpression {
-    return item.kind === 'SelectListExpression'
-  }
-
   export type AllTableFields = {
     kind: 'AllTableFields'
     tableName: string
@@ -154,12 +144,6 @@ export namespace SelectListItem {
 
   export function createAllTableFields(tableName: string): AllTableFields {
     return { kind: 'AllTableFields', tableName }
-  }
-
-  export function isAllTableFields(
-    item: SelectListItem
-  ): item is AllTableFields {
-    return item.kind === 'AllTableFields'
   }
 
   export type AllFields = {
@@ -170,8 +154,22 @@ export namespace SelectListItem {
     return { kind: 'AllFields' }
   }
 
-  export function isAllFields(item: SelectListItem): item is AllFields {
-    return item.kind === 'AllFields'
+  export function walk<T>(
+    item: SelectListItem,
+    handlers: {
+      selectListExpression: (value: SelectListExpression) => T
+      allTableFields: (value: AllTableFields) => T
+      allFields: (value: AllFields) => T
+    }
+  ): T {
+    switch (item.kind) {
+      case 'SelectListExpression':
+        return handlers.selectListExpression(item)
+      case 'AllTableFields':
+        return handlers.allTableFields(item)
+      case 'AllFields':
+        return handlers.allFields(item)
+    }
   }
 }
 
