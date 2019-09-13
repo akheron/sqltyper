@@ -33,6 +33,8 @@ import {
   OrderBy,
   Select,
   SelectListItem,
+  Insert,
+  Values,
 } from './ast'
 
 export { ParseError, isParseError } from 'typed-parser'
@@ -58,6 +60,7 @@ const reservedWords: string[] = [
   'ASC',
   'BETWEEN',
   'BY',
+  'DEFAULT',
   'DESC',
   'FALSE',
   'FIRST',
@@ -67,6 +70,8 @@ const reservedWords: string[] = [
   'ILIKE',
   'IN',
   'INNER',
+  'INSERT',
+  'INTO',
   'IS',
   'ISNULL',
   'JOIN',
@@ -83,12 +88,14 @@ const reservedWords: string[] = [
   'OR',
   'ORDER',
   'OUTER',
+  'RETURNING',
   'RIGHT',
   'SELECT',
   'SIMILAR',
   'TRUE',
   'UNKNOWN',
   'USING',
+  'VALUES',
   'WHERE',
 ]
 
@@ -166,12 +173,16 @@ const anyOperatorExcept = (exclude: string[]) =>
 
 const itemSep = seq($null, symbol(','), _)
 
+// [ AS ] identifier
 const as: Parser<string | null> = seq(
   (_as, id, _ws1) => id,
   optional(seq($null, reservedWord('AS'), _)),
   identifier,
   _
 )
+
+// AS identifier
+const reqAs: Parser<string> = seq($3, reservedWord('AS'), _, identifier, _)
 
 // Expressions
 
@@ -507,7 +518,7 @@ const selectListItem = oneOf(
 
 const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectListItem)
 
-const select: Parser<Select> = seq(
+const select: Parser<AST> = seq(
   (_select, _ws1, list, from, where, groupBy, orderBy, limit) =>
     Select.create(list, from, where, groupBy || [], orderBy || [], limit),
   reservedWord('SELECT'),
@@ -520,9 +531,72 @@ const select: Parser<Select> = seq(
   optional(limit)
 )
 
+// INSERT
+
+const columnList: Parser<string[]> = seq(
+  $3,
+  symbol('('),
+  _,
+  sepBy1(itemSep, seq($1, identifier, _)),
+  symbol(')'),
+  _
+)
+
+const defaultValues: Parser<Values> = seq(
+  (_def, _ws1, _val, _ws2) => Values.defaultValues,
+  reservedWord('DEFAULT'),
+  _,
+  reservedWord('VALUES'),
+  _
+)
+
+const expressionValues: Parser<Values> = seq(
+  (_val, _ws1, values, _ws2) => Values.createExpressionValues(values),
+  reservedWord('VALUES'),
+  _,
+  sepBy(
+    itemSep,
+    seq(
+      $3,
+      symbol('('),
+      _,
+      sepBy1(
+        itemSep,
+        oneOf(seq($null, reservedWord('DEFAULT'), _), expression)
+      ),
+      symbol(')')
+    )
+  ),
+  _
+)
+
+const values: Parser<Values> = oneOf(defaultValues, expressionValues)
+
+const returning: Parser<SelectListItem[]> = seq(
+  $3,
+  reservedWord('RETURNING'),
+  _,
+  selectList
+)
+
+const insert: Parser<AST> = seq(
+  (_ins, _ws1, _into, _ws2, table, _ws3, as, columns, values, returning) =>
+    Insert.create(table, as, columns || [], values, returning || []),
+  reservedWord('INSERT'),
+  _,
+  reservedWord('INTO'),
+  _,
+  identifier,
+  _,
+  optional(reqAs),
+  optional(columnList),
+  values,
+  optional(returning)
+)
+
 // parse
 
-const statementParser: Parser<Select> = seq($2, _, select, end)
+const statementParser: Parser<AST> = seq($2, _, oneOf(select, insert), end)
 
 export function parse(source: string): Either<ParseError, AST> {
   return tryCatch(() => run(statementParser, source), e => e as ParseError)

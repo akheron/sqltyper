@@ -38,22 +38,26 @@ type ColumnNullability = boolean[]
 
 export function inferColumnNullability(
   client: SchemaClient,
-  ast: ast.AST
+  tree: ast.AST
 ): TaskEither.TaskEither<string, ColumnNullability> {
-  return pipe(
-    getSourceTables(client, ast.from),
-    TaskEither.chain(sourceTables =>
-      Task.of(
-        pipe(
-          ast.selectList.map(item =>
-            inferSelectListItemNullability(sourceTables, item)
-          ),
-          array.sequence(Either.either),
-          Either.map(R.flatten)
+  return ast.walk(tree, {
+    select: ({ from, selectList }) =>
+      pipe(
+        getSourceTables(client, from),
+        TaskEither.chain(sourceTables =>
+          Task.of(
+            pipe(
+              selectList.map(item =>
+                inferSelectListItemNullability(sourceTables, item)
+              ),
+              array.sequence(Either.either),
+              Either.map(R.flatten)
+            )
+          )
         )
-      )
-    )
-  )
+      ),
+    insert: () => TaskEither.left('INSERT is not implemented'),
+  })
 }
 
 function applyColumnNullability(

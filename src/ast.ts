@@ -246,6 +246,7 @@ export namespace Limit {
 }
 
 export type Select = {
+  kind: 'Select'
   selectList: SelectListItem[]
   from: From | null
   where: Expression | null
@@ -263,8 +264,60 @@ export namespace Select {
     orderBy: OrderBy[],
     limit: Limit | null
   ): Select {
-    return { selectList, from, where, groupBy, orderBy, limit }
+    return { kind: 'Select', selectList, from, where, groupBy, orderBy, limit }
   }
 }
 
-export type AST = Select
+export type Values = Values.DefaultValues | Values.ExpressionValues
+
+export namespace Values {
+  export type DefaultValues = { kind: 'DefaultValues' }
+
+  export const defaultValues: DefaultValues = { kind: 'DefaultValues' }
+
+  export type ExpressionValues = {
+    kind: 'ExpressionValues'
+    values: (null | Expression)[][] // null means DEFAULT
+  }
+
+  export function createExpressionValues(
+    values: (null | Expression)[][]
+  ): ExpressionValues {
+    return { kind: 'ExpressionValues', values }
+  }
+}
+
+export type Insert = {
+  kind: 'Insert'
+  table: string
+  as: string | null
+  columns: string[]
+  values: Values
+  returning: SelectListItem[]
+}
+
+export namespace Insert {
+  export function create(
+    table: string,
+    as: string | null,
+    columns: string[],
+    values: Values,
+    returning: SelectListItem[]
+  ): Insert {
+    return { kind: 'Insert', table, as, columns, values, returning }
+  }
+}
+
+export type AST = Select | Insert
+
+export function walk<T>(
+  ast: AST,
+  handlers: { select: (node: Select) => T; insert: (node: Insert) => T }
+): T {
+  switch (ast.kind) {
+    case 'Select':
+      return handlers.select(ast)
+    case 'Insert':
+      return handlers.insert(ast)
+  }
+}
