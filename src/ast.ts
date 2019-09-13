@@ -340,7 +340,28 @@ export namespace Update {
   }
 }
 
-export type AST = Select | Insert | Update
+export type Delete = {
+  kind: 'Delete'
+  table: string
+  as: string | null
+  where: Expression | null
+  returning: SelectListItem[]
+}
+
+export namespace Delete {
+  export function create(
+    table: string,
+    as: string | null,
+    where: Expression | null,
+    returning: SelectListItem[]
+  ): Delete {
+    return { kind: 'Delete', table, as, where, returning }
+  }
+}
+
+// ---------------------------------------------------------------------
+
+export type AST = Select | Insert | Update | Delete
 
 export function walk<T>(
   ast: AST,
@@ -348,6 +369,7 @@ export function walk<T>(
     select: (node: Select) => T
     insert: (node: Insert) => T
     update: (node: Update) => T
+    delete: (node: Delete) => T
   }
 ): T {
   switch (ast.kind) {
@@ -357,5 +379,7 @@ export function walk<T>(
       return handlers.insert(ast)
     case 'Update':
       return handlers.update(ast)
+    case 'Delete':
+      return handlers.delete(ast)
   }
 }

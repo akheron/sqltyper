@@ -26,6 +26,7 @@ import {
 } from 'typed-parser'
 import {
   AST,
+  Delete,
   Expression,
   From,
   Insert,
@@ -63,6 +64,7 @@ const reservedWords: string[] = [
   'BETWEEN',
   'BY',
   'DEFAULT',
+  'DELETE',
   'DESC',
   'FALSE',
   'FIRST',
@@ -631,12 +633,28 @@ const update: Parser<AST> = seq(
   optional(returning)
 )
 
+// DELETE
+
+const delete_: Parser<AST> = seq(
+  (_del, _ws1, _from, _ws2, table, _ws3, as, where, returning) =>
+    Delete.create(table, as, where, returning || []),
+  reservedWord('DELETE'),
+  _,
+  reservedWord('FROM'),
+  _,
+  identifier,
+  _,
+  optional(reqAs),
+  optional(where),
+  optional(returning)
+)
+
 // parse
 
 const statementParser: Parser<AST> = seq(
   $2,
   _,
-  oneOf(select, insert, update),
+  oneOf(select, insert, update, delete_),
   end
 )
 
