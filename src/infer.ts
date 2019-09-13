@@ -10,7 +10,7 @@ import { parse } from './parser'
 import { SchemaClient } from './schema'
 import { Statement } from './types'
 
-import { SourceTable, getSourceTables } from './source'
+import { SourceTable, getSourceTables, getSourceTable } from './source'
 
 export function inferStatementNullability(
   schemaClient: SchemaClient,
@@ -45,18 +45,16 @@ export function inferColumnNullability(
       pipe(
         getSourceTables(client, from),
         TaskEither.chain(sourceTables =>
-          Task.of(
-            pipe(
-              selectList.map(item =>
-                inferSelectListItemNullability(sourceTables, item)
-              ),
-              array.sequence(Either.either),
-              Either.map(R.flatten)
-            )
-          )
+          Task.of(inferSelectListNullability(sourceTables, selectList))
         )
       ),
-    insert: () => TaskEither.left('INSERT is not implemented'),
+    insert: ({ table, returning }) =>
+      pipe(
+        getSourceTable(client, null, table, null),
+        TaskEither.chain(sourceTable =>
+          Task.of(inferSelectListNullability([sourceTable], returning))
+        )
+      ),
   })
 }
 
@@ -76,6 +74,17 @@ inferred ${columnNullability.length}, actual ${stmt.columns.length}`)
       columnNullability
     ),
   })
+}
+
+function inferSelectListNullability(
+  sourceTables: SourceTable[],
+  selectList: ast.SelectListItem[]
+): Either.Either<string, ColumnNullability> {
+  return pipe(
+    selectList.map(item => inferSelectListItemNullability(sourceTables, item)),
+    array.sequence(Either.either),
+    Either.map(R.flatten)
+  )
 }
 
 function inferSelectListItemNullability(

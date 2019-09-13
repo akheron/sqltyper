@@ -1,42 +1,39 @@
 import { array } from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
-import { TaskEither, taskEither } from 'fp-ts/lib/TaskEither'
+import * as TaskEither from 'fp-ts/lib/TaskEither'
 
 import { SchemaClient, Table } from './schema'
 import * as ast from './ast'
+import { pipe } from 'fp-ts/lib/pipeable'
 
 export type SourceTable = {
   table: Table
   as: string
 }
 
-function tableRefToString(tableRef: ast.TableRef) {
-  return `${tableRef.schema || 'public'}.{tableRef.table}`
-}
-
 export function getSourceTables(
   client: SchemaClient,
   from: ast.From | null
-): TaskEither<string, SourceTable[]> {
+): TaskEither.TaskEither<string, SourceTable[]> {
   if (from) {
-    return array.traverse(taskEither)([from, ...from.joins], s =>
-      getSourceTable(client, s)
+    return array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
+      getSourceTable(client, s.table.schema, s.table.table, s.as)
     )
   }
   return async () => Either.right([])
 }
 
-function getSourceTable(
+export function getSourceTable(
   client: SchemaClient,
-  source: ast.From | ast.Join
-): TaskEither<string, SourceTable> {
-  return async () => {
-    const table = await client.getTable(source.table)
-    if (!table) return Either.left(tableRefToString(source.table))
-
-    return Either.right({
+  schemaName: string | null,
+  tableName: string,
+  as: string | null
+): TaskEither.TaskEither<string, SourceTable> {
+  return pipe(
+    client.getTable(schemaName, tableName),
+    TaskEither.map(table => ({
       table,
-      as: source.as ? source.as : table.name,
-    })
-  }
+      as: as || table.name,
+    }))
+  )
 }
