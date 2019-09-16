@@ -2,7 +2,6 @@ export type Oid = number
 
 export type Statement = {
   sql: string
-  statementType: StatementType
   columns: StatementColumn[]
   params: Parameter[]
   rowCount: StatementRowCount
