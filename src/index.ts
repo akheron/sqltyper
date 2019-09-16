@@ -14,6 +14,7 @@ import { generateTypeScript, validateStatement } from './codegen'
 import { describeStatement } from './describe'
 import { inferStatementNullability } from './infer'
 import { preprocessSQL } from './preprocess'
+import { runPrettier } from './prettify'
 
 async function main(): Promise<number> {
   const args = parseArgs()
@@ -39,9 +40,19 @@ async function main(): Promise<number> {
   }
 
   if (args.watch) {
-    await watchDirectories(clients.right, fileExtensions, dirPaths)
+    await watchDirectories(
+      clients.right,
+      fileExtensions,
+      dirPaths,
+      args.prettify
+    )
   } else {
-    await processDirectories(clients.right, fileExtensions, dirPaths)
+    await processDirectories(
+      clients.right,
+      fileExtensions,
+      dirPaths,
+      args.prettify
+    )
   }
 
   await disconnect(clients.right)
@@ -67,6 +78,13 @@ function parseArgs() {
       alias: 'w',
       description: 'Watch files and run the conversion when something changes',
       type: 'boolean',
+      default: false,
+    })
+    .option('prettify', {
+      alias: 'p',
+      description: 'Apply prettier to output TypeScript files',
+      type: 'boolean',
+      default: false,
     })
     .epilogue(
       `\
@@ -88,9 +106,10 @@ the SQL queries, so it's safe to run against any database.
 async function watchDirectories(
   clients: Clients,
   fileExtensions: string[],
-  dirPaths: string[]
+  dirPaths: string[],
+  prettify: boolean
 ) {
-  await processDirectories(clients, fileExtensions, dirPaths)
+  await processDirectories(clients, fileExtensions, dirPaths, prettify)
   dirPaths.forEach(dirPath =>
     watch(
       dirPath,
@@ -98,7 +117,7 @@ async function watchDirectories(
       async (event, filePath) => {
         switch (event) {
           case 'update':
-            processSQLFile(clients, filePath)
+            processSQLFile(clients, filePath, prettify)
             return
           case 'remove':
             removeOutputFile(filePath)
@@ -113,10 +132,16 @@ async function watchDirectories(
 async function processDirectories(
   clients: Clients,
   fileExtensions: string[],
-  dirPaths: string[]
+  dirPaths: string[],
+  prettify: boolean
 ) {
   for (const dirPath of dirPaths) {
-    const success = await processDirectory(clients, dirPath, fileExtensions)
+    const success = await processDirectory(
+      clients,
+      dirPath,
+      fileExtensions,
+      prettify
+    )
     if (!success) {
       break
     }
@@ -126,7 +151,8 @@ async function processDirectories(
 async function processDirectory(
   clients: Clients,
   dirPath: string,
-  fileExtensions: string[]
+  fileExtensions: string[],
+  prettify: boolean
 ): Promise<boolean> {
   for (const dirent of await fs.readdir(dirPath, {
     encoding: 'utf-8',
@@ -137,7 +163,7 @@ async function processDirectory(
     }
 
     const filePath = path.join(dirPath, dirent.name)
-    if (!(await processSQLFile(clients, filePath))) {
+    if (!(await processSQLFile(clients, filePath, prettify))) {
       return false
     }
   }
@@ -146,7 +172,8 @@ async function processDirectory(
 
 async function processSQLFile(
   clients: Clients,
-  filePath: string
+  filePath: string,
+  prettify: boolean
 ): Promise<boolean> {
   const tsPath = getOutputPath(filePath)
   console.log('---------------------------------------------------------')
@@ -163,6 +190,13 @@ async function processSQLFile(
       TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
       TaskEither.chain(stmt => inferStatementNullability(clients.schema, stmt)),
       TaskEither.map(stmt => generateTypeScript(clients.types, filePath, stmt)),
+      TaskEither.chain(tsCode =>
+        prettify
+          ? TaskEither.rightTask(() =>
+              runPrettier(getOutputPath(filePath), tsCode)
+            )
+          : TaskEither.right(tsCode)
+      ),
       TaskEither.chain(tsCode => () =>
         fs.writeFile(tsPath, tsCode).then(Either.right)
       ),
