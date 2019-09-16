@@ -6,6 +6,12 @@
   "repository": "https://github.com/akheron/sqltyper",
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
+  "bin": {
+    "sqltyper": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
   "devDependencies": {
     "@types/camelcase": "^5.2.0",
     "@types/jest": "^24.0.18",
