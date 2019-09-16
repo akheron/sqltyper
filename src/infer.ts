@@ -8,76 +8,84 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import * as ast from './ast'
 import { parse } from './parser'
 import { SchemaClient } from './schema'
-import { Statement } from './types'
+import { Statement, StatementRowCount } from './types'
 
 import { SourceTable, getSourceTables, getSourceTable } from './source'
 
 export function inferStatementNullability(
   schemaClient: SchemaClient,
-  stmt: Statement
+  statement: Statement
 ): TaskEither.TaskEither<string, Statement> {
-  const parseResult = parse(stmt.sql)
-  if (Either.isRight(parseResult)) {
-    return pipe(
-      inferColumnNullability(schemaClient, parseResult.right),
-      TaskEither.chain(columnNullability =>
-        Task.of(applyColumnNullability(stmt, columnNullability))
+  return pipe(
+    TaskEither.fromEither(parse(statement.sql)),
+    TaskEither.chain(parseResult =>
+      pipe(
+        inferColumnNullability(schemaClient, statement, parseResult),
+        TaskEither.map(stmt => inferSingleRow(stmt, parseResult))
       )
-    )
-  } else {
-    // tslint-disable-next-line no-console
-    console.warn(
-      `WARNING: The internal SQL parser failed to parse the SQL \
+    ),
+    TaskEither.orElse(parseErrorStr => {
+      console.warn(
+        `WARNING: The internal SQL parser failed to parse the SQL \
 statement. The inferred types may be inaccurate with respect to nullability.`
-    )
-    // tslint-disable-next-line no-console
-    console.warn(`Parse error: ${parseResult.left.explain()}`)
-    return Task.of(Either.right(stmt))
-  }
+      )
+      // tslint-disable-next-line no-console
+      console.warn(`Parse error: ${parseErrorStr}`)
+      return TaskEither.right(statement)
+    })
+  )
 }
 
 type ColumnNullability = boolean[]
 
 export function inferColumnNullability(
   client: SchemaClient,
+  statement: Statement,
   tree: ast.AST
-): TaskEither.TaskEither<string, ColumnNullability> {
-  return ast.walk(tree, {
-    select: ({ from, selectList }) =>
-      pipe(
-        getSourceTables(client, from),
-        TaskEither.chain(sourceTables =>
-          Task.of(inferSelectListNullability(sourceTables, selectList))
-        )
-      ),
-    insert: ({ table, as, returning }) =>
-      pipe(
-        getSourceTable(client, null, table, as),
-        TaskEither.chain(sourceTable =>
-          Task.of(inferSelectListNullability([sourceTable], returning))
-        )
-      ),
-    update: ({ table, as, from, returning }) =>
-      pipe(
-        getSourceTables(client, from),
-        TaskEither.chain(sourceTables =>
-          pipe(
-            getSourceTable(client, null, table, as),
-            TaskEither.map(t => [t, ...sourceTables])
+): TaskEither.TaskEither<string, Statement> {
+  return pipe(
+    ast.walk(tree, {
+      select: ({ from, selectList }) =>
+        pipe(
+          getSourceTables(client, from),
+          TaskEither.chain(sourceTables =>
+            Task.of(inferSelectListNullability(sourceTables, selectList))
           )
         ),
-        TaskEither.chain(sourceTables =>
-          Task.of(inferSelectListNullability(sourceTables, returning))
-        )
-      ),
-    delete: ({ table, as, returning }) =>
-      pipe(
-        getSourceTable(client, null, table, as),
-        TaskEither.chain(sourceTable =>
-          Task.of(inferSelectListNullability([sourceTable], returning))
-        )
-      ),
-  })
+      insert: ({ table, as, returning }) =>
+        pipe(
+          getSourceTable(client, null, table, as),
+          TaskEither.chain(sourceTable =>
+            Task.of(inferSelectListNullability([sourceTable], returning))
+          )
+        ),
+      update: ({ table, as, from, returning }) =>
+        pipe(
+          getSourceTables(client, from),
+          TaskEither.chain(sourceTables =>
+            pipe(
+              getSourceTable(client, null, table, as),
+              TaskEither.map(t => [t, ...sourceTables])
+            )
+          ),
+          TaskEither.chain(sourceTables =>
+            Task.of(inferSelectListNullability(sourceTables, returning))
+          )
+        ),
+      delete: ({ table, as, returning }) =>
+        pipe(
+          getSourceTable(client, null, table, as),
+          TaskEither.chain(sourceTable =>
+            Task.of(inferSelectListNullability([sourceTable], returning))
+          )
+        ),
+    }),
+    TaskEither.chain(columnNullability =>
+      TaskEither.fromEither(
+        applyColumnNullability(statement, columnNullability)
+      )
+    )
+  )
 }
 
 function applyColumnNullability(
@@ -181,6 +189,51 @@ function inferExpressionNullability(
     // A positional parameter can be NULL
     positional: () => Either.right(true),
   })
+}
+
+function inferSingleRow(statement: Statement, parseResult: ast.AST): Statement {
+  const rowCount: StatementRowCount = ast.walk(parseResult, {
+    select: ({ limit }) =>
+      limit && limit.count && isConstantExprOf('1', limit.count)
+        ? 'zeroOrOne' // LIMIT 1 => zero or one rows
+        : 'many',
+
+    insert: ({ values, returning }) =>
+      ast.Values.walk(values, {
+        // INSERT INTO xxx DEFAULT VALUES always creates a single row
+        defaultValues: () => 'one',
+        exprValues: exprValues =>
+          returning.length
+            ? // Check the length of the VALUES expression list
+              exprValues.values.length === 1
+              ? 'one'
+              : 'many'
+            : // No RETURNING, no output
+              'zero',
+      }),
+
+    update: ({ returning }) =>
+      returning.length
+        ? 'many'
+        : // No RETURNING, no output
+          'zero',
+
+    delete: ({ returning }) =>
+      returning.length
+        ? 'many'
+        : // No RETURNING, no output
+          'zero',
+  })
+
+  return { ...statement, rowCount }
+}
+
+function isConstantExprOf(expectedValue: string, expr: ast.Expression) {
+  return ast.Expression.walkConstant(
+    expr,
+    false,
+    ({ valueText }) => valueText === expectedValue
+  )
 }
 
 function findSourceTable(sourceTables: SourceTable[], tableName: string) {

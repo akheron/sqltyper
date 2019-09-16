@@ -44,6 +44,7 @@ function describeResult(
       nullable: true,
       type: field.dataTypeID,
     })),
+    rowCount: 'many',
     params: R.zipWith(
       (name, type) => ({ name, type }),
       paramNames,

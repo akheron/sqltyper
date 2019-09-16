@@ -116,6 +116,19 @@ export namespace Expression {
         return handlers.functionCall(expr)
     }
   }
+
+  export function walkConstant<T>(
+    expr: Expression,
+    elseVal: T,
+    handler: (node: Constant) => T
+  ): T {
+    switch (expr.kind) {
+      case 'Constant':
+        return handler(expr)
+      default:
+        return elseVal
+    }
+  }
 }
 
 export type SelectListItem =
@@ -286,6 +299,21 @@ export namespace Values {
     values: Array<Array<null | Expression>>
   ): ExpressionValues {
     return { kind: 'ExpressionValues', values }
+  }
+
+  export function walk<T>(
+    values: Values,
+    handlers: {
+      defaultValues: (node: DefaultValues) => T
+      exprValues: (node: ExpressionValues) => T
+    }
+  ): T {
+    switch (values.kind) {
+      case 'DefaultValues':
+        return handlers.defaultValues(values)
+      case 'ExpressionValues':
+        return handlers.exprValues(values)
+    }
   }
 }
 

@@ -5,9 +5,16 @@ export type Statement = {
   statementType: StatementType
   columns: StatementColumn[]
   params: Parameter[]
+  rowCount: StatementRowCount
 }
 
 export type StatementType = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE'
+
+export type StatementRowCount =
+  | 'zero' // no output rows ever
+  | 'one' // exatly one output row
+  | 'zeroOrOne' // zero or one output row
+  | 'many' // zero or more output rows
 
 export type StatementColumn = {
   name: string

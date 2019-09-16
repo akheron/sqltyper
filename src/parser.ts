@@ -658,6 +658,9 @@ const statementParser: Parser<AST> = seq(
   end
 )
 
-export function parse(source: string): Either<ParseError, AST> {
-  return tryCatch(() => run(statementParser, source), e => e as ParseError)
+export function parse(source: string): Either<string, AST> {
+  return tryCatch(
+    () => run(statementParser, source),
+    e => (e as ParseError).explain()
+  )
 }

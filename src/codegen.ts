@@ -40,7 +40,7 @@ export async function ${funcName(fileName)}(
 ): Promise<${outputType(types, stmt)}> {
     const result = await client.query(\`\\
 ${stmt.sql}\`${queryValues(stmt, positionalOnly)})
-    return ${funcResultExpr(stmt)}
+    return ${outputValue(stmt)}
 }
 `
 }
@@ -55,25 +55,38 @@ function funcName(fileName: string) {
 }
 
 function outputType(types: TypeClient, stmt: Statement) {
-  if (stmt.statementType === 'SELECT' || stmt.columns.length) {
-    return (
-      'Array<{ ' +
-      stmt.columns
-        .map(column => {
-          const { name, type } = types.columnType(column)
-          return `${stringLiteral(name)}: ${type}`
-        })
-        .join('; ') +
-      ' }>'
-    )
+  const rowType =
+    '{ ' +
+    stmt.columns
+      .map(column => {
+        const { name, type } = types.columnType(column)
+        return `${stringLiteral(name)}: ${type}`
+      })
+      .join('; ') +
+    ' }'
+  switch (stmt.rowCount) {
+    case 'zero':
+      return 'number' // return the affected row count
+    case 'one':
+      return rowType
+    case 'zeroOrOne':
+      return `${rowType} | null`
+    case 'many':
+      return `Array<${rowType}>`
   }
-  return 'number'
 }
 
-function funcResultExpr(stmt: Statement): string {
-  if (stmt.statementType === 'SELECT' || stmt.columns.length)
-    return 'result.rows'
-  return 'result.rowCount'
+function outputValue(stmt: Statement): string {
+  switch (stmt.rowCount) {
+    case 'zero':
+      return 'result.rowCount' // return the affected row count
+    case 'one':
+      return 'result.rows[0]'
+    case 'zeroOrOne':
+      return 'result.rows.length ? result.rows[0] : null'
+    case 'many':
+      return 'result.rows'
+  }
 }
 
 function stringLiteral(str: string): string {
