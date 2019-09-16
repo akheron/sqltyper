@@ -133,7 +133,7 @@ const identifier = attempt(
   )
 )
 
-const reservedWord = <A extends string>(word: A): Parser<A> => {
+export const reservedWord = <A extends string>(word: A): Parser<A> => {
   if (!reservedWords.includes(word))
     throw new Error(`INTERNAL ERROR: ${word} is not included in reservedWords`)
   return attempt(

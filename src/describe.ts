@@ -1,28 +1,44 @@
-import { Either, left, right } from 'fp-ts/lib/Either'
+import * as Either from 'fp-ts/lib/Either'
+import * as Task from 'fp-ts/lib/Task'
+import * as TaskEither from 'fp-ts/lib/TaskEither'
+import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
+import * as P from 'typed-parser'
 
 import { Client, QueryResult } from './pg'
-import { Statement } from './types'
+import { reservedWord } from './parser'
+import { Statement, StatementType } from './types'
 
-export async function describeStatement(
+export function describeStatement(
   client: Client,
   sql: string,
   paramNames: string[]
-): Promise<Either<string, Statement>> {
-  try {
-    const queryResult = await client.query({ text: sql, describe: true })
-    return right(describeResult(sql, paramNames, queryResult))
-  } catch (error) {
-    return left(describeError(error, sql))
-  }
+): TaskEither.TaskEither<string, Statement> {
+  return pipe(
+    TaskEither.tryCatch(
+      () => client.query({ text: sql, describe: true }),
+      error => describeError(error as PGError, sql)
+    ),
+    TaskEither.chain(queryResult =>
+      pipe(
+        Task.of(getStatementType(sql)),
+        TaskEither.map(statementType => ({ queryResult, statementType }))
+      )
+    ),
+    TaskEither.map(({ queryResult, statementType }) =>
+      describeResult(sql, statementType, paramNames, queryResult)
+    )
+  )
 }
 
 function describeResult(
   sql: string,
+  statementType: StatementType,
   paramNames: string[],
   queryResult: QueryResult<any>
 ): Statement {
   return {
+    statementType,
     columns: queryResult.fields.map(field => ({
       name: field.name,
       nullable: true,
@@ -36,6 +52,27 @@ function describeResult(
     sql,
   }
 }
+
+function getStatementType(sql: string): Either.Either<string, StatementType> {
+  // Throws on error, but there should be no error at this point
+  // because describe has succeeded on the Postgres server
+  return Either.tryCatch(
+    () => P.run(statementTypeParser, sql),
+    () =>
+      'Unsupported statement type (expected one of SELECT, INSERT, UPDATE, DELETE'
+  )
+}
+
+const statementTypeParser: P.Parser<StatementType> = P.seq(
+  P.$2,
+  P._,
+  P.oneOf(
+    reservedWord('SELECT'),
+    reservedWord('INSERT'),
+    reservedWord('UPDATE'),
+    reservedWord('DELETE')
+  )
+)
 
 type PGError = {
   message: string | undefined

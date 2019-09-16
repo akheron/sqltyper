@@ -184,7 +184,7 @@ async function processSQLFile(
       Task.of(fs.readFile(filePath)),
       Task.map(s => s.toString()),
       Task.map(preprocessSQL),
-      TaskEither.chain(processed => () =>
+      TaskEither.chain(processed =>
         describeStatement(clients.pg, processed.sql, processed.paramNames)
       ),
       TaskEither.chain(stmt => Task.of(validateStatement(stmt))),

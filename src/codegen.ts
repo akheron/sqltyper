@@ -40,7 +40,7 @@ export async function ${funcName(fileName)}(
 ): Promise<${outputType(types, stmt)}> {
     const result = await client.query(\`\\
 ${stmt.sql}\`${queryValues(stmt, positionalOnly)})
-    return result.rows
+    return ${funcResultExpr(stmt)}
 }
 `
 }
@@ -55,16 +55,25 @@ function funcName(fileName: string) {
 }
 
 function outputType(types: TypeClient, stmt: Statement) {
-  return (
-    'Array<{ ' +
-    stmt.columns
-      .map(column => {
-        const { name, type } = types.columnType(column)
-        return `${stringLiteral(name)}: ${type}`
-      })
-      .join('; ') +
-    ' }>'
-  )
+  if (stmt.statementType === 'SELECT' || stmt.columns.length) {
+    return (
+      'Array<{ ' +
+      stmt.columns
+        .map(column => {
+          const { name, type } = types.columnType(column)
+          return `${stringLiteral(name)}: ${type}`
+        })
+        .join('; ') +
+      ' }>'
+    )
+  }
+  return 'number'
+}
+
+function funcResultExpr(stmt: Statement): string {
+  if (stmt.statementType === 'SELECT' || stmt.columns.length)
+    return 'result.rows'
+  return 'result.rowCount'
 }
 
 function stringLiteral(str: string): string {
