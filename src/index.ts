@@ -1,6 +1,6 @@
 // tslint:disable:no-console
-import { Dirent, promises as fs } from 'fs'
-import { watch as fsWatch } from 'fs'
+import { promises as fs } from 'fs'
+import watch from 'node-watch'
 import * as path from 'path'
 
 import * as Either from 'fp-ts/lib/Either'
@@ -92,12 +92,20 @@ async function watchDirectories(
 ) {
   await processDirectories(clients, fileExtensions, dirPaths)
   dirPaths.forEach(dirPath =>
-    fsWatch(dirPath, async (_eventType, fileName) => {
-      if (!(await isSQLFile(fileExtensions, dirPath, fileName))) {
-        return
+    watch(
+      dirPath,
+      { filter: fileName => hasOneOfExtensions(fileExtensions, fileName) },
+      async (event, filePath) => {
+        switch (event) {
+          case 'update':
+            processSQLFile(clients, filePath)
+            return
+          case 'remove':
+            removeOutputFile(filePath)
+            return
+        }
       }
-      processSQLFile(clients, path.join(dirPath, fileName))
-    })
+    )
   )
   return new Promise(() => {})
 }
@@ -163,6 +171,17 @@ async function processSQLFile(
       })
     )()
   )
+}
+
+async function removeOutputFile(filePath: string): Promise<void> {
+  const tsPath = getOutputPath(filePath)
+  try {
+    await fs.unlink(tsPath)
+  } catch (_err) {
+    return
+  }
+  console.log('---------------------------------------------------------')
+  console.log(`Removed ${tsPath}`)
 }
 
 function getOutputPath(filePath: string): string {

@@ -24,6 +24,7 @@
     "buffer-writer": "^2.0.0",
     "camelcase": "^5.3.1",
     "fp-ts": "^2.0.5",
+    "node-watch": "^0.6.3",
     "packet-reader": "^1.0.0",
     "pg-connection-string": "^2.1.0",
     "pg-pool": "^2.0.7",
