@@ -30,15 +30,15 @@ async function main(): Promise<number> {
     }
     dirPaths.push(dirPath)
   }
-  const fileExtensions = extensions(args.e)
+  const fileExtensions = extensions(args.ext)
 
-  const clients = await connect(args.d)
+  const clients = await connect(args.database)
   if (Either.isLeft(clients)) {
     console.error(clients.left)
     throw process.exit(1)
   }
 
-  if (args.w) {
+  if (args.watch) {
     await watchDirectories(clients.right, fileExtensions, dirPaths)
   } else {
     await processDirectories(clients.right, fileExtensions, dirPaths)
@@ -51,20 +51,20 @@ async function main(): Promise<number> {
 function parseArgs() {
   return yargs
     .usage('Usage: $0 [options] DIRECTORY...')
-    .option('d', {
-      alias: 'database',
+    .option('database', {
+      alias: 'd',
       describe:
         'Database URI to connect to, e.g. -d postgres://user:pass@localhost/mydb',
       type: 'string',
     })
-    .option('e', {
-      alias: 'ext',
+    .option('ext', {
+      alias: 'e',
       default: 'sql',
       describe: 'File extensions to consider, e.g. -e sql,psql',
       type: 'string',
     })
-    .option('w', {
-      alias: 'watch',
+    .option('watch', {
+      alias: 'w',
       description: 'Watch files and run the conversion when something changes',
       type: 'boolean',
     })
