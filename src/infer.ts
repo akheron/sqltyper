@@ -71,7 +71,7 @@ function inferColumnNullability(
         ),
       insert: ({ table, as, returning }) =>
         pipe(
-          getSourceTable(client, null, table, as),
+          getSourceTable(client, table, as),
           TaskEither.chain(sourceTable =>
             Task.of(inferSelectListNullability([sourceTable], returning))
           )
@@ -81,7 +81,7 @@ function inferColumnNullability(
           getSourceTables(client, from),
           TaskEither.chain(sourceTables =>
             pipe(
-              getSourceTable(client, null, table, as),
+              getSourceTable(client, table, as),
               TaskEither.map(t => [t, ...sourceTables])
             )
           ),
@@ -91,7 +91,7 @@ function inferColumnNullability(
         ),
       delete: ({ table, as, returning }) =>
         pipe(
-          getSourceTable(client, null, table, as),
+          getSourceTable(client, table, as),
           TaskEither.chain(sourceTable =>
             Task.of(inferSelectListNullability([sourceTable], returning))
           )
@@ -249,7 +249,7 @@ function getSourceTables(
 ): TaskEither.TaskEither<string, SourceTable[]> {
   if (from) {
     return array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
-      getSourceTable(client, s.table.schema, s.table.table, s.as)
+      getSourceTable(client, s.table, s.as)
     )
   }
   return async () => Either.right([])
@@ -257,12 +257,11 @@ function getSourceTables(
 
 function getSourceTable(
   client: SchemaClient,
-  schemaName: string | null,
-  tableName: string,
+  table: ast.TableRef,
   as: string | null
 ): TaskEither.TaskEither<string, SourceTable> {
   return pipe(
-    client.getTable(schemaName, tableName),
+    client.getTable(table.schema, table.table),
     TaskEither.map(table => ({
       table,
       as: as || table.name,

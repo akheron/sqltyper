@@ -36,6 +36,7 @@ import {
   Select,
   SelectListItem,
   Statement,
+  TableRef,
   UpdateAssignment,
   Values,
   Update,
@@ -450,7 +451,7 @@ const joinType: Parser<Join.JoinType> = oneOf(
 
 const tableRef = seq(
   (id1, _ws1, id2) =>
-    id2 ? { schema: id1, table: id2 } : { schema: null, table: id1 },
+    id2 ? TableRef.create(id1, id2) : TableRef.create(null, id1),
   identifier,
   _,
   optional(seq($3, symbol('.'), _, identifier, _))
@@ -632,13 +633,13 @@ const returning: Parser<SelectListItem[]> = seq(
   selectList
 )
 
-const insertInto: Parser<string> = seq(
+const insertInto: Parser<TableRef> = seq(
   $5,
   reservedWord('INSERT'),
   _,
   reservedWord('INTO'),
   _,
-  identifier,
+  tableRef,
   _
 )
 
@@ -679,11 +680,11 @@ const updateAssignments: Parser<UpdateAssignment[]> = seq(
   )
 )
 
-const updateTable: Parser<string> = seq(
+const updateTable: Parser<TableRef> = seq(
   $3,
   reservedWord('UPDATE'),
   _,
-  identifier,
+  tableRef,
   _
 )
 
@@ -709,13 +710,13 @@ const update: Parser<Statement> = seq(
 
 // DELETE
 
-const deleteFrom: Parser<string> = seq(
+const deleteFrom: Parser<TableRef> = seq(
   $5,
   reservedWord('DELETE'),
   _,
   reservedWord('FROM'),
   _,
-  identifier,
+  tableRef,
   _
 )
 

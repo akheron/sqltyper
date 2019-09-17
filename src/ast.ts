@@ -186,6 +186,14 @@ export namespace SelectListItem {
   }
 }
 
+export type TableRef = { schema: string | null; table: string }
+
+export namespace TableRef {
+  export function create(schema: string | null, table: string) {
+    return { schema, table }
+  }
+}
+
 export type Join = {
   kind: 'JOIN'
   joinType: Join.JoinType
@@ -206,8 +214,6 @@ export namespace Join {
     return { kind: 'JOIN', joinType, table, as, condition }
   }
 }
-
-export type TableRef = { schema: string | null; table: string }
 
 export type From = {
   table: TableRef
@@ -331,7 +337,7 @@ export namespace Values {
 export type Insert = {
   kind: 'Insert'
   ctes: WithQuery[]
-  table: string
+  table: TableRef
   as: string | null
   columns: string[]
   values: Values
@@ -341,7 +347,7 @@ export type Insert = {
 export namespace Insert {
   export function create(
     ctes: WithQuery[],
-    table: string,
+    table: TableRef,
     as: string | null,
     columns: string[],
     values: Values,
@@ -369,7 +375,7 @@ export type UpdateAssignment = {
 export type Update = {
   kind: 'Update'
   ctes: WithQuery[]
-  table: string
+  table: TableRef
   as: string | null
   updates: UpdateAssignment[]
   from: From | null
@@ -380,7 +386,7 @@ export type Update = {
 export namespace Update {
   export function create(
     ctes: WithQuery[],
-    table: string,
+    table: TableRef,
     as: string | null,
     updates: UpdateAssignment[],
     from: From | null,
@@ -402,7 +408,7 @@ export namespace Update {
 
 export type Delete = {
   kind: 'Delete'
-  table: string
+  table: TableRef
   as: string | null
   where: Expression | null
   returning: SelectListItem[]
@@ -410,7 +416,7 @@ export type Delete = {
 
 export namespace Delete {
   export function create(
-    table: string,
+    table: TableRef,
     as: string | null,
     where: Expression | null,
     returning: SelectListItem[]
