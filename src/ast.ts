@@ -6,6 +6,8 @@ export type Expression =
   | Expression.Positional
   | Expression.UnaryOp
   | Expression.BinaryOp
+  | Expression.ExistsOp
+  | Expression.InOp
   | Expression.FunctionCall
 
 export namespace Expression {
@@ -74,6 +76,30 @@ export namespace Expression {
     return { kind: 'BinaryOp', lhs, op, rhs }
   }
 
+  export type ExistsOp = {
+    kind: 'ExistsOp'
+    subquery: Select
+  }
+
+  export function createExistsOp(subquery: Select): ExistsOp {
+    return { kind: 'ExistsOp', subquery }
+  }
+
+  export type InOp = {
+    kind: 'InOp'
+    lhs: Expression
+    op: 'IN' | 'NOT IN'
+    subquery: Select
+  }
+
+  export function createInOp(
+    lhs: Expression,
+    op: 'IN' | 'NOT IN',
+    subquery: Select
+  ): InOp {
+    return { kind: 'InOp', lhs, op, subquery }
+  }
+
   export type FunctionCall = {
     kind: 'FunctionCall'
     funcName: string
@@ -96,6 +122,8 @@ export namespace Expression {
       positional: (value: Positional) => T
       unaryOp: (value: UnaryOp) => T
       binaryOp: (value: BinaryOp) => T
+      existsOp: (value: ExistsOp) => T
+      inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
     }
   ): T {
@@ -112,6 +140,10 @@ export namespace Expression {
         return handlers.unaryOp(expr)
       case 'BinaryOp':
         return handlers.binaryOp(expr)
+      case 'ExistsOp':
+        return handlers.existsOp(expr)
+      case 'InOp':
+        return handlers.inOp(expr)
       case 'FunctionCall':
         return handlers.functionCall(expr)
     }

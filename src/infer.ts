@@ -190,6 +190,12 @@ function inferExpressionNullability(
       inferExpressionNullability(sourceTables, lhs) ||
       inferExpressionNullability(sourceTables, rhs),
 
+    // EXISTS (subquery) never returns NULL
+    existsOp: () => Either.right(false),
+
+    // expr IN (subquery) returns NULL if expr is NULL
+    inOp: ({ lhs }) => inferExpressionNullability(sourceTables, lhs),
+
     // A function call returns NULL if any of its arguments is NULL
     functionCall: ({ argList }) =>
       pipe(

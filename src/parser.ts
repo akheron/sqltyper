@@ -73,6 +73,7 @@ const reservedWords: string[] = [
   'DESC',
   'DISTINCT',
   'EXCEPT',
+  'EXISTS',
   'FALSE',
   'FIRST',
   'FROM',
@@ -352,7 +353,70 @@ const unaryPlusMinus = makeUnaryOp(oneOfOperators('+', '-'), subscriptExpr)
 const expExpr = makeBinaryOp(operator('^'), unaryPlusMinus)
 const mulDivModExpr = makeBinaryOp(oneOfOperators('*', '/', '%'), expExpr)
 const addSubExpr = makeBinaryOp(oneOfOperators('+', '-'), mulDivModExpr)
-const otherOpExpr = makeBinaryOp(
+
+const existsExpr = seq(
+  (_exists, _ws, subquery) => Expression.createExistsOp(subquery),
+  reservedWord('EXISTS'),
+  _,
+  parenthesized(lazy(() => select))
+)
+
+type InExprRhs = { op: 'IN' | 'NOT IN'; rhs: Select }
+function isInExprRhs(a: any): a is InExprRhs {
+  return a.op === 'IN' || a.op === 'NOT IN'
+}
+const inExpr: Parser<InExprRhs> = seq(
+  (op, rhs) => ({ op, rhs }),
+  attempt(
+    oneOf<'IN' | 'NOT IN'>(
+      seq(_ => 'IN', reservedWord('IN'), _),
+      seq(_ => 'NOT IN', reservedWord('NOT'), _, reservedWord('IN'), _)
+    )
+  ),
+  parenthesized(lazy(() => select))
+)
+
+type OtherExprRhs = { op: string; rhs: Expression }
+const otherOpExpr: Parser<OtherExprRhs> = seq(
+  (op, _ws, rhs) => ({ op, rhs }),
+  anyOperatorExcept([
+    '<',
+    '>',
+    '=',
+    '<=',
+    '>=',
+    '<>',
+    '+',
+    '-',
+    '*',
+    '/',
+    '%',
+    '^',
+  ]),
+  _,
+  addSubExpr
+)
+const otherOrInExpr = seq(
+  (first, _ws1, rest, _ws2) =>
+    rest.reduce(
+      (acc, val) =>
+        isInExprRhs(val)
+          ? Expression.createInOp(acc, val.op, val.rhs)
+          : Expression.createBinaryOp(acc, val.op, val.rhs),
+      first
+    ),
+  addSubExpr,
+  _,
+  many(
+    oneOf<
+      { op: 'IN' | 'NOT IN'; rhs: Select } | { op: string; rhs: Expression }
+    >(otherOpExpr, inExpr)
+  ),
+  _
+)
+const otherExpr = oneOf(existsExpr, otherOrInExpr)
+
+makeBinaryOp(
   anyOperatorExcept([
     '<',
     '>',
@@ -371,7 +435,7 @@ const otherOpExpr = makeBinaryOp(
 )
 const comparisonExpr = makeBinaryOp(
   oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
-  otherOpExpr
+  otherExpr
 )
 
 const isExpr = seq(
@@ -612,7 +676,7 @@ const selectSetOps: Parser<SelectOp[]> = many(
   )
 )
 
-const select: Parser<Statement> = seq(
+const select: Parser<Select> = seq(
   (withQueries, body, setOps, orderBy, limit) =>
     Select.create(withQueries || [], body, setOps, orderBy || [], limit),
   optional(withQueries),
@@ -664,7 +728,7 @@ const insertInto: Parser<TableRef> = seq(
   _
 )
 
-const insert: Parser<Statement> = seq(
+const insert: Parser<Insert> = seq(
   (withQueries, table, as, columns, values, returning) =>
     Insert.create(
       withQueries || [],
@@ -709,7 +773,7 @@ const updateTable: Parser<TableRef> = seq(
   _
 )
 
-const update: Parser<Statement> = seq(
+const update: Parser<Update> = seq(
   (withQueries, table, as, updates, from, where, returning) =>
     Update.create(
       withQueries || [],
@@ -741,7 +805,7 @@ const deleteFrom: Parser<TableRef> = seq(
   _
 )
 
-const delete_: Parser<Statement> = seq(
+const delete_: Parser<Delete> = seq(
   (table, as, where, returning) =>
     Delete.create(table, as, where, returning || []),
   deleteFrom,
@@ -755,7 +819,7 @@ const delete_: Parser<Statement> = seq(
 const statementParser: Parser<AST> = seq(
   ({ result, startOffset, endOffset }) =>
     AST.create(result, startOffset, endOffset),
-  withRange(oneOf(select, insert, update, delete_))
+  withRange(oneOf<Statement>(select, insert, update, delete_))
 )
 
 const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)
