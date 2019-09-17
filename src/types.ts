@@ -1,6 +1,6 @@
 export type Oid = number
 
-export type Statement = {
+export type StatementDescription = {
   sql: string
   columns: StatementColumn[]
   params: Parameter[]

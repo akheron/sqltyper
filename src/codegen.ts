@@ -4,9 +4,11 @@ import camelCase = require('camelcase')
 import { Either, left, right } from 'fp-ts/lib/Either'
 
 import { TypeClient } from './tstype'
-import { Statement } from './types'
+import { StatementDescription } from './types'
 
-export function validateStatement(stmt: Statement): Either<string, Statement> {
+export function validateStatement(
+  stmt: StatementDescription
+): Either<string, StatementDescription> {
   const columnNames: Set<string> = new Set()
   const conflicts: Set<string> = new Set()
 
@@ -29,7 +31,7 @@ export function validateStatement(stmt: Statement): Either<string, Statement> {
 export function generateTypeScript(
   types: TypeClient,
   fileName: string,
-  stmt: Statement
+  stmt: StatementDescription
 ): string {
   const positionalOnly = hasOnlyPositionalParams(stmt)
   return `\
@@ -45,7 +47,7 @@ ${stmt.sql}\`${queryValues(stmt, positionalOnly)})
 `
 }
 
-function hasOnlyPositionalParams(stmt: Statement) {
+function hasOnlyPositionalParams(stmt: StatementDescription) {
   return stmt.params.every(param => !!param.name.match(/\$\d+/))
 }
 
@@ -54,7 +56,7 @@ function funcName(fileName: string) {
   return camelCase(parsed.name)
 }
 
-function outputType(types: TypeClient, stmt: Statement) {
+function outputType(types: TypeClient, stmt: StatementDescription) {
   const rowType =
     '{ ' +
     stmt.columns
@@ -76,7 +78,7 @@ function outputType(types: TypeClient, stmt: Statement) {
   }
 }
 
-function outputValue(stmt: Statement): string {
+function outputValue(stmt: StatementDescription): string {
   switch (stmt.rowCount) {
     case 'zero':
       return 'result.rowCount' // return the affected row count
@@ -95,7 +97,7 @@ function stringLiteral(str: string): string {
 
 function funcParams(
   types: TypeClient,
-  stmt: Statement,
+  stmt: StatementDescription,
   positionalOnly: boolean
 ) {
   if (!stmt.params.length) {
@@ -110,17 +112,17 @@ function funcParams(
   )
 }
 
-function positionalFuncParams(types: TypeClient, stmt: Statement) {
+function positionalFuncParams(types: TypeClient, stmt: StatementDescription) {
   return stmt.params
     .map(param => `${param.name}: ${types.tsType(param.type, false)}`)
     .join(', ')
 }
 
-function namedFuncParams(types: TypeClient, stmt: Statement) {
+function namedFuncParams(types: TypeClient, stmt: StatementDescription) {
   return 'params: { ' + positionalFuncParams(types, stmt) + ' }'
 }
 
-function queryValues(stmt: Statement, positionalOnly: boolean) {
+function queryValues(stmt: StatementDescription, positionalOnly: boolean) {
   if (!stmt.params.length) {
     return ''
   }

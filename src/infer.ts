@@ -8,14 +8,14 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import * as ast from './ast'
 import { parse } from './parser'
 import { SchemaClient } from './schema'
-import { Statement, StatementRowCount } from './types'
+import { StatementDescription, StatementRowCount } from './types'
 
 import { SourceTable, getSourceTables, getSourceTable } from './source'
 
 export function inferStatementNullability(
   schemaClient: SchemaClient,
-  statement: Statement
-): TaskEither.TaskEither<string, Statement> {
+  statement: StatementDescription
+): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     TaskEither.fromEither(parse(statement.sql)),
     TaskEither.chain(parseResult =>
@@ -38,9 +38,9 @@ statement. The inferred types may be inaccurate with respect to nullability.`
 
 export function inferOutputNullability(
   client: SchemaClient,
-  statement: Statement,
+  statement: StatementDescription,
   tree: ast.AST
-): TaskEither.TaskEither<string, Statement> {
+): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     inferColumnNullability(client, tree),
     TaskEither.chain(columnNullability =>
@@ -98,9 +98,9 @@ function inferColumnNullability(
 }
 
 function applyColumnNullability(
-  stmt: Statement,
+  stmt: StatementDescription,
   columnNullability: ColumnNullability
-): Either.Either<string, Statement> {
+): Either.Either<string, StatementDescription> {
   if (columnNullability.length != stmt.columns.length) {
     return Either.left(`BUG: Non-equal number of columns: \
 inferred ${columnNullability.length}, actual ${stmt.columns.length}`)
@@ -200,7 +200,10 @@ function inferExpressionNullability(
   })
 }
 
-function inferSingleRow(statement: Statement, parseResult: ast.AST): Statement {
+function inferSingleRow(
+  statement: StatementDescription,
+  parseResult: ast.AST
+): StatementDescription {
   const rowCount: StatementRowCount = ast.walk(parseResult, {
     select: ({ limit }) =>
       limit && limit.count && isConstantExprOf('1', limit.count)

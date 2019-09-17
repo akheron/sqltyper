@@ -3,13 +3,13 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
 
 import { Client, QueryResult } from './pg'
-import { Statement } from './types'
+import { StatementDescription } from './types'
 
 export function describeStatement(
   client: Client,
   sql: string,
   paramNames: string[]
-): TaskEither.TaskEither<string, Statement> {
+): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     TaskEither.tryCatch(
       () => client.query({ text: sql, describe: true }),
@@ -23,7 +23,7 @@ function describeResult(
   sql: string,
   paramNames: string[],
   queryResult: QueryResult<any>
-): Statement {
+): StatementDescription {
   return {
     columns: queryResult.fields.map(field => ({
       name: field.name,
