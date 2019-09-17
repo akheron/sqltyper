@@ -260,6 +260,7 @@ export namespace Limit {
 
 export type Select = {
   kind: 'Select'
+  with: WithQuery[]
   selectList: SelectListItem[]
   from: From | null
   where: Expression | null
@@ -270,6 +271,7 @@ export type Select = {
 
 export namespace Select {
   export function create(
+    withQueries: WithQuery[],
     selectList: SelectListItem[],
     from: From | null,
     where: Expression | null,
@@ -277,7 +279,16 @@ export namespace Select {
     orderBy: OrderBy[],
     limit: Limit | null
   ): Select {
-    return { kind: 'Select', selectList, from, where, groupBy, orderBy, limit }
+    return {
+      kind: 'Select',
+      with: withQueries,
+      selectList,
+      from,
+      where,
+      groupBy,
+      orderBy,
+      limit,
+    }
   }
 }
 
@@ -319,6 +330,7 @@ export namespace Values {
 
 export type Insert = {
   kind: 'Insert'
+  with: WithQuery[]
   table: string
   as: string | null
   columns: string[]
@@ -328,13 +340,22 @@ export type Insert = {
 
 export namespace Insert {
   export function create(
+    withQueries: WithQuery[],
     table: string,
     as: string | null,
     columns: string[],
     values: Values,
     returning: SelectListItem[]
   ): Insert {
-    return { kind: 'Insert', table, as, columns, values, returning }
+    return {
+      kind: 'Insert',
+      with: withQueries,
+      table,
+      as,
+      columns,
+      values,
+      returning,
+    }
   }
 }
 
@@ -347,6 +368,7 @@ export type UpdateAssignment = {
 
 export type Update = {
   kind: 'Update'
+  with: WithQuery[]
   table: string
   as: string | null
   updates: UpdateAssignment[]
@@ -357,6 +379,7 @@ export type Update = {
 
 export namespace Update {
   export function create(
+    withQueries: WithQuery[],
     table: string,
     as: string | null,
     updates: UpdateAssignment[],
@@ -364,7 +387,16 @@ export namespace Update {
     where: Expression | null,
     returning: SelectListItem[]
   ): Update {
-    return { kind: 'Update', table, as, updates, from, where, returning }
+    return {
+      kind: 'Update',
+      with: withQueries,
+      table,
+      as,
+      updates,
+      from,
+      where,
+      returning,
+    }
   }
 }
 
@@ -384,6 +416,24 @@ export namespace Delete {
     returning: SelectListItem[]
   ): Delete {
     return { kind: 'Delete', table, as, where, returning }
+  }
+}
+
+// ---------------------------------------------------------------------
+
+export type WithQuery = {
+  as: string
+  columnNames: string[] | null
+  query: AST
+}
+
+export namespace WithQuery {
+  export function create(
+    as: string,
+    columnNames: string[] | null,
+    query: AST
+  ): WithQuery {
+    return { as, columnNames, query }
   }
 }
 

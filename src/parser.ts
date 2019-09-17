@@ -38,6 +38,7 @@ import {
   UpdateAssignment,
   Values,
   Update,
+  WithQuery,
 } from './ast'
 
 export { ParseError, isParseError } from 'typed-parser'
@@ -103,6 +104,7 @@ const reservedWords: string[] = [
   'USING',
   'VALUES',
   'WHERE',
+  'WITH',
 ]
 
 const quotedEscape = seq(
@@ -179,6 +181,10 @@ const anyOperatorExcept = (exclude: string[]) =>
 
 const itemSep = seq($null, symbol(','), _)
 
+function parenthesized<T>(parser: Parser<T>): Parser<T> {
+  return seq($3, symbol('('), _, parser, symbol(')'), _)
+}
+
 // [ AS ] identifier
 const as: Parser<string | null> = seq(
   (_as, id, _ws1) => id,
@@ -192,16 +198,12 @@ const reqAs: Parser<string> = seq($3, reservedWord('AS'), _, identifier, _)
 
 // Expressions
 
-const functionArguments: Parser<Expression[]> = seq(
-  $3,
-  symbol('('),
-  _,
+const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
     // func(*} means no arguments
     seq((_a, _ws) => [], symbol('*'), _),
     sepBy(itemSep, lazy(() => expression))
-  ),
-  symbol(')')
+  )
 )
 
 const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
@@ -254,14 +256,8 @@ const userInputExpr: Parser<Expression> = seq(
   int('[0-9]+')
 )
 
-const parenthesizedExpr: Parser<Expression> = seq(
-  $3,
-  symbol('('),
-  _,
-  lazy(() => expression),
-  _,
-  symbol(')'),
-  _
+const parenthesizedExpr: Parser<Expression> = parenthesized(
+  lazy(() => expression)
 )
 
 const primaryExpr = oneOf(
@@ -363,6 +359,32 @@ const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
 
 const expression: Parser<Expression> = orExpr
 
+// (name1, name2, ...)
+
+const identifierList: Parser<string[]> = parenthesized(
+  sepBy1(itemSep, seq($1, identifier, _))
+)
+
+// WITH
+
+const withQueries: Parser<WithQuery[]> = seq(
+  $3,
+  reservedWord('WITH'),
+  _,
+  sepBy1(
+    itemSep,
+    seq(
+      (as, _ws1, columns, _as, _ws2, stmt) =>
+        WithQuery.create(as, columns, stmt),
+      identifier,
+      _,
+      optional(identifierList),
+      reservedWord('AS'),
+      _,
+      parenthesized(lazy(() => statementParser))
+    )
+  )
+)
 // FROM & JOIN
 
 const joinType: Parser<Join.JoinType> = oneOf(
@@ -525,8 +547,17 @@ const selectListItem = oneOf(
 const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectListItem)
 
 const select: Parser<AST> = seq(
-  (_select, _ws1, list, from, where, groupBy, orderBy, limit) =>
-    Select.create(list, from, where, groupBy || [], orderBy || [], limit),
+  (withQueries, _select, _ws1, list, from, where, groupBy, orderBy, limit) =>
+    Select.create(
+      withQueries || [],
+      list,
+      from,
+      where,
+      groupBy || [],
+      orderBy || [],
+      limit
+    ),
+  optional(withQueries),
   reservedWord('SELECT'),
   _,
   selectList,
@@ -538,15 +569,6 @@ const select: Parser<AST> = seq(
 )
 
 // INSERT
-
-const columnList: Parser<string[]> = seq(
-  $3,
-  symbol('('),
-  _,
-  sepBy1(itemSep, seq($1, identifier, _)),
-  symbol(')'),
-  _
-)
 
 const defaultValues: Parser<Values> = seq(
   (_def, _ws1, _val, _ws2) => Values.defaultValues,
@@ -562,15 +584,8 @@ const expressionValues: Parser<Values> = seq(
   _,
   sepBy(
     itemSep,
-    seq(
-      $3,
-      symbol('('),
-      _,
-      sepBy1(
-        itemSep,
-        oneOf(seq($null, reservedWord('DEFAULT'), _), expression)
-      ),
-      symbol(')')
+    parenthesized(
+      sepBy1(itemSep, oneOf(seq($null, reservedWord('DEFAULT'), _), expression))
     )
   ),
   _
@@ -585,17 +600,30 @@ const returning: Parser<SelectListItem[]> = seq(
   selectList
 )
 
-const insert: Parser<AST> = seq(
-  (_ins, _ws1, _into, _ws2, table, _ws3, as, columns, values, returning) =>
-    Insert.create(table, as, columns || [], values, returning || []),
+const insertInto: Parser<string> = seq(
+  $5,
   reservedWord('INSERT'),
   _,
   reservedWord('INTO'),
   _,
   identifier,
-  _,
+  _
+)
+
+const insert: Parser<AST> = seq(
+  (withQueries, table, as, columns, values, returning) =>
+    Insert.create(
+      withQueries || [],
+      table,
+      as,
+      columns || [],
+      values,
+      returning || []
+    ),
+  optional(withQueries),
+  insertInto,
   optional(reqAs),
-  optional(columnList),
+  optional(identifierList),
   values,
   optional(returning)
 )
@@ -619,13 +647,27 @@ const updateAssignments: Parser<UpdateAssignment[]> = seq(
   )
 )
 
-const update: Parser<AST> = seq(
-  (_upd, _ws1, table, _ws2, as, updates, from, where, returning) =>
-    Update.create(table, as, updates, from, where, returning || []),
+const updateTable: Parser<string> = seq(
+  $3,
   reservedWord('UPDATE'),
   _,
   identifier,
-  _,
+  _
+)
+
+const update: Parser<AST> = seq(
+  (withQueries, table, as, updates, from, where, returning) =>
+    Update.create(
+      withQueries || [],
+      table,
+      as,
+      updates,
+      from,
+      where,
+      returning || []
+    ),
+  optional(withQueries),
+  updateTable,
   optional(reqAs),
   updateAssignments,
   optional(from),
@@ -635,15 +677,20 @@ const update: Parser<AST> = seq(
 
 // DELETE
 
-const delete_: Parser<AST> = seq(
-  (_del, _ws1, _from, _ws2, table, _ws3, as, where, returning) =>
-    Delete.create(table, as, where, returning || []),
+const deleteFrom: Parser<string> = seq(
+  $5,
   reservedWord('DELETE'),
   _,
   reservedWord('FROM'),
   _,
   identifier,
-  _,
+  _
+)
+
+const delete_: Parser<AST> = seq(
+  (table, as, where, returning) =>
+    Delete.create(table, as, where, returning || []),
+  deleteFrom,
   optional(reqAs),
   optional(where),
   optional(returning)
@@ -651,16 +698,13 @@ const delete_: Parser<AST> = seq(
 
 // parse
 
-const statementParser: Parser<AST> = seq(
-  $2,
-  _,
-  oneOf(select, insert, update, delete_),
-  end
-)
+const statementParser: Parser<AST> = oneOf(select, insert, update, delete_)
+
+const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)
 
 export function parse(source: string): Either<string, AST> {
   return tryCatch(
-    () => run(statementParser, source),
+    () => run(topLevelParser, source),
     e => (e as ParseError).explain()
   )
 }
