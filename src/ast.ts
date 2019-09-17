@@ -260,7 +260,7 @@ export namespace Limit {
 
 export type Select = {
   kind: 'Select'
-  with: WithQuery[]
+  ctes: WithQuery[]
   selectList: SelectListItem[]
   from: From | null
   where: Expression | null
@@ -271,7 +271,7 @@ export type Select = {
 
 export namespace Select {
   export function create(
-    withQueries: WithQuery[],
+    ctes: WithQuery[],
     selectList: SelectListItem[],
     from: From | null,
     where: Expression | null,
@@ -281,7 +281,7 @@ export namespace Select {
   ): Select {
     return {
       kind: 'Select',
-      with: withQueries,
+      ctes,
       selectList,
       from,
       where,
@@ -330,7 +330,7 @@ export namespace Values {
 
 export type Insert = {
   kind: 'Insert'
-  with: WithQuery[]
+  ctes: WithQuery[]
   table: string
   as: string | null
   columns: string[]
@@ -340,7 +340,7 @@ export type Insert = {
 
 export namespace Insert {
   export function create(
-    withQueries: WithQuery[],
+    ctes: WithQuery[],
     table: string,
     as: string | null,
     columns: string[],
@@ -349,7 +349,7 @@ export namespace Insert {
   ): Insert {
     return {
       kind: 'Insert',
-      with: withQueries,
+      ctes,
       table,
       as,
       columns,
@@ -368,7 +368,7 @@ export type UpdateAssignment = {
 
 export type Update = {
   kind: 'Update'
-  with: WithQuery[]
+  ctes: WithQuery[]
   table: string
   as: string | null
   updates: UpdateAssignment[]
@@ -379,7 +379,7 @@ export type Update = {
 
 export namespace Update {
   export function create(
-    withQueries: WithQuery[],
+    ctes: WithQuery[],
     table: string,
     as: string | null,
     updates: UpdateAssignment[],
@@ -389,7 +389,7 @@ export namespace Update {
   ): Update {
     return {
       kind: 'Update',
-      with: withQueries,
+      ctes,
       table,
       as,
       updates,
@@ -439,7 +439,23 @@ export namespace WithQuery {
 
 // ---------------------------------------------------------------------
 
-export type AST = Select | Insert | Update | Delete
+export type Statement = Select | Insert | Update | Delete
+
+export type AST = {
+  statement: Statement
+  startOffset: number
+  endOffset: number
+}
+
+export namespace AST {
+  export function create(
+    statement: Statement,
+    startOffset: number,
+    endOffset: number
+  ): AST {
+    return { statement, startOffset, endOffset }
+  }
+}
 
 export function walk<T>(
   ast: AST,
@@ -450,14 +466,14 @@ export function walk<T>(
     delete: (node: Delete) => T
   }
 ): T {
-  switch (ast.kind) {
+  switch (ast.statement.kind) {
     case 'Select':
-      return handlers.select(ast)
+      return handlers.select(ast.statement)
     case 'Insert':
-      return handlers.insert(ast)
+      return handlers.insert(ast.statement)
     case 'Update':
-      return handlers.update(ast)
+      return handlers.update(ast.statement)
     case 'Delete':
-      return handlers.delete(ast)
+      return handlers.delete(ast.statement)
   }
 }

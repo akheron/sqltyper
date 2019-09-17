@@ -35,6 +35,7 @@ import {
   OrderBy,
   Select,
   SelectListItem,
+  Statement,
   UpdateAssignment,
   Values,
   Update,
@@ -183,6 +184,37 @@ const itemSep = seq($null, symbol(','), _)
 
 function parenthesized<T>(parser: Parser<T>): Parser<T> {
   return seq($3, symbol('('), _, parser, symbol(')'), _)
+}
+
+type RangeMatch<T> = {
+  result: T
+  startOffset: number
+  endOffset: number
+}
+
+// typed-parser doesn't export the Failure interface, so we have to do
+// some digging to get hold of it :)
+type Failure = Exclude<ReturnType<Parser<'foo'>>, 'foo'>
+
+function isFailure(a: any): a is Failure {
+  return (
+    a instanceof Object &&
+    ['scope', 'offset', 'message'].every(prop => a.hasOwnProperty(prop))
+  )
+}
+
+function withRange<T>(parser: Parser<T>): Parser<RangeMatch<T>> {
+  return (source, context) => {
+    const startOffset = context.offset
+
+    const result = parser(source, context)
+    if (isFailure(result)) {
+      return result
+    }
+
+    const endOffset = context.offset
+    return { result, startOffset, endOffset }
+  }
 }
 
 // [ AS ] identifier
@@ -546,7 +578,7 @@ const selectListItem = oneOf(
 
 const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectListItem)
 
-const select: Parser<AST> = seq(
+const select: Parser<Statement> = seq(
   (withQueries, _select, _ws1, list, from, where, groupBy, orderBy, limit) =>
     Select.create(
       withQueries || [],
@@ -610,7 +642,7 @@ const insertInto: Parser<string> = seq(
   _
 )
 
-const insert: Parser<AST> = seq(
+const insert: Parser<Statement> = seq(
   (withQueries, table, as, columns, values, returning) =>
     Insert.create(
       withQueries || [],
@@ -655,7 +687,7 @@ const updateTable: Parser<string> = seq(
   _
 )
 
-const update: Parser<AST> = seq(
+const update: Parser<Statement> = seq(
   (withQueries, table, as, updates, from, where, returning) =>
     Update.create(
       withQueries || [],
@@ -687,7 +719,7 @@ const deleteFrom: Parser<string> = seq(
   _
 )
 
-const delete_: Parser<AST> = seq(
+const delete_: Parser<Statement> = seq(
   (table, as, where, returning) =>
     Delete.create(table, as, where, returning || []),
   deleteFrom,
@@ -698,7 +730,11 @@ const delete_: Parser<AST> = seq(
 
 // parse
 
-const statementParser: Parser<AST> = oneOf(select, insert, update, delete_)
+const statementParser: Parser<AST> = seq(
+  ({ result, startOffset, endOffset }) =>
+    AST.create(result, startOffset, endOffset),
+  withRange(oneOf(select, insert, update, delete_))
+)
 
 const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)
 

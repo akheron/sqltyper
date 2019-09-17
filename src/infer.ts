@@ -7,10 +7,13 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 
 import * as ast from './ast'
 import { parse } from './parser'
-import { SchemaClient } from './schema'
+import { SchemaClient, Table } from './schema'
 import { StatementDescription, StatementRowCount } from './types'
 
-import { SourceTable, getSourceTables, getSourceTable } from './source'
+export type SourceTable = {
+  table: Table
+  as: string
+}
 
 export function inferStatementNullability(
   schemaClient: SchemaClient,
@@ -238,6 +241,33 @@ function inferSingleRow(
   })
 
   return { ...statement, rowCount }
+}
+
+function getSourceTables(
+  client: SchemaClient,
+  from: ast.From | null
+): TaskEither.TaskEither<string, SourceTable[]> {
+  if (from) {
+    return array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
+      getSourceTable(client, s.table.schema, s.table.table, s.as)
+    )
+  }
+  return async () => Either.right([])
+}
+
+function getSourceTable(
+  client: SchemaClient,
+  schemaName: string | null,
+  tableName: string,
+  as: string | null
+): TaskEither.TaskEither<string, SourceTable> {
+  return pipe(
+    client.getTable(schemaName, tableName),
+    TaskEither.map(table => ({
+      table,
+      as: as || table.name,
+    }))
+  )
 }
 
 function isConstantExprOf(expectedValue: string, expr: ast.Expression) {
