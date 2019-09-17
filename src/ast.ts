@@ -264,13 +264,45 @@ export namespace Limit {
   }
 }
 
-export type Select = {
-  kind: 'Select'
-  ctes: WithQuery[]
+export type SelectBody = {
   selectList: SelectListItem[]
   from: From | null
   where: Expression | null
   groupBy: Expression[]
+}
+
+export namespace SelectBody {
+  export function create(
+    selectList: SelectListItem[],
+    from: From | null,
+    where: Expression | null,
+    groupBy: Expression[]
+  ): SelectBody {
+    return { selectList, from, where, groupBy }
+  }
+}
+
+export type SelectOp = {
+  op: 'UNION' | 'INTERSECT' | 'EXCEPT'
+  duplicates: 'DISTINCT' | 'ALL'
+  select: SelectBody
+}
+
+export namespace SelectOp {
+  export function create(
+    op: 'UNION' | 'INTERSECT' | 'EXCEPT',
+    duplicates: 'DISTINCT' | 'ALL',
+    select: SelectBody
+  ): SelectOp {
+    return { op, duplicates, select }
+  }
+}
+
+export type Select = {
+  kind: 'Select'
+  ctes: WithQuery[]
+  body: SelectBody
+  setOps: SelectOp[]
   orderBy: OrderBy[]
   limit: Limit | null
 }
@@ -278,20 +310,16 @@ export type Select = {
 export namespace Select {
   export function create(
     ctes: WithQuery[],
-    selectList: SelectListItem[],
-    from: From | null,
-    where: Expression | null,
-    groupBy: Expression[],
+    body: SelectBody,
+    setOps: SelectOp[],
     orderBy: OrderBy[],
     limit: Limit | null
   ): Select {
     return {
       kind: 'Select',
       ctes,
-      selectList,
-      from,
-      where,
-      groupBy,
+      body,
+      setOps,
       orderBy,
       limit,
     }

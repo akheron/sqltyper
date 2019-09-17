@@ -6,13 +6,13 @@ import { Client, QueryResult } from './pg'
 import { StatementDescription } from './types'
 
 export function describeStatement(
-  client: Client,
+  pgClient: Client,
   sql: string,
   paramNames: string[]
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     TaskEither.tryCatch(
-      () => client.query({ text: sql, describe: true }),
+      () => pgClient.query({ text: sql, describe: true }),
       error => describeError(error as PGError, sql)
     ),
     TaskEither.map(queryResult => describeResult(sql, paramNames, queryResult))

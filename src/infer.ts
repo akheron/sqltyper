@@ -16,15 +16,15 @@ export type SourceTable = {
 }
 
 export function inferStatementNullability(
-  schemaClient: SchemaClient,
+  client: SchemaClient,
   statement: StatementDescription
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     TaskEither.fromEither(parse(statement.sql)),
-    TaskEither.chain(parseResult =>
+    TaskEither.chain(astNode =>
       pipe(
-        inferOutputNullability(schemaClient, statement, parseResult),
-        TaskEither.map(stmt => inferSingleRow(stmt, parseResult))
+        inferOutputNullability(client, statement, astNode),
+        TaskEither.map(stmt => inferSingleRow(stmt, astNode))
       )
     ),
     TaskEither.orElse(parseErrorStr => {
@@ -62,38 +62,41 @@ function inferColumnNullability(
 ): TaskEither.TaskEither<string, ColumnNullability> {
   return pipe(
     ast.walk(tree, {
-      select: ({ from, selectList }) =>
+      select: ({ body }) =>
         pipe(
-          getSourceTables(client, from),
+          getSourceTablesForFrom(client, body.from),
           TaskEither.chain(sourceTables =>
-            Task.of(inferSelectListNullability(sourceTables, selectList))
+            TaskEither.fromEither(
+              inferSelectListNullability(sourceTables, body.selectList)
+            )
           )
         ),
       insert: ({ table, as, returning }) =>
         pipe(
           getSourceTable(client, table, as),
-          TaskEither.chain(sourceTable =>
-            Task.of(inferSelectListNullability([sourceTable], returning))
+          TaskEither.chain(sourceTables =>
+            TaskEither.fromEither(
+              inferSelectListNullability(sourceTables, returning)
+            )
           )
         ),
       update: ({ table, as, from, returning }) =>
         pipe(
-          getSourceTables(client, from),
-          TaskEither.chain(sourceTables =>
-            pipe(
-              getSourceTable(client, table, as),
-              TaskEither.map(t => [t, ...sourceTables])
-            )
+          combineSourceTables(
+            getSourceTablesForFrom(client, from),
+            getSourceTable(client, table, as)
           ),
           TaskEither.chain(sourceTables =>
-            Task.of(inferSelectListNullability(sourceTables, returning))
+            TaskEither.fromEither(
+              inferSelectListNullability(sourceTables, returning)
+            )
           )
         ),
       delete: ({ table, as, returning }) =>
         pipe(
           getSourceTable(client, table, as),
-          TaskEither.chain(sourceTable =>
-            Task.of(inferSelectListNullability([sourceTable], returning))
+          TaskEither.chain(sourceTables =>
+            Task.of(inferSelectListNullability(sourceTables, returning))
           )
         ),
     })
@@ -205,9 +208,9 @@ function inferExpressionNullability(
 
 function inferSingleRow(
   statement: StatementDescription,
-  parseResult: ast.AST
+  astNode: ast.AST
 ): StatementDescription {
-  const rowCount: StatementRowCount = ast.walk(parseResult, {
+  const rowCount: StatementRowCount = ast.walk(astNode, {
     select: ({ limit }) =>
       limit && limit.count && isConstantExprOf('1', limit.count)
         ? 'zeroOrOne' // LIMIT 1 => zero or one rows
@@ -243,29 +246,43 @@ function inferSingleRow(
   return { ...statement, rowCount }
 }
 
-function getSourceTables(
-  client: SchemaClient,
-  from: ast.From | null
-): TaskEither.TaskEither<string, SourceTable[]> {
-  if (from) {
-    return array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
-      getSourceTable(client, s.table, s.as)
-    )
-  }
-  return async () => Either.right([])
-}
-
 function getSourceTable(
   client: SchemaClient,
   table: ast.TableRef,
   as: string | null
-): TaskEither.TaskEither<string, SourceTable> {
+): TaskEither.TaskEither<string, SourceTable[]> {
   return pipe(
     client.getTable(table.schema, table.table),
-    TaskEither.map(table => ({
-      table,
-      as: as || table.name,
-    }))
+    TaskEither.map(table => [
+      {
+        table,
+        as: as || table.name,
+      },
+    ])
+  )
+}
+
+function getSourceTablesForFrom(
+  client: SchemaClient,
+  from: ast.From | null
+): TaskEither.TaskEither<string, SourceTable[]> {
+  if (from) {
+    return pipe(
+      array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
+        getSourceTable(client, s.table, s.as)
+      ),
+      TaskEither.map(R.flatten)
+    )
+  }
+  return TaskEither.right([])
+}
+
+function combineSourceTables(
+  ...tables: Array<TaskEither.TaskEither<string, SourceTable[]>>
+): TaskEither.TaskEither<string, SourceTable[]> {
+  return pipe(
+    array.sequence(TaskEither.taskEither)(tables),
+    TaskEither.map(R.flatten)
   )
 }
 

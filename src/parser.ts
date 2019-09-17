@@ -34,6 +34,8 @@ import {
   Limit,
   OrderBy,
   Select,
+  SelectBody,
+  SelectOp,
   SelectListItem,
   Statement,
   TableRef,
@@ -69,6 +71,8 @@ const reservedWords: string[] = [
   'DEFAULT',
   'DELETE',
   'DESC',
+  'DISTINCT',
+  'EXCEPT',
   'FALSE',
   'FIRST',
   'FROM',
@@ -78,6 +82,7 @@ const reservedWords: string[] = [
   'IN',
   'INNER',
   'INSERT',
+  'INTERSECT',
   'INTO',
   'IS',
   'ISNULL',
@@ -101,6 +106,7 @@ const reservedWords: string[] = [
   'SET',
   'SIMILAR',
   'TRUE',
+  'UNION',
   'UNKNOWN',
   'UPDATE',
   'USING',
@@ -579,24 +585,39 @@ const selectListItem = oneOf(
 
 const selectList: Parser<SelectListItem[]> = sepBy1(itemSep, selectListItem)
 
-const select: Parser<Statement> = seq(
-  (withQueries, _select, _ws1, list, from, where, groupBy, orderBy, limit) =>
-    Select.create(
-      withQueries || [],
-      list,
-      from,
-      where,
-      groupBy || [],
-      orderBy || [],
-      limit
-    ),
-  optional(withQueries),
+const selectBody: Parser<SelectBody> = seq(
+  (_sel, _ws, list, from, where, groupBy) =>
+    SelectBody.create(list, from, where, groupBy || []),
   reservedWord('SELECT'),
   _,
   selectList,
   optional(from),
   optional(where),
-  optional(groupBy),
+  optional(groupBy)
+)
+
+const selectSetOps: Parser<SelectOp[]> = many(
+  seq(
+    (op, _ws1, duplicates, _ws2, body) =>
+      SelectOp.create(op, duplicates || 'DISTINCT', body),
+    oneOf(
+      reservedWord('UNION'),
+      reservedWord('INTERSECT'),
+      reservedWord('EXCEPT')
+    ),
+    _,
+    optional(oneOf(reservedWord('ALL'), reservedWord('DISTINCT'))),
+    _,
+    selectBody
+  )
+)
+
+const select: Parser<Statement> = seq(
+  (withQueries, body, setOps, orderBy, limit) =>
+    Select.create(withQueries || [], body, setOps, orderBy || [], limit),
+  optional(withQueries),
+  selectBody,
+  selectSetOps,
   optional(orderBy),
   optional(limit)
 )
