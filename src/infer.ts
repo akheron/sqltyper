@@ -20,7 +20,7 @@ export function inferStatementNullability(
     TaskEither.fromEither(parse(statement.sql)),
     TaskEither.chain(parseResult =>
       pipe(
-        inferColumnNullability(schemaClient, statement, parseResult),
+        inferOutputNullability(schemaClient, statement, parseResult),
         TaskEither.map(stmt => inferSingleRow(stmt, parseResult))
       )
     ),
@@ -36,13 +36,27 @@ statement. The inferred types may be inaccurate with respect to nullability.`
   )
 }
 
-type ColumnNullability = boolean[]
-
-export function inferColumnNullability(
+export function inferOutputNullability(
   client: SchemaClient,
   statement: Statement,
   tree: ast.AST
 ): TaskEither.TaskEither<string, Statement> {
+  return pipe(
+    inferColumnNullability(client, tree),
+    TaskEither.chain(columnNullability =>
+      TaskEither.fromEither(
+        applyColumnNullability(statement, columnNullability)
+      )
+    )
+  )
+}
+
+type ColumnNullability = boolean[]
+
+function inferColumnNullability(
+  client: SchemaClient,
+  tree: ast.AST
+): TaskEither.TaskEither<string, ColumnNullability> {
   return pipe(
     ast.walk(tree, {
       select: ({ from, selectList }) =>
@@ -79,12 +93,7 @@ export function inferColumnNullability(
             Task.of(inferSelectListNullability([sourceTable], returning))
           )
         ),
-    }),
-    TaskEither.chain(columnNullability =>
-      TaskEither.fromEither(
-        applyColumnNullability(statement, columnNullability)
-      )
-    )
+    })
   )
 }
 
