@@ -5,5 +5,9 @@
     "module": "commonjs",
     "strict": true,
     "allowJs": true
-  }
+  },
+  "exclude": [
+    "dist",
+    "tests"
+  ]
 }

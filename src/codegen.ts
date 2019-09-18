@@ -4,7 +4,7 @@ import camelCase = require('camelcase')
 import { Either, left, right } from 'fp-ts/lib/Either'
 
 import { TypeClient } from './tstype'
-import { StatementDescription } from './types'
+import { StatementDescription, StatementColumn } from './types'
 
 export function validateStatement(
   stmt: StatementDescription
@@ -39,7 +39,7 @@ import { ClientBase } from 'pg'
 
 export async function ${funcName(fileName)}(
   client: ClientBase${funcParams(types, stmt, positionalOnly)}
-): Promise<${outputType(types, stmt)}> {
+): Promise<${funcReturnType(types, stmt)}> {
     const result = await client.query(\`\\
 ${stmt.sql}\`${queryValues(stmt, positionalOnly)})
     return ${outputValue(stmt)}
@@ -56,16 +56,8 @@ function funcName(fileName: string) {
   return camelCase(parsed.name)
 }
 
-function outputType(types: TypeClient, stmt: StatementDescription) {
-  const rowType =
-    '{ ' +
-    stmt.columns
-      .map(column => {
-        const { name, type } = types.columnType(column)
-        return `${stringLiteral(name)}: ${type}`
-      })
-      .join('; ') +
-    ' }'
+function funcReturnType(types: TypeClient, stmt: StatementDescription) {
+  const rowType = '{ ' + stmt.columns.map(columnType(types)).join('; ') + ' }'
   switch (stmt.rowCount) {
     case 'zero':
       return 'number' // return the affected row count
@@ -76,6 +68,11 @@ function outputType(types: TypeClient, stmt: StatementDescription) {
     case 'many':
       return `Array<${rowType}>`
   }
+}
+
+const columnType = (types: TypeClient) => (column: StatementColumn): string => {
+  const { name, type } = types.columnType(column)
+  return `${stringLiteral(name)}: ${type}`
 }
 
 function outputValue(stmt: StatementDescription): string {
