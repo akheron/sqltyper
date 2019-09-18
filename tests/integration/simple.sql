@@ -1,8 +1,8 @@
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  id serial,
-  name varchar(255) not null,
+  id serial PRIMARY KEY,
+  name varchar(255) NOT NULL,
   age integer
 );
 

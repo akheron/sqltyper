@@ -1,16 +1,26 @@
+Assigning an input param directly to a nullable column in UPDATE
+should make the param nullable. Computing a derived value and then
+assigning should not.
+
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  id serial,
-  name varchar(255) not null,
+  id serial PRIMARY KEY,
+  constant integer,
+  name varchar(255) NOT NULL,
   age integer,
   height_doubled integer
 );
 
 --- query -----------------------------------------------------------------
 
-INSERT INTO person (name, age, height_doubled)
-VALUES (${name}, ${age}, ${height} * 2)
+UPDATE person
+SET
+    constant = 42,
+    name = ${name},
+    age = ${age},
+    height_doubled = ${height} * 2
+WHERE id = ${id}
 
 --- expected row count ----------------------------------------------------
 
@@ -23,3 +33,4 @@ zero
 name: string
 age: number | null
 height: number
+id: number

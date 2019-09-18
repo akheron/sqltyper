@@ -1,10 +1,12 @@
+A custom enum is be converted to a union type of string constants
+
 --- setup -----------------------------------------------------------------
 
 CREATE TYPE myenum AS ENUM ('foo', 'bar', 'baz');
 
 CREATE TABLE mytable (
-  id serial,
-  value myenum not null,
+  id serial PRIMARY KEY,
+  value myenum NOT NULL,
   other myenum
 );
 
