@@ -290,8 +290,8 @@ const constantExpr: Parser<Expression> = seq(
   oneOf(match("[0-9]+|' '"), stringConstant)
 )
 
-const userInputExpr: Parser<Expression> = seq(
-  (_$, index) => Expression.createPositional(index),
+const parameterExpr: Parser<Expression> = seq(
+  (_$, index) => Expression.createParameter(index),
   symbol('$'),
   int('[0-9]+')
 )
@@ -303,7 +303,7 @@ const parenthesizedExpr: Parser<Expression> = parenthesized(
 const primaryExpr = oneOf(
   columnRefOrFunctionCallExpr,
   constantExpr,
-  userInputExpr,
+  parameterExpr,
   parenthesizedExpr
 )
 

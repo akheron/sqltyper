@@ -2,8 +2,8 @@ export type Oid = number
 
 export type StatementDescription = {
   sql: string
-  columns: StatementColumn[]
-  params: Parameter[]
+  columns: NamedValue[]
+  params: NamedValue[]
   rowCount: StatementRowCount
 }
 
@@ -15,15 +15,10 @@ export type StatementRowCount =
   | 'zeroOrOne' // zero or one output row
   | 'many' // zero or more output rows
 
-export type StatementColumn = {
+export type NamedValue = {
   name: string
   type: Oid
   nullable: boolean
-}
-
-export type Parameter = {
-  name: string
-  type: Oid
 }
 
 export type TsType = string

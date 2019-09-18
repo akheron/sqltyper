@@ -4,7 +4,7 @@ import camelCase = require('camelcase')
 import { Either, left, right } from 'fp-ts/lib/Either'
 
 import { TypeClient } from './tstype'
-import { StatementDescription, StatementColumn } from './types'
+import { StatementDescription, NamedValue } from './types'
 
 export function validateStatement(
   stmt: StatementDescription
@@ -70,7 +70,7 @@ function funcReturnType(types: TypeClient, stmt: StatementDescription) {
   }
 }
 
-const columnType = (types: TypeClient) => (column: StatementColumn): string => {
+const columnType = (types: TypeClient) => (column: NamedValue): string => {
   const { name, type } = types.columnType(column)
   return `${stringLiteral(name)}: ${type}`
 }
@@ -111,7 +111,7 @@ function funcParams(
 
 function positionalFuncParams(types: TypeClient, stmt: StatementDescription) {
   return stmt.params
-    .map(param => `${param.name}: ${types.tsType(param.type, false)}`)
+    .map(param => `${param.name}: ${types.tsType(param.type, param.nullable)}`)
     .join(', ')
 }
 

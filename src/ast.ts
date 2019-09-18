@@ -3,7 +3,7 @@ export type Expression =
   | Expression.ColumnRef
   | Expression.TableColumnRef
   | Expression.Constant
-  | Expression.Positional
+  | Expression.Parameter
   | Expression.UnaryOp
   | Expression.BinaryOp
   | Expression.ExistsOp
@@ -42,13 +42,13 @@ export namespace Expression {
     return { kind: 'Constant', valueText }
   }
 
-  export type Positional = {
-    kind: 'Positional'
+  export type Parameter = {
+    kind: 'Parameter'
     index: number
   }
 
-  export function createPositional(index: number): Positional {
-    return { kind: 'Positional', index }
+  export function createParameter(index: number): Parameter {
+    return { kind: 'Parameter', index }
   }
 
   export type UnaryOp = {
@@ -119,7 +119,7 @@ export namespace Expression {
       columnRef: (value: ColumnRef) => T
       tableColumnRef: (value: TableColumnRef) => T
       constant: (value: Constant) => T
-      positional: (value: Positional) => T
+      parameter: (value: Parameter) => T
       unaryOp: (value: UnaryOp) => T
       binaryOp: (value: BinaryOp) => T
       existsOp: (value: ExistsOp) => T
@@ -134,8 +134,8 @@ export namespace Expression {
         return handlers.tableColumnRef(expr)
       case 'Constant':
         return handlers.constant(expr)
-      case 'Positional':
-        return handlers.positional(expr)
+      case 'Parameter':
+        return handlers.parameter(expr)
       case 'UnaryOp':
         return handlers.unaryOp(expr)
       case 'BinaryOp':
@@ -156,6 +156,19 @@ export namespace Expression {
   ): T {
     switch (expr.kind) {
       case 'Constant':
+        return handler(expr)
+      default:
+        return elseVal
+    }
+  }
+
+  export function walkParameter<T>(
+    expr: Expression,
+    elseVal: T,
+    handler: (node: Parameter) => T
+  ): T {
+    switch (expr.kind) {
+      case 'Parameter':
         return handler(expr)
       default:
         return elseVal
@@ -369,13 +382,13 @@ export namespace Values {
 
   export type ExpressionValues = {
     kind: 'ExpressionValues'
-    values: Array<Array<null | Expression>> // null means DEFAULT
+    valuesList: Array<Array<null | Expression>> // null means DEFAULT
   }
 
   export function createExpressionValues(
-    values: Array<Array<null | Expression>>
+    valuesList: Array<Array<null | Expression>>
   ): ExpressionValues {
-    return { kind: 'ExpressionValues', values }
+    return { kind: 'ExpressionValues', valuesList }
   }
 
   export function walk<T>(

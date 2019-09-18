@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import { Oid, TsType, StatementColumn } from './types'
+import { NamedValue, Oid, TsType } from './types'
 import { Client } from './pg'
 import { schemaClient } from './schema'
 
@@ -14,7 +14,7 @@ export async function typeClient(pgClient: Client) {
     return nullable ? `${result} | null` : result
   }
 
-  function columnType(column: StatementColumn): { name: string; type: TsType } {
+  function columnType(column: NamedValue): { name: string; type: TsType } {
     return {
       name: column.name,
       type: tsType(column.type, column.nullable),

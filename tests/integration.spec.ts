@@ -41,7 +41,7 @@ describe('Integration tests', () => {
       pipe(
         TaskEither.fromEither(parseTestFile(filePath)),
         TaskEither.chain(testFile => () =>
-          alwaysRollback<Either.Either<string, boolean>>(
+          alwaysRollback<Either.Either<string, void>>(
             pgClient,
             async pgClient => {
               // Setup
@@ -55,7 +55,7 @@ describe('Integration tests', () => {
 
               // Check expectations
               const typeClient = await getTypeClient(pgClient)
-              await pipe(
+              return await pipe(
                 statementDescription,
                 TaskEither.map(statementDescription => {
                   // Expected row count
@@ -72,13 +72,11 @@ describe('Integration tests', () => {
                   // Expected param types
                   const paramTypes = statementDescription.params.map(param => ({
                     name: param.name,
-                    type: typeClient.tsType(param.type, false),
+                    type: typeClient.tsType(param.type, param.nullable),
                   }))
                   expect(paramTypes).toEqual(testFile.paramTypes)
                 })
               )()
-
-              return Either.right(true)
             }
           )
         ),

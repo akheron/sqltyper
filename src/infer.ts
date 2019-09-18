@@ -1,14 +1,18 @@
 import * as R from 'ramda'
-import { pipe } from 'fp-ts/lib/pipeable'
-import { array } from 'fp-ts/lib/Array'
+
+import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
+import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
 import { parse } from './parser'
-import { SchemaClient, Table } from './schema'
+import { SchemaClient, Table, Column } from './schema'
 import { StatementDescription, StatementRowCount } from './types'
+
+const sequenceAE = Array.array.sequence(Either.either)
+const sequenceATE = Array.array.sequence(TaskEither.taskEither)
 
 export type SourceTable = {
   table: Table
@@ -23,8 +27,9 @@ export function inferStatementNullability(
     TaskEither.fromEither(parse(statement.sql)),
     TaskEither.chain(astNode =>
       pipe(
-        inferOutputNullability(client, statement, astNode),
-        TaskEither.map(stmt => inferSingleRow(stmt, astNode))
+        inferColumnNullability(client, statement, astNode),
+        TaskEither.chain(stmt => inferParamNullability(client, stmt, astNode)),
+        TaskEither.map(stmt => inferRowCount(stmt, astNode))
       )
     ),
     TaskEither.orElse(parseErrorStr => {
@@ -39,13 +44,13 @@ statement. The inferred types may be inaccurate with respect to nullability.`
   )
 }
 
-export function inferOutputNullability(
+export function inferColumnNullability(
   client: SchemaClient,
   statement: StatementDescription,
   tree: ast.AST
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
-    inferColumnNullability(client, tree),
+    getColumnNullability(client, tree),
     TaskEither.chain(columnNullability =>
       TaskEither.fromEither(
         applyColumnNullability(statement, columnNullability)
@@ -54,58 +59,56 @@ export function inferOutputNullability(
   )
 }
 
-type ColumnNullability = boolean[]
+type ColumnNullability = boolean
 
-function inferColumnNullability(
+function getColumnNullability(
   client: SchemaClient,
   tree: ast.AST
-): TaskEither.TaskEither<string, ColumnNullability> {
-  return pipe(
-    ast.walk(tree, {
-      select: ({ body }) =>
-        pipe(
-          getSourceTablesForFrom(client, body.from),
-          TaskEither.chain(sourceTables =>
-            TaskEither.fromEither(
-              inferSelectListNullability(sourceTables, body.selectList)
-            )
+): TaskEither.TaskEither<string, ColumnNullability[]> {
+  return ast.walk(tree, {
+    select: ({ body }) =>
+      pipe(
+        getSourceTablesForFrom(client, body.from),
+        TaskEither.chain(sourceTables =>
+          TaskEither.fromEither(
+            inferSelectListNullability(sourceTables, body.selectList)
           )
-        ),
-      insert: ({ table, as, returning }) =>
-        pipe(
-          getSourceTable(client, table, as),
-          TaskEither.chain(sourceTables =>
-            TaskEither.fromEither(
-              inferSelectListNullability(sourceTables, returning)
-            )
+        )
+      ),
+    insert: ({ table, as, returning }) =>
+      pipe(
+        getSourceTable(client, table, as),
+        TaskEither.chain(sourceTables =>
+          TaskEither.fromEither(
+            inferSelectListNullability(sourceTables, returning)
           )
+        )
+      ),
+    update: ({ table, as, from, returning }) =>
+      pipe(
+        combineSourceTables(
+          getSourceTablesForFrom(client, from),
+          getSourceTable(client, table, as)
         ),
-      update: ({ table, as, from, returning }) =>
-        pipe(
-          combineSourceTables(
-            getSourceTablesForFrom(client, from),
-            getSourceTable(client, table, as)
-          ),
-          TaskEither.chain(sourceTables =>
-            TaskEither.fromEither(
-              inferSelectListNullability(sourceTables, returning)
-            )
+        TaskEither.chain(sourceTables =>
+          TaskEither.fromEither(
+            inferSelectListNullability(sourceTables, returning)
           )
-        ),
-      delete: ({ table, as, returning }) =>
-        pipe(
-          getSourceTable(client, table, as),
-          TaskEither.chain(sourceTables =>
-            Task.of(inferSelectListNullability(sourceTables, returning))
-          )
-        ),
-    })
-  )
+        )
+      ),
+    delete: ({ table, as, returning }) =>
+      pipe(
+        getSourceTable(client, table, as),
+        TaskEither.chain(sourceTables =>
+          Task.of(inferSelectListNullability(sourceTables, returning))
+        )
+      ),
+  })
 }
 
 function applyColumnNullability(
   stmt: StatementDescription,
-  columnNullability: ColumnNullability
+  columnNullability: ColumnNullability[]
 ): Either.Either<string, StatementDescription> {
   if (columnNullability.length != stmt.columns.length) {
     return Either.left(`BUG: Non-equal number of columns: \
@@ -124,10 +127,10 @@ inferred ${columnNullability.length}, actual ${stmt.columns.length}`)
 function inferSelectListNullability(
   sourceTables: SourceTable[],
   selectList: ast.SelectListItem[]
-): Either.Either<string, ColumnNullability> {
+): Either.Either<string, ColumnNullability[]> {
   return pipe(
     selectList.map(item => inferSelectListItemNullability(sourceTables, item)),
-    array.sequence(Either.either),
+    sequenceAE,
     Either.map(R.flatten)
   )
 }
@@ -135,7 +138,7 @@ function inferSelectListNullability(
 function inferSelectListItemNullability(
   sourceTables: SourceTable[],
   selectListItem: ast.SelectListItem
-): Either.Either<string, ColumnNullability> {
+): Either.Either<string, ColumnNullability[]> {
   return ast.SelectListItem.walk(selectListItem, {
     allFields: () =>
       Either.right(
@@ -200,19 +203,176 @@ function inferExpressionNullability(
     functionCall: ({ argList }) =>
       pipe(
         argList.map(arg => inferExpressionNullability(sourceTables, arg)),
-        array.sequence(Either.either),
+        sequenceAE,
         Either.map(R.any(R.identity))
       ),
 
     // A constant is never NULL
     constant: () => Either.right(false),
 
-    // A positional parameter can be NULL
-    positional: () => Either.right(true),
+    // A parameter can be NULL
+    parameter: () => Either.right(true),
   })
 }
 
-function inferSingleRow(
+function inferParamNullability(
+  client: SchemaClient,
+  statement: StatementDescription,
+  tree: ast.AST
+): TaskEither.TaskEither<string, StatementDescription> {
+  return pipe(
+    getParamNullability(client, tree),
+    TaskEither.chain(paramNullability =>
+      paramNullability
+        ? TaskEither.fromEither(
+            applyParamNullability(statement, paramNullability)
+          )
+        : TaskEither.right(statement)
+    )
+  )
+}
+
+// index 0 means param $1, index 1 means param $2, etc.
+type ParamNullability = { index: number; nullable: boolean }
+
+function getParamNullability(
+  client: SchemaClient,
+  tree: ast.AST
+): TaskEither.TaskEither<string, ParamNullability[] | null> {
+  return ast.walk<TaskEither.TaskEither<string, ParamNullability[] | null>>(
+    tree,
+    {
+      select: () => TaskEither.right(null),
+      insert: ({ table, columns, values }) =>
+        pipe(
+          TaskEither.right(combineParamNullability),
+          TaskEither.ap(
+            TaskEither.right(findParamsFromValues(values, columns.length))
+          ),
+          TaskEither.ap(findInsertColumns(client, table, columns))
+        ),
+      update: ({ table, updates }) =>
+        findParamNullabilityFromUpdates(client, table, updates),
+      delete: () => TaskEither.right(null),
+    }
+  )
+}
+
+function findParamsFromValues(
+  values: ast.Values,
+  numInsertColumns: number
+): Array<Array<number | null>> {
+  return ast.Values.walk(values, {
+    defaultValues: () => [R.repeat(null, numInsertColumns)],
+    exprValues: ({ valuesList }) =>
+      valuesList.map(values => values.map(paramIndexFromExpr)),
+  })
+}
+
+function findParamNullabilityFromUpdates(
+  client: SchemaClient,
+  table: ast.TableRef,
+  updates: ast.UpdateAssignment[]
+): TaskEither.TaskEither<string, ParamNullability[]> {
+  return pipe(
+    client.getTable(table.schema, table.table),
+    TaskEither.chain(dbTable =>
+      TaskEither.fromEither(
+        pipe(
+          updates.map(update => updateToParamNullability(dbTable, update)),
+          sequenceAE
+        )
+      )
+    ),
+    TaskEither.map(paramNullabilities =>
+      paramNullabilities.filter(
+        (value: ParamNullability | null): value is ParamNullability =>
+          value != null
+      )
+    )
+  )
+}
+
+function paramIndexFromExpr(expression: ast.Expression | null): number | null {
+  return expression
+    ? ast.Expression.walkParameter(
+        expression,
+        null,
+        paramExpr => paramExpr.index - 1
+      )
+    : null
+}
+
+function updateToParamNullability(
+  dbTable: Table,
+  update: ast.UpdateAssignment
+) {
+  return pipe(
+    Either.right(makeParamNullability),
+    Either.ap(Either.right(paramIndexFromExpr(update.value))),
+    Either.ap(findTableColumn(dbTable, update.columnName))
+  )
+}
+
+const makeParamNullability = (index: number | null) => (column: Column) =>
+  index != null ? { index, nullable: column.nullable } : null
+
+function findInsertColumns(
+  client: SchemaClient,
+  table: ast.TableRef,
+  columnNames: string[]
+): TaskEither.TaskEither<string, Column[]> {
+  return pipe(
+    client.getTable(table.schema, table.table),
+    TaskEither.chain(dbTable =>
+      TaskEither.fromEither(
+        pipe(
+          columnNames.map(columnName => findTableColumn(dbTable, columnName)),
+          sequenceAE
+        )
+      )
+    )
+  )
+}
+
+const combineParamNullability = (
+  valuesListParams: Array<Array<null | number>>
+) => (targetColumns: Column[]): ParamNullability[] => {
+  return pipe(
+    valuesListParams.map(valuesParams =>
+      R.zip(targetColumns, valuesParams).map(([column, param]) =>
+        param != null ? { index: param, nullable: column.nullable } : null
+      )
+    ),
+    R.flatten
+  ).filter(
+    (value: ParamNullability | null): value is ParamNullability => value != null
+  )
+}
+
+function applyParamNullability(
+  stmt: StatementDescription,
+  paramNullability: ParamNullability[]
+): Either.Either<string, StatementDescription> {
+  // paramNullability may contain multiple records for each param. If
+  // any of the records states that the param is nullable, then it is
+  // nullable.
+  const nullability = R.range(0, stmt.params.length).map(index =>
+    paramNullability
+      .filter(record => record.index === index)
+      .some(record => record.nullable)
+  )
+  return Either.right({
+    ...stmt,
+    params: R.zipWith(
+      (param, nullable) => ({ ...param, nullable }),
+      stmt.params,
+      nullability
+    ),
+  })
+}
+
+function inferRowCount(
   statement: StatementDescription,
   astNode: ast.AST
 ): StatementDescription {
@@ -229,7 +389,7 @@ function inferSingleRow(
         exprValues: exprValues =>
           returning.length
             ? // Check the length of the VALUES expression list
-              exprValues.values.length === 1
+              exprValues.valuesList.length === 1
               ? 'one'
               : 'many'
             : // No RETURNING, no output
@@ -274,7 +434,7 @@ function getSourceTablesForFrom(
 ): TaskEither.TaskEither<string, SourceTable[]> {
   if (from) {
     return pipe(
-      array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
+      Array.array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
         getSourceTable(client, s.table, s.as)
       ),
       TaskEither.map(R.flatten)
@@ -287,7 +447,8 @@ function combineSourceTables(
   ...tables: Array<TaskEither.TaskEither<string, SourceTable[]>>
 ): TaskEither.TaskEither<string, SourceTable[]> {
   return pipe(
-    array.sequence(TaskEither.taskEither)(tables),
+    tables,
+    sequenceATE,
     TaskEither.map(R.flatten)
   )
 }
@@ -328,6 +489,13 @@ function findSourceColumn(sourceTables: SourceTable[], columnName: string) {
     sourceTables.map(sourceTable => sourceTable.table.columns),
     R.flatten,
     R.find(column => column.name === columnName),
+    Either.fromNullable(`Unknown column ${columnName}`)
+  )
+}
+
+function findTableColumn(table: Table, columnName: string) {
+  return pipe(
+    table.columns.find(column => column.name === columnName),
     Either.fromNullable(`Unknown column ${columnName}`)
   )
 }

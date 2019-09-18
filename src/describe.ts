@@ -27,12 +27,16 @@ function describeResult(
   return {
     columns: queryResult.fields.map(field => ({
       name: field.name,
-      nullable: true,
+      nullable: true, // columns are nullable by default
       type: field.dataTypeID,
     })),
     rowCount: 'many',
     params: R.zipWith(
-      (name, type) => ({ name, type }),
+      (name, type) => ({
+        name,
+        nullable: false, // params are non-nullable by default
+        type,
+      }),
       paramNames,
       queryResult.params
     ),
