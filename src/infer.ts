@@ -76,7 +76,11 @@ function getColumnNullability(
         getSourceTablesForTableExpr(client, body.from),
         TaskEither.chain(sourceTables =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceTables, body.selectList)
+            inferSelectListNullability(
+              sourceTables,
+              body.where,
+              body.selectList
+            )
           )
         )
       ),
@@ -85,11 +89,11 @@ function getColumnNullability(
         getSourceTable(client, table, as),
         TaskEither.chain(sourceTables =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceTables, returning)
+            inferSelectListNullability(sourceTables, null, returning)
           )
         )
       ),
-    update: ({ table, as, from, returning }) =>
+    update: ({ table, as, from, where, returning }) =>
       pipe(
         combineSourceTables(
           getSourceTablesForTableExpr(client, from),
@@ -97,15 +101,15 @@ function getColumnNullability(
         ),
         TaskEither.chain(sourceTables =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceTables, returning)
+            inferSelectListNullability(sourceTables, where, returning)
           )
         )
       ),
-    delete: ({ table, as, returning }) =>
+    delete: ({ table, as, where, returning }) =>
       pipe(
         getSourceTable(client, table, as),
         TaskEither.chain(sourceTables =>
-          Task.of(inferSelectListNullability(sourceTables, returning))
+          Task.of(inferSelectListNullability(sourceTables, where, returning))
         )
       ),
   })
@@ -131,17 +135,26 @@ inferred ${columnNullability.length}, actual ${stmt.columns.length}`)
 
 function inferSelectListNullability(
   sourceTables: SourceTable[],
+  where: ast.Expression | null,
   selectList: ast.SelectListItem[]
 ): Either.Either<string, ColumnNullability[]> {
   return pipe(
-    selectList.map(item => inferSelectListItemNullability(sourceTables, item)),
-    sequenceAE,
-    Either.map(R.flatten)
+    Either.right(getNonNullExpressionsFromWhere(where)),
+    Either.chain(nonNullExpressions =>
+      pipe(
+        selectList.map(item =>
+          inferSelectListItemNullability(sourceTables, nonNullExpressions, item)
+        ),
+        sequenceAE,
+        Either.map(R.flatten)
+      )
+    )
   )
 }
 
 function inferSelectListItemNullability(
   sourceTables: SourceTable[],
+  nonNullExpressions: ast.Expression[],
   selectListItem: ast.SelectListItem
 ): Either.Either<string, ColumnNullability[]> {
   return ast.SelectListItem.walk(selectListItem, {
@@ -163,7 +176,11 @@ function inferSelectListItemNullability(
 
     selectListExpression: ({ expression }) =>
       pipe(
-        inferExpressionNullability(sourceTables, expression),
+        inferExpressionNullability(
+          sourceTables,
+          nonNullExpressions,
+          expression
+        ),
         Either.map(x => [x])
       ),
   })
@@ -171,8 +188,16 @@ function inferSelectListItemNullability(
 
 function inferExpressionNullability(
   sourceTables: SourceTable[],
+  nonNullExprs: ast.Expression[],
   expression: ast.Expression
 ): Either.Either<string, boolean> {
+  if (
+    nonNullExprs.some(nonNull => ast.Expression.equals(expression, nonNull))
+  ) {
+    // This expression is guaranteed to be not NULL by a
+    // `WHERE expr IS NOT NULL` clause
+    return Either.right(false)
+  }
   return ast.Expression.walk<Either.Either<string, boolean>>(expression, {
     // A column reference may evaluate to NULL if the column doesn't
     // have a NOT NULL constraint
@@ -191,19 +216,18 @@ function inferExpressionNullability(
       ),
 
     // A unary operator returns NULL if its operand is NULL
-    unaryOp: ({ operand }) => inferExpressionNullability(sourceTables, operand),
+    unaryOp: ({ operand }) =>
+      inferExpressionNullability(sourceTables, nonNullExprs, operand),
 
     // A binary operator returns NULL if any of its operands is NULL
     binaryOp: ({ lhs, rhs }) =>
-      inferExpressionNullability(sourceTables, lhs) ||
-      inferExpressionNullability(sourceTables, rhs),
+      inferExpressionNullability(sourceTables, nonNullExprs, lhs) ||
+      inferExpressionNullability(sourceTables, nonNullExprs, rhs),
 
     // EXISTS (subquery) never returns NULL
     existsOp: () => Either.right(false),
 
     // expr IN (subquery) returns NULL if expr is NULL
-    inOp: ({ lhs }) => inferExpressionNullability(sourceTables, lhs),
-
     // A function call returns NULL if any of its arguments is NULL
     functionCall: ({ argList }) =>
       pipe(
@@ -211,12 +235,39 @@ function inferExpressionNullability(
         sequenceAE,
         Either.map(R.any(R.identity))
       ),
+    inOp: ({ lhs }) =>
+      inferExpressionNullability(sourceTables, nonNullExprs, lhs),
 
     // A constant is never NULL
     constant: () => Either.right(false),
 
     // A parameter can be NULL
     parameter: () => Either.right(true),
+  })
+}
+
+function getNonNullExpressionsFromWhere(
+  where: ast.Expression | null
+): ast.Expression[] {
+  if (where == null) {
+    return []
+  }
+  return ast.Expression.walkSome<ast.Expression[]>(where, [], {
+    binaryOp: ({ lhs, op, rhs }) => {
+      if (op === 'AND') {
+        return [
+          ...getNonNullExpressionsFromWhere(lhs),
+          ...getNonNullExpressionsFromWhere(rhs),
+        ]
+      }
+      return []
+    },
+    unaryOp: ({ op, operand }) => {
+      if (op === 'IS NOT NULL' || op === 'NOTNULL') {
+        return [operand]
+      }
+      return []
+    },
   })
 }
 
@@ -300,11 +351,9 @@ function findParamNullabilityFromUpdates(
 
 function paramIndexFromExpr(expression: ast.Expression | null): number | null {
   return expression
-    ? ast.Expression.walkParameter(
-        expression,
-        null,
-        paramExpr => paramExpr.index - 1
-      )
+    ? ast.Expression.walkSome(expression, null, {
+        parameter: paramExpr => paramExpr.index - 1,
+      })
     : null
 }
 
@@ -494,11 +543,9 @@ function combineSourceTables(
 }
 
 function isConstantExprOf(expectedValue: string, expr: ast.Expression) {
-  return ast.Expression.walkConstant(
-    expr,
-    false,
-    ({ valueText }) => valueText === expectedValue
-  )
+  return ast.Expression.walkSome(expr, false, {
+    constant: ({ valueText }) => valueText === expectedValue,
+  })
 }
 
 function findSourceTable(sourceTables: SourceTable[], tableName: string) {

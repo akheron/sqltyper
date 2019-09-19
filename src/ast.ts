@@ -1,3 +1,5 @@
+import * as R from 'ramda'
+
 // $1 -> index 1, $2 -> index 2, ...
 export type Expression =
   | Expression.ColumnRef
@@ -113,6 +115,45 @@ export namespace Expression {
     return { kind: 'FunctionCall', funcName, argList }
   }
 
+  export function walkSome<T>(
+    expr: Expression,
+    elseVal: T,
+    handlers: {
+      columnRef?: (value: ColumnRef) => T
+      tableColumnRef?: (value: TableColumnRef) => T
+      constant?: (value: Constant) => T
+      parameter?: (value: Parameter) => T
+      unaryOp?: (value: UnaryOp) => T
+      binaryOp?: (value: BinaryOp) => T
+      existsOp?: (value: ExistsOp) => T
+      inOp?: (value: InOp) => T
+      functionCall?: (value: FunctionCall) => T
+    }
+  ): T {
+    switch (expr.kind) {
+      case 'ColumnRef':
+        return (handlers.columnRef && handlers.columnRef(expr)) || elseVal
+      case 'TableColumnRef':
+        return (
+          (handlers.tableColumnRef && handlers.tableColumnRef(expr)) || elseVal
+        )
+      case 'Constant':
+        return (handlers.constant && handlers.constant(expr)) || elseVal
+      case 'Parameter':
+        return (handlers.parameter && handlers.parameter(expr)) || elseVal
+      case 'UnaryOp':
+        return (handlers.unaryOp && handlers.unaryOp(expr)) || elseVal
+      case 'BinaryOp':
+        return (handlers.binaryOp && handlers.binaryOp(expr)) || elseVal
+      case 'ExistsOp':
+        return (handlers.existsOp && handlers.existsOp(expr)) || elseVal
+      case 'InOp':
+        return (handlers.inOp && handlers.inOp(expr)) || elseVal
+      case 'FunctionCall':
+        return (handlers.functionCall && handlers.functionCall(expr)) || elseVal
+    }
+  }
+
   export function walk<T>(
     expr: Expression,
     handlers: {
@@ -149,29 +190,38 @@ export namespace Expression {
     }
   }
 
-  export function walkConstant<T>(
-    expr: Expression,
-    elseVal: T,
-    handler: (node: Constant) => T
-  ): T {
-    switch (expr.kind) {
+  export function equals(a: Expression, b: Expression): boolean {
+    switch (a.kind) {
+      case 'ColumnRef':
+        if (a.kind !== b.kind) return false
+        return a.column === b.column
+      case 'TableColumnRef':
+        if (a.kind !== b.kind) return false
+        return a.table === b.table && a.column === b.column
       case 'Constant':
-        return handler(expr)
-      default:
-        return elseVal
-    }
-  }
-
-  export function walkParameter<T>(
-    expr: Expression,
-    elseVal: T,
-    handler: (node: Parameter) => T
-  ): T {
-    switch (expr.kind) {
+        if (a.kind !== b.kind) return false
+        return a.valueText === b.valueText // TODO: This doesn't work in some cases, e.g. with '1.0' and '1.00'
       case 'Parameter':
-        return handler(expr)
-      default:
-        return elseVal
+        if (a.kind !== b.kind) return false
+        return a.index === b.index
+      case 'UnaryOp':
+        if (a.kind !== b.kind) return false
+        return a.op === b.op && equals(a.operand, b.operand)
+      case 'BinaryOp':
+        if (a.kind !== b.kind) return false
+        return a.op === b.op && equals(a.lhs, b.lhs) && equals(a.rhs, b.rhs)
+      case 'ExistsOp':
+        if (a.kind !== b.kind) return false
+        return false // TODO
+      case 'InOp':
+        if (a.kind !== b.kind) return false
+        return false // TODO
+      case 'FunctionCall':
+        if (a.kind !== b.kind) return false
+        return (
+          a.funcName === b.funcName &&
+          R.zip(a.argList, b.argList).every(([ap, bp]) => equals(ap, bp))
+        )
     }
   }
 }
