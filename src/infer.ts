@@ -7,6 +7,7 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
+import { isFunctionNullSafe, isOperatorNullSafe } from './constants'
 import { parse } from './parser'
 import {
   SchemaClient,
@@ -215,26 +216,56 @@ function inferExpressionNullability(
         Either.map(column => column.nullable)
       ),
 
-    // A unary operator returns NULL if its operand is NULL
-    unaryOp: ({ operand }) =>
-      inferExpressionNullability(sourceTables, nonNullExprs, operand),
+    // A unary operator has two options:
+    //
+    // - The operator is known to be NULL safe: it returns NULL only
+    //   if its operand is NULL
+    //
+    // - The operator is not NULL safe: it can return NULL even if its
+    // - operand is not NULL
+    unaryOp: ({ op, operand }) =>
+      isOperatorNullSafe(op)
+        ? inferExpressionNullability(sourceTables, nonNullExprs, operand)
+        : Either.right(true),
 
-    // A binary operator returns NULL if any of its operands is NULL
-    binaryOp: ({ lhs, rhs }) =>
-      inferExpressionNullability(sourceTables, nonNullExprs, lhs) ||
-      inferExpressionNullability(sourceTables, nonNullExprs, rhs),
+    // A binary operator has two options:
+    //
+    // - The operator is known to be NULL safe: it returns NULL only
+    //   if any of its operands is NULL
+    //
+    // - The function is not NULL safe: it can return NULL even if all
+    //   of its operands are non-NULL
+    binaryOp: ({ op, lhs, rhs }) =>
+      isOperatorNullSafe(op)
+        ? inferExpressionNullability(sourceTables, nonNullExprs, lhs) ||
+          inferExpressionNullability(sourceTables, nonNullExprs, rhs)
+        : Either.right(true),
 
     // EXISTS (subquery) never returns NULL
     existsOp: () => Either.right(false),
 
+    // A function call has two options:
+    //
+    // - The function is known to be NULL safe: it returns NULL only
+    //   if any of its arguments is NULL
+    //
+    // - The function is not NULL safe: it can return NULL even if all
+    //   of its arguments are non-NULL
+    //
+    functionCall: ({ funcName, argList }) => {
+      if (isFunctionNullSafe(funcName)) {
+        return pipe(
+          argList.map(arg =>
+            inferExpressionNullability(sourceTables, nonNullExprs, arg)
+          ),
+          sequenceAE,
+          Either.map(R.any(R.identity))
+        )
+      }
+      return Either.right(true)
+    },
+
     // expr IN (subquery) returns NULL if expr is NULL
-    // A function call returns NULL if any of its arguments is NULL
-    functionCall: ({ argList }) =>
-      pipe(
-        argList.map(arg => inferExpressionNullability(sourceTables, arg)),
-        sequenceAE,
-        Either.map(R.any(R.identity))
-      ),
     inOp: ({ lhs }) =>
       inferExpressionNullability(sourceTables, nonNullExprs, lhs),
 

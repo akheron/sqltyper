@@ -1,4 +1,5 @@
 import * as R from 'ramda'
+import { isOperatorCommutative } from './constants'
 
 // $1 -> index 1, $2 -> index 2, ...
 export type Expression =
@@ -205,11 +206,17 @@ export namespace Expression {
         if (a.kind !== b.kind) return false
         return a.index === b.index
       case 'UnaryOp':
-        if (a.kind !== b.kind) return false
-        return a.op === b.op && equals(a.operand, b.operand)
+        if (a.kind !== b.kind || a.op !== b.op) return false
+        return equals(a.operand, b.operand)
       case 'BinaryOp':
-        if (a.kind !== b.kind) return false
-        return a.op === b.op && equals(a.lhs, b.lhs) && equals(a.rhs, b.rhs)
+        if (a.kind !== b.kind || a.op != b.op) return false
+        return (
+          (equals(a.lhs, b.lhs) && equals(a.rhs, b.rhs)) ||
+          (isOperatorCommutative(a.op) &&
+            equals(a.lhs, b.rhs) &&
+            equals(a.rhs, b.lhs))
+        )
+
       case 'ExistsOp':
         if (a.kind !== b.kind) return false
         return false // TODO
