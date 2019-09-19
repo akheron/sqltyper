@@ -8,7 +8,12 @@ import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
 import { parse } from './parser'
-import { SchemaClient, Table, Column } from './schema'
+import {
+  SchemaClient,
+  Table,
+  Column,
+  setTableColumnsAsNullable,
+} from './schema'
 import { StatementDescription, StatementRowCount } from './types'
 
 const sequenceAE = Array.array.sequence(Either.either)
@@ -68,7 +73,7 @@ function getColumnNullability(
   return ast.walk(tree, {
     select: ({ body }) =>
       pipe(
-        getSourceTablesForFrom(client, body.from),
+        getSourceTablesForTableExpr(client, body.from),
         TaskEither.chain(sourceTables =>
           TaskEither.fromEither(
             inferSelectListNullability(sourceTables, body.selectList)
@@ -87,7 +92,7 @@ function getColumnNullability(
     update: ({ table, as, from, returning }) =>
       pipe(
         combineSourceTables(
-          getSourceTablesForFrom(client, from),
+          getSourceTablesForTableExpr(client, from),
           getSourceTable(client, table, as)
         ),
         TaskEither.chain(sourceTables =>
@@ -428,19 +433,54 @@ function getSourceTable(
   )
 }
 
-function getSourceTablesForFrom(
+function getSourceTablesForTableExpr(
   client: SchemaClient,
-  from: ast.From | null
+  tableExpr: ast.TableExpression | null,
+  setNullable: boolean = false
 ): TaskEither.TaskEither<string, SourceTable[]> {
-  if (from) {
-    return pipe(
-      Array.array.traverse(TaskEither.taskEither)([from, ...from.joins], s =>
-        getSourceTable(client, s.table, s.as)
-      ),
-      TaskEither.map(R.flatten)
-    )
+  if (!tableExpr) {
+    return TaskEither.right([])
   }
-  return TaskEither.right([])
+
+  return pipe(
+    ast.TableExpression.walk(tableExpr, {
+      table: ({ table, as }) => getSourceTable(client, table, as),
+      crossJoin: ({ left, right }) =>
+        combineSourceTables(
+          getSourceTablesForTableExpr(client, left, false),
+          getSourceTablesForTableExpr(client, right, false)
+        ),
+      qualifiedJoin: ({ left, joinType, right }) =>
+        combineSourceTables(
+          getSourceTablesForTableExpr(
+            client,
+            left,
+            // RIGHT or FULL JOIN -> The left side columns becomes is nullable
+            joinType === 'RIGHT' || joinType === 'FULL'
+          ),
+          getSourceTablesForTableExpr(
+            client,
+            right,
+            // LEFT or FULL JOIN -> The right side columns becomes is nullable
+            joinType === 'LEFT' || joinType === 'FULL'
+          )
+        ),
+    }),
+    TaskEither.map(sourceTables =>
+      setNullable
+        ? sourceTables.map(setSourceTableColumnsAsNullable)
+        : sourceTables
+    )
+  )
+}
+
+function setSourceTableColumnsAsNullable(
+  sourceTable: SourceTable
+): SourceTable {
+  return {
+    ...sourceTable,
+    table: setTableColumnsAsNullable(sourceTable.table),
+  }
 }
 
 function combineSourceTables(

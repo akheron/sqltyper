@@ -231,48 +231,89 @@ export namespace SelectListItem {
   }
 }
 
-export type TableRef = { schema: string | null; table: string }
+export type TableRef = {
+  kind: 'TableRef'
+  schema: string | null
+  table: string
+}
 
 export namespace TableRef {
-  export function create(schema: string | null, table: string) {
-    return { schema, table }
+  export function create(schema: string | null, table: string): TableRef {
+    return { kind: 'TableRef', schema, table }
   }
 }
 
-export type Join = {
-  kind: 'JOIN'
-  joinType: Join.JoinType
-  table: TableRef
-  as: string | null
-  condition: Expression
-}
+export type TableExpression =
+  | TableExpression.Table
+  | TableExpression.CrossJoin
+  | TableExpression.QualifiedJoin
 
-export namespace Join {
+export namespace TableExpression {
+  export type Table = {
+    kind: 'Table'
+    table: TableRef
+    as: string | null
+  }
+
+  export function createTable(table: TableRef, as: string | null): Table {
+    return { kind: 'Table', table, as }
+  }
+
+  export type CrossJoin = {
+    kind: 'CrossJoin'
+    left: TableExpression
+    right: TableExpression
+  }
+
+  export function createCrossJoin(
+    left: TableExpression,
+    right: TableExpression
+  ): CrossJoin {
+    return { kind: 'CrossJoin', left, right }
+  }
+
+  export type QualifiedJoin = {
+    kind: 'QualifiedJoin'
+    left: TableExpression
+    joinType: JoinType
+    right: TableExpression
+    condition: Expression | null // null means NATURAL JOIN
+  }
+
+  export function createQualifiedJoin(
+    left: TableExpression,
+    joinType: JoinType,
+    right: TableExpression,
+    condition: Expression | null
+  ): QualifiedJoin {
+    return { kind: 'QualifiedJoin', left, joinType, right, condition }
+  }
+
+  export type NaturalJoin = {
+    kind: 'NaturalJoin'
+    left: TableExpression
+    joinType: JoinType
+    right: TableExpression
+  }
+
   export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL'
 
-  export function create(
-    joinType: JoinType,
-    table: TableRef,
-    as: string | null,
-    condition: Expression
-  ): Join {
-    return { kind: 'JOIN', joinType, table, as, condition }
-  }
-}
-
-export type From = {
-  table: TableRef
-  as: string | null
-  joins: Join[]
-}
-
-export namespace From {
-  export function create(
-    table: TableRef,
-    as: string | null,
-    joins: Join[]
-  ): From {
-    return { table, as, joins }
+  export function walk<T>(
+    tableExpr: TableExpression,
+    handlers: {
+      table: (node: Table) => T
+      crossJoin: (node: CrossJoin) => T
+      qualifiedJoin: (node: QualifiedJoin) => T
+    }
+  ): T {
+    switch (tableExpr.kind) {
+      case 'Table':
+        return handlers.table(tableExpr)
+      case 'CrossJoin':
+        return handlers.crossJoin(tableExpr)
+      case 'QualifiedJoin':
+        return handlers.qualifiedJoin(tableExpr)
+    }
   }
 }
 
@@ -311,7 +352,7 @@ export namespace Limit {
 
 export type SelectBody = {
   selectList: SelectListItem[]
-  from: From | null
+  from: TableExpression | null
   where: Expression | null
   groupBy: Expression[]
 }
@@ -319,7 +360,7 @@ export type SelectBody = {
 export namespace SelectBody {
   export function create(
     selectList: SelectListItem[],
-    from: From | null,
+    from: TableExpression | null,
     where: Expression | null,
     groupBy: Expression[]
   ): SelectBody {
@@ -451,7 +492,7 @@ export type Update = {
   table: TableRef
   as: string | null
   updates: UpdateAssignment[]
-  from: From | null
+  from: TableExpression | null
   where: Expression | null
   returning: SelectListItem[]
 }
@@ -462,7 +503,7 @@ export namespace Update {
     table: TableRef,
     as: string | null,
     updates: UpdateAssignment[],
-    from: From | null,
+    from: TableExpression | null,
     where: Expression | null,
     returning: SelectListItem[]
   ): Update {

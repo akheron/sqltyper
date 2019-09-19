@@ -28,9 +28,7 @@ import {
   AST,
   Delete,
   Expression,
-  From,
   Insert,
-  Join,
   Limit,
   OrderBy,
   Select,
@@ -38,12 +36,14 @@ import {
   SelectOp,
   SelectListItem,
   Statement,
+  TableExpression,
   TableRef,
   UpdateAssignment,
   Values,
   Update,
   WithQuery,
 } from './ast'
+import { sqlReservedWords } from './constants'
 
 export { ParseError, isParseError } from 'typed-parser'
 
@@ -60,61 +60,6 @@ function optional<A>(parser: Parser<A>): Parser<A | null> {
 // Token parsers etc.
 
 const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
-
-const reservedWords: string[] = [
-  'ALL',
-  'AND',
-  'AS',
-  'ASC',
-  'BETWEEN',
-  'BY',
-  'DEFAULT',
-  'DELETE',
-  'DESC',
-  'DISTINCT',
-  'EXCEPT',
-  'EXISTS',
-  'FALSE',
-  'FIRST',
-  'FROM',
-  'FULL',
-  'GROUP',
-  'ILIKE',
-  'IN',
-  'INNER',
-  'INSERT',
-  'INTERSECT',
-  'INTO',
-  'IS',
-  'ISNULL',
-  'JOIN',
-  'LAST',
-  'LEFT',
-  'LIKE',
-  'LIMIT',
-  'NOT',
-  'NOTNULL',
-  'NULL',
-  'NULLS',
-  'OFFSET',
-  'ON',
-  'OR',
-  'ORDER',
-  'OUTER',
-  'RETURNING',
-  'RIGHT',
-  'SELECT',
-  'SET',
-  'SIMILAR',
-  'TRUE',
-  'UNION',
-  'UNKNOWN',
-  'UPDATE',
-  'USING',
-  'VALUES',
-  'WHERE',
-  'WITH',
-]
 
 const quotedEscape = seq(
   $2,
@@ -135,7 +80,7 @@ const identifier = attempt(
   oneOf(
     map(
       (identifier, toError) =>
-        reservedWords.includes(identifier.toUpperCase())
+        sqlReservedWords.includes(identifier.toUpperCase())
           ? toError(`Expected an identifier, got reserved word ${identifier}`)
           : identifier,
       matchIdentifier
@@ -145,7 +90,7 @@ const identifier = attempt(
 )
 
 const reservedWord = <A extends string>(word: A): Parser<A> => {
-  if (!reservedWords.includes(word))
+  if (!sqlReservedWords.includes(word))
     throw new Error(`INTERNAL ERROR: ${word} is not included in reservedWords`)
   return attempt(
     map(
@@ -226,7 +171,7 @@ function withRange<T>(parser: Parser<T>): Parser<RangeMatch<T>> {
 }
 
 // [ AS ] identifier
-const as: Parser<string | null> = seq(
+const as: Parser<string> = seq(
   (_as, id, _ws1) => id,
   optional(seq($null, reservedWord('AS'), _)),
   identifier,
@@ -235,6 +180,15 @@ const as: Parser<string | null> = seq(
 
 // AS identifier
 const reqAs: Parser<string> = seq($3, reservedWord('AS'), _, identifier, _)
+
+// [ schema . ] table
+const tableRef: Parser<TableRef> = seq(
+  (id1, _ws1, id2) =>
+    id2 ? TableRef.create(id1, id2) : TableRef.create(null, id1),
+  identifier,
+  _,
+  optional(seq($3, symbol('.'), _, identifier, _))
+)
 
 // Expressions
 
@@ -445,8 +399,8 @@ const isExpr = seq(
     oneOf(
       sepReserveds('IS NULL'),
       sepReserveds('IS NOT NULL'),
-      reservedWord('ISNULL'),
-      reservedWord('NOTNULL'),
+      seq($1, reservedWord('ISNULL'), _),
+      seq($1, reservedWord('NOTNULL'), _),
       sepReserveds('IS TRUE'),
       sepReserveds('IS NOT TRUE'),
       sepReserveds('IS FALSE'),
@@ -488,64 +442,126 @@ const withQueries: Parser<WithQuery[]> = seq(
     )
   )
 )
+
 // FROM & JOIN
 
-const joinType: Parser<Join.JoinType> = oneOf(
-  seq((..._args) => 'INNER', reservedWord('JOIN')),
-  seq((..._args) => 'INNER', reservedWord('INNER'), _, reservedWord('JOIN')),
-  seq(
-    (..._args) => 'LEFT',
-    reservedWord('LEFT'),
-    _,
-    optional(reservedWord('OUTER')),
-    _,
-    reservedWord('JOIN')
-  ),
-  seq(
-    (..._args) => 'RIGHT',
-    reservedWord('RIGHT'),
-    _,
-    optional(reservedWord('OUTER')),
-    _,
-    reservedWord('JOIN')
-  ),
-  seq(
-    (..._args) => 'FULL',
-    reservedWord('FULL'),
-    _,
-    optional(reservedWord('OUTER')),
-    _,
-    reservedWord('JOIN')
-  )
+type JoinSpec = {
+  join:
+    | { kind: 'Cross' }
+    | {
+        kind: 'Qualified'
+        type: TableExpression.JoinType
+        condition: Expression
+      }
+    | { kind: 'Natural'; type: TableExpression.JoinType }
+  tableExpr: TableExpression
+}
+
+const crossJoin: Parser<JoinSpec> = seq(
+  (_cj, tableExpr) => ({ join: { kind: 'Cross' }, tableExpr }),
+  sepReserveds('CROSS JOIN'),
+  lazy(() => tableExpression)
 )
 
-const tableRef = seq(
-  (id1, _ws1, id2) =>
-    id2 ? TableRef.create(id1, id2) : TableRef.create(null, id1),
-  identifier,
-  _,
-  optional(seq($3, symbol('.'), _, identifier, _))
+const qualifiedJoinType: Parser<TableExpression.JoinType> = seq(
+  (joinType, _join, _ws) => joinType || 'INNER',
+  optional(
+    oneOf(
+      seq($1, reservedWord('INNER'), _),
+      seq(
+        $1,
+        oneOf(
+          reservedWord('LEFT'),
+          reservedWord('RIGHT'),
+          reservedWord('FULL')
+        ),
+        _,
+        optional(seq($null, reservedWord('OUTER'), _))
+      )
+    )
+  ),
+  reservedWord('JOIN'),
+  _
 )
 
-const join: Parser<Join> = seq(
-  (type, _ws1, table, as, _on, _ws3, condition) =>
-    Join.create(type, table, as, condition),
-  joinType,
-  _,
-  tableRef,
-  optional(as),
+const qualifiedJoin: Parser<JoinSpec> = seq(
+  (type, tableExpr, _on, _ws, condition) => ({
+    join: { kind: 'Qualified', type, condition },
+    tableExpr,
+  }),
+  qualifiedJoinType,
+  lazy(() => tableExpression),
   reservedWord('ON'),
   _,
   expression
 )
 
-const from: Parser<From> = seq(
-  (_from, _ws1, table, as, joins) => From.create(table, as, joins),
+const naturalJoinType: Parser<TableExpression.JoinType> = seq(
+  $3,
+  reservedWord('NATURAL'),
+  _,
+  qualifiedJoinType
+)
+
+const naturalJoin: Parser<JoinSpec> = seq(
+  (type, tableExpr) => ({ join: { kind: 'Natural', type }, tableExpr }),
+  naturalJoinType,
+  lazy(() => tableExpression)
+)
+
+const table: Parser<TableExpression> = seq(
+  TableExpression.createTable,
+  tableRef,
+  optional(as)
+)
+
+function tableExprReducer(
+  acc: TableExpression,
+  joinSpec: JoinSpec
+): TableExpression {
+  switch (joinSpec.join.kind) {
+    case 'Cross':
+      return TableExpression.createCrossJoin(acc, joinSpec.tableExpr)
+    case 'Qualified':
+      return TableExpression.createQualifiedJoin(
+        acc,
+        joinSpec.join.type,
+        joinSpec.tableExpr,
+        joinSpec.join.condition
+      )
+    case 'Natural':
+      return TableExpression.createQualifiedJoin(
+        acc,
+        joinSpec.join.type,
+        joinSpec.tableExpr,
+        null // null conditiong means NATURAL JOIN
+      )
+  }
+}
+
+const tableExpression: Parser<TableExpression> = seq(
+  (lhs, rest) => (rest.length === 0 ? lhs : rest.reduce(tableExprReducer, lhs)),
+  oneOf(
+    seq($3, symbol('('), _, lazy(() => tableExpression), symbol(')')),
+    seq($1, table, _)
+  ),
+  many(oneOf(crossJoin, qualifiedJoin, naturalJoin)),
+  _
+)
+
+const from: Parser<TableExpression> = seq(
+  (_from, _ws, tableExpr, rest) =>
+    rest.length === 0
+      ? tableExpr
+      : // Implicit join equals to CROSS JOIN
+        rest.reduce(
+          (acc, next) => TableExpression.createCrossJoin(acc, next),
+          tableExpr
+        ),
   reservedWord('FROM'),
   _,
-  tableRef,
-  optional(as),
-  many(join)
+  tableExpression,
+  many(seq($3, symbol(','), _, tableExpression))
 )
 
 // WHERE

@@ -109,3 +109,10 @@ WHERE t.typtype = 'e'
 function fullTableName(schemaName: string | null, tableName: string): string {
   return (schemaName ? schemaName + '.' : '') + tableName
 }
+
+export function setTableColumnsAsNullable(table: Table): Table {
+  return {
+    ...table,
+    columns: table.columns.map(column => ({ ...column, nullable: true })),
+  }
+}
