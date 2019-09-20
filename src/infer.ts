@@ -8,7 +8,8 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
-import { functionNullSafety, operatorNullSafety } from './constHelpers'
+import { sequenceAE, sequenceATE } from './fp-utils'
+import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import {
   SchemaClient,
@@ -17,9 +18,6 @@ import {
   setTableColumnsAsNullable,
 } from './schema'
 import { StatementDescription, StatementRowCount } from './types'
-
-const sequenceAE = Array.array.sequence(Either.either)
-const sequenceATE = Array.array.sequence(TaskEither.taskEither)
 
 export type SourceTable = {
   table: Table

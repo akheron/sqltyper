@@ -1,5 +1,5 @@
 import * as R from 'ramda'
-import { isOperatorCommutative } from './constHelpers'
+import { isOperatorCommutative } from './const-utils'
 
 // $1 -> index 1, $2 -> index 2, ...
 export type Expression =

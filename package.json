@@ -7,7 +7,7 @@
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
   "bin": {
-    "sqltyper": "./dist/src/index.js"
+    "sqltyper": "./dist/src/cli.js"
   },
   "scripts": {
     "build": "tsc",

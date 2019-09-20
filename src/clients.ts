@@ -31,3 +31,10 @@ export async function connect(
 export async function disconnect(clients: Clients): Promise<void> {
   await clients.pg.end()
 }
+
+export async function clearCache(clients: Clients): Promise<Clients> {
+  // The type client caches stuff about user-defined SQL types.
+  // Recreate it to clear the cache.
+  const types = await typeClient(clients.pg)
+  return { ...clients, types }
+}

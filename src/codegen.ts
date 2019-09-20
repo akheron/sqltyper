@@ -1,14 +1,14 @@
-import * as path from 'path'
+import * as Either from 'fp-ts/lib/Either'
+import * as Task from 'fp-ts/lib/Task'
+import { pipe } from 'fp-ts/lib/pipeable'
 
-import camelCase = require('camelcase')
-import { Either, left, right } from 'fp-ts/lib/Either'
-
+import { sequenceATs } from './fp-utils'
 import { TypeClient } from './tstype'
 import { StatementDescription, NamedValue } from './types'
 
 export function validateStatement(
   stmt: StatementDescription
-): Either<string, StatementDescription> {
+): Either.Either<string, StatementDescription> {
   const columnNames: Set<string> = new Set()
   const conflicts: Set<string> = new Set()
 
@@ -22,57 +22,77 @@ export function validateStatement(
 
   if (conflicts.size) {
     const dup = [...conflicts.values()].sort().join(', ')
-    return left(`Duplicate output columns: ${dup}`)
+    return Either.left(`Duplicate output columns: ${dup}`)
   }
 
-  return right(stmt)
+  return Either.right(stmt)
 }
 
 export function generateTypeScript(
   types: TypeClient,
-  fileName: string,
+  funcName: string,
   stmt: StatementDescription
-): string {
+): Task.Task<string> {
   const positionalOnly = hasOnlyPositionalParams(stmt)
-  return `\
+  return pipe(
+    Task.of(typeScriptString(funcName, stmt.sql)),
+    Task.ap(funcParams(types, stmt, positionalOnly)),
+    Task.ap(funcReturnType(types, stmt)),
+    Task.ap(Task.of(queryValues(stmt, positionalOnly))),
+    Task.ap(Task.of(outputValue(stmt)))
+  )
+}
+
+const typeScriptString = (funcName: string, sql: string) => (
+  params: string
+) => (returnType: string) => (queryValues: string) => (
+  outputValue: string
+): string => `\
 import { ClientBase } from 'pg'
 
-export async function ${funcName(fileName)}(
-  client: ClientBase${funcParams(types, stmt, positionalOnly)}
-): Promise<${funcReturnType(types, stmt)}> {
+export async function ${funcName}(
+  client: ClientBase${params}
+): Promise<${returnType}> {
     const result = await client.query(\`\\
-${stmt.sql}\`${queryValues(stmt, positionalOnly)})
-    return ${outputValue(stmt)}
+${sql}\`${queryValues})
+    return ${outputValue}
 }
 `
-}
 
 function hasOnlyPositionalParams(stmt: StatementDescription) {
   return stmt.params.every(param => !!param.name.match(/\$\d+/))
 }
 
-function funcName(fileName: string) {
-  const parsed = path.parse(fileName)
-  return camelCase(parsed.name)
+function funcReturnType(
+  types: TypeClient,
+  stmt: StatementDescription
+): Task.Task<string> {
+  return pipe(
+    stmt.columns.map(columnType(types)),
+    sequenceATs,
+    Task.map(columnTypes => {
+      const rowType = '{ ' + columnTypes.join('; ') + ' }'
+      switch (stmt.rowCount) {
+        case 'zero':
+          return 'number' // return the affected row count
+        case 'one':
+          return rowType
+        case 'zeroOrOne':
+          return `${rowType} | null`
+        case 'many':
+          return `Array<${rowType}>`
+      }
+    })
+  )
 }
 
-function funcReturnType(types: TypeClient, stmt: StatementDescription) {
-  const rowType = '{ ' + stmt.columns.map(columnType(types)).join('; ') + ' }'
-  switch (stmt.rowCount) {
-    case 'zero':
-      return 'number' // return the affected row count
-    case 'one':
-      return rowType
-    case 'zeroOrOne':
-      return `${rowType} | null`
-    case 'many':
-      return `Array<${rowType}>`
-  }
-}
-
-const columnType = (types: TypeClient) => (column: NamedValue): string => {
-  const { name, type } = types.columnType(column)
-  return `${stringLiteral(name)}: ${type}`
+const columnType = (types: TypeClient) => (
+  column: NamedValue
+): Task.Task<string> => {
+  return pipe(
+    types.columnType(column),
+    Task.map(({ name, type }) => `${stringLiteral(name)}: ${type}`)
+  )
 }
 
 function outputValue(stmt: StatementDescription): string {
@@ -96,30 +116,46 @@ function funcParams(
   types: TypeClient,
   stmt: StatementDescription,
   positionalOnly: boolean
-) {
+): Task.Task<string> {
   if (!stmt.params.length) {
-    return ''
+    return Task.of('')
   }
 
-  return (
-    ', ' +
-    (positionalOnly
+  return pipe(
+    positionalOnly
       ? positionalFuncParams(types, stmt)
-      : namedFuncParams(types, stmt))
+      : namedFuncParams(types, stmt),
+    Task.map(params => `, ${params}`)
   )
 }
 
-function positionalFuncParams(types: TypeClient, stmt: StatementDescription) {
-  return stmt.params
-    .map(param => `${param.name}: ${types.tsType(param.type, param.nullable)}`)
-    .join(', ')
+function positionalFuncParams(
+  types: TypeClient,
+  stmt: StatementDescription
+): Task.Task<string> {
+  return pipe(
+    stmt.params.map(param => async () =>
+      `${param.name}: ${await types.tsType(param.type, param.nullable)}`
+    ),
+    sequenceATs,
+    Task.map(params => params.join(', '))
+  )
 }
 
-function namedFuncParams(types: TypeClient, stmt: StatementDescription) {
-  return 'params: { ' + positionalFuncParams(types, stmt) + ' }'
+function namedFuncParams(
+  types: TypeClient,
+  stmt: StatementDescription
+): Task.Task<string> {
+  return pipe(
+    positionalFuncParams(types, stmt),
+    Task.map(params => `params: { ${params} }`)
+  )
 }
 
-function queryValues(stmt: StatementDescription, positionalOnly: boolean) {
+function queryValues(
+  stmt: StatementDescription,
+  positionalOnly: boolean
+): string {
   if (!stmt.params.length) {
     return ''
   }

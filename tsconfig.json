@@ -6,8 +6,7 @@
     "strict": true,
     "allowJs": true
   },
-  "exclude": [
-    "dist",
-    "tests"
+  "include": [
+    "src"
   ]
 }

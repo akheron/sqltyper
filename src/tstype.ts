@@ -1,4 +1,7 @@
 import * as ts from 'typescript'
+import * as Task from 'fp-ts/lib/Task'
+import { pipe } from 'fp-ts/lib/pipeable'
+
 import { NamedValue, Oid, TsType } from './types'
 import { Client } from './pg'
 import { schemaClient } from './schema'
@@ -7,18 +10,28 @@ type UnPromise<T extends Promise<any>> = T extends Promise<infer U> ? U : never
 export type TypeClient = UnPromise<ReturnType<typeof typeClient>>
 
 export async function typeClient(pgClient: Client) {
-  const enums = await makeEnumMap(pgClient)
+  let enums: Map<Oid, string> | null = null
 
-  function tsType(pgType: Oid, nullable: boolean): TsType {
-    const result = builtinTypes.get(pgType) || enums.get(pgType) || defaultType
-    return nullable ? `${result} | null` : result
+  function tsType(pgType: Oid, nullable: boolean): Task.Task<TsType> {
+    return async () => {
+      if (enums == null) enums = await makeEnumMap(pgClient)
+
+      const result =
+        builtinTypes.get(pgType) || enums.get(pgType) || defaultType
+      return nullable ? `${result} | null` : result
+    }
   }
 
-  function columnType(column: NamedValue): { name: string; type: TsType } {
-    return {
-      name: column.name,
-      type: tsType(column.type, column.nullable),
-    }
+  function columnType(
+    column: NamedValue
+  ): Task.Task<{ name: string; type: TsType }> {
+    return pipe(
+      tsType(column.type, column.nullable),
+      Task.map(type => ({
+        name: column.name,
+        type,
+      }))
+    )
   }
 
   return {
