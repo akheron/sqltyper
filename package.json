@@ -10,6 +10,7 @@
     "sqltyper": "./dist/src/cli.js"
   },
   "scripts": {
+    "watch-sql": "ts-node src/cli.ts --prettify --pg-module ../pg  --watch src/sql/",
     "build": "tsc",
     "test": "jest"
   },

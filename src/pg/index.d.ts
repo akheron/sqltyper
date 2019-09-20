@@ -58,7 +58,7 @@ export interface QueryConfig<I extends any[] = any[]> {
   describe?: boolean
 }
 
-export class Client {
+export class ClientBase {
   constructor(config?: string | ClientConfig)
   connect(): Promise<void>
   end(): Promise<void>
@@ -71,3 +71,5 @@ export class Client {
     values?: I
   ): Promise<QueryResult<R>>
 }
+
+export class Client extends ClientBase {}

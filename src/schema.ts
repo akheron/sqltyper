@@ -2,6 +2,7 @@ import * as Either from 'fp-ts/lib/Either'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { Client } from './pg'
 import { Oid } from './types'
+import * as sql from './sql'
 
 export type Table = {
   name: string
@@ -29,44 +30,21 @@ export function schemaClient(pgClient: Client) {
     tableName: string
   ): TaskEither.TaskEither<string, Table> {
     return async () => {
-      const tblResult = await pgClient.query(
-        `
-SELECT c.oid
-FROM pg_catalog.pg_class c
-LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-WHERE
-    c.relkind = 'r'
-    AND n.nspname = $1
-    AND c.relname = $2
-`,
-        [schemaName || 'public', tableName]
-      )
-      if (tblResult.rowCount === 0)
+      const tblResult = await sql.tableOid(pgClient, {
+        schemaName: schemaName || 'public',
+        tableName,
+      })
+      if (tblResult == null)
         return Either.left(
           `No such table: ${fullTableName(schemaName, tableName)}`
         )
-      const tableOid = tblResult.rows[0].oid
 
-      const colResult = await pgClient.query(
-        `
-SELECT attnum, attname, atttypid, attnotnull
-FROM pg_attribute
-WHERE attrelid = $1
-ORDER BY attnum
-`,
-        [tableOid]
-      )
-
-      const columns: {
-        attnum: number
-        attname: string
-        atttypid: Oid
-        attnotnull: boolean
-      }[] = colResult.rows
-
+      const colResult = await sql.tableColumns(pgClient, {
+        tableOid: tblResult.oid,
+      })
       return Either.right({
         name: tableName,
-        columns: columns.map(col => ({
+        columns: colResult.map(col => ({
           hidden: col.attnum < 0,
           name: col.attname,
           nullable: !col.attnotnull,
@@ -88,7 +66,7 @@ SELECT
   typname,
   array(
     SELECT enumlabel
-    FROM pg_enum e
+    FROM pg_catalog.pg_enum e
     WHERE e.enumtypid = t.oid
     ORDER BY e.enumsortorder
   )::text[] AS labels
