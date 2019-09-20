@@ -17,12 +17,14 @@ SELECT
   age,
   shoe_size,
   height,
-  height + 5 as height_plus_5
+  height + 5 as height_plus_5,
+  height / 2 as height_per_2
   FROM person
 WHERE
   age IS NOT NULL AND
   shoe_size NOTNULL AND
-  height + 5 IS NOT NULL
+  height + 5 IS NOT NULL AND
+  height / 2 NOTNULL
 
 --- expected row count ----------------------------------------------------
 
@@ -34,5 +36,6 @@ age: number
 shoe_size: number
 height: number | null
 height_plus_5: number
+height_per_2: number
 
 --- expected param types --------------------------------------------------

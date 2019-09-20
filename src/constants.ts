@@ -65,19 +65,28 @@ export const sqlReservedWords: string[] = [
 type Operator = {
   op: string
 
-  // does `a op b` equal `b op a`
-  commutative: boolean
+  // does `a op b` equal `b op a`. null means unary operator.
+  commutative: boolean | null
 
-  // is `a op b` always non-null if `a` and `b` are non-null
-  nullSafe: boolean
+  // is `a op b` or `op a`:
+  // - safe: always non-NULL if the operand(s) are non-NULL
+  // - unsafe: may be NUL even the operand(s) are non-NULL
+  // - neverNull: is never NULL regardless of the operand(s)
+  // - alwaysNull: is always NULL regardless of the operand (s)
+  nullSafety: NullSafety
 }
 
 export const operators: Operator[] = [
-  // name, commutative, nullSafe
-  op('+', true, true),
-  op('-', false, true),
-  op('*', true, true),
-  op('/', false, true),
+  // name, commutative, nullSafety
+  op('OR', true, 'safe'),
+  op('AND', true, 'safe'),
+  op('IS NULL', null, 'neverNull'),
+  op('IS NOT NULL', null, 'neverNull'),
+  op('=', true, 'safe'),
+  op('+', true, 'safe'),
+  op('-', false, 'safe'),
+  op('*', true, 'safe'),
+  op('/', false, 'safe'),
 ]
 
 export function findOperator(name: string): Option.Option<Operator> {
@@ -87,52 +96,63 @@ export function findOperator(name: string): Option.Option<Operator> {
 export function isOperatorCommutative(name: string): boolean {
   return pipe(
     findOperator(name),
-    Option.map(op => op.commutative),
+    Option.map(op => op.commutative || false),
     Option.getOrElse<boolean>(() => false)
   )
 }
 
-export function isOperatorNullSafe(name: string): boolean {
+export function operatorNullSafety(name: string): NullSafety {
   return pipe(
     findOperator(name),
-    Option.map(op => op.nullSafe),
-    Option.getOrElse<boolean>(() => false)
+    Option.map(op => op.nullSafety),
+    Option.getOrElse<NullSafety>(() => 'unsafe')
   )
 }
 
 // SQL functions
 
+type NullSafety = 'unsafe' | 'safe' | 'neverNull' | 'alwaysNull'
+
 type Function = {
   name: string
 
-  // is `func(a, b, ...)` always non-null if the
-  // parameters are non-null
-  nullSafe: boolean
+  // is `func(a, b, ...)`:
+  // - safe: always non-NULL if all the parameters are non-null
+  // - unsafe: may be NUL even if all the parameters are non-NULL
+  // - neverNull: is never NULL regardless of the parameters
+  // - alwaysNull: is always NULL regardless of the parameters
+  nullSafety: NullSafety
 }
 
 export const functions: Function[] = [
-  //   name, nullSafe
-  func('now', true),
+  //   name, nullSafety
+  func('now', 'neverNull'),
+  func('count', 'neverNull'),
+  func('sum', 'safe'),
 ]
 
 export function findFunction(name: string): Option.Option<Function> {
   return Option.fromNullable(functions.find(f => f.name === name))
 }
 
-export function isFunctionNullSafe(name: string): boolean {
+export function functionNullSafety(name: string): NullSafety {
   return pipe(
     findFunction(name),
-    Option.map(func => func.nullSafe),
-    Option.getOrElse<boolean>(() => false)
+    Option.map(func => func.nullSafety),
+    Option.getOrElse<Function['nullSafety']>(() => 'unsafe')
   )
 }
 
 /// Helpers
 
-function op(op: string, commutative: boolean, nullSafe: boolean): Operator {
-  return { op, commutative, nullSafe }
+function op(
+  op: string,
+  commutative: boolean | null,
+  nullSafety: NullSafety
+): Operator {
+  return { op, commutative, nullSafety }
 }
 
-function func(name: string, nullSafe: boolean) {
-  return { name, nullSafe }
+function func(name: string, nullSafety: NullSafety): Function {
+  return { name, nullSafety }
 }
