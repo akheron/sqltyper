@@ -87,6 +87,7 @@ export const operators: Operator[] = [
   op('-', false, 'safe'),
   op('*', true, 'safe'),
   op('/', false, 'safe'),
+  op('::', false, 'safe'),
 ]
 
 export function findOperator(name: string): Option.Option<Operator> {
