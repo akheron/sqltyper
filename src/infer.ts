@@ -2,6 +2,7 @@ import * as R from 'ramda'
 
 import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
+import * as Option from 'fp-ts/lib/Option'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
@@ -369,9 +370,9 @@ function getParamNullability(
 function findParamsFromValues(
   values: ast.Values,
   numInsertColumns: number
-): Array<Array<number | null>> {
+): Array<Array<Option.Option<number>>> {
   return ast.Values.walk(values, {
-    defaultValues: () => [R.repeat(null, numInsertColumns)],
+    defaultValues: () => [R.repeat(Option.none, numInsertColumns)],
     exprValues: ({ valuesList }) =>
       valuesList.map(values => values.map(paramIndexFromExpr)),
   })
@@ -393,26 +394,31 @@ function findParamNullabilityFromUpdates(
       )
     ),
     TaskEither.map(paramNullabilities =>
-      paramNullabilities.filter(
-        (value: ParamNullability | null): value is ParamNullability =>
-          value != null
+      pipe(
+        paramNullabilities,
+        Array.filterMap(R.identity)
       )
     )
   )
 }
 
-function paramIndexFromExpr(expression: ast.Expression | null): number | null {
-  return expression
-    ? ast.Expression.walkSome(expression, null, {
-        parameter: paramExpr => paramExpr.index - 1,
+function paramIndexFromExpr(
+  expression: ast.Expression | null
+): Option.Option<number> {
+  return pipe(
+    Option.fromNullable(expression),
+    Option.chain(nonNullExpr =>
+      ast.Expression.walkSome(nonNullExpr, Option.none, {
+        parameter: paramExpr => Option.some(paramExpr.index - 1),
       })
-    : null
+    )
+  )
 }
 
 function updateToParamNullability(
   dbTable: Table,
   update: ast.UpdateAssignment
-) {
+): Either.Either<string, Option.Option<ParamNullability>> {
   return pipe(
     Either.right(makeParamNullability),
     Either.ap(Either.right(paramIndexFromExpr(update.value))),
@@ -420,8 +426,13 @@ function updateToParamNullability(
   )
 }
 
-const makeParamNullability = (index: number | null) => (column: Column) =>
-  index != null ? { index, nullable: column.nullable } : null
+const makeParamNullability = (index: Option.Option<number>) => (
+  column: Column
+): Option.Option<ParamNullability> =>
+  pipe(
+    index,
+    Option.map(index => ({ index, nullable: column.nullable }))
+  )
 
 function findInsertColumns(
   client: SchemaClient,
@@ -442,17 +453,19 @@ function findInsertColumns(
 }
 
 const combineParamNullability = (
-  valuesListParams: Array<Array<null | number>>
+  valuesListParams: Array<Array<Option.Option<number>>>
 ) => (targetColumns: Column[]): ParamNullability[] => {
   return pipe(
     valuesListParams.map(valuesParams =>
       R.zip(targetColumns, valuesParams).map(([column, param]) =>
-        param != null ? { index: param, nullable: column.nullable } : null
+        pipe(
+          param,
+          Option.map(index => ({ index, nullable: column.nullable }))
+        )
       )
     ),
-    R.flatten
-  ).filter(
-    (value: ParamNullability | null): value is ParamNullability => value != null
+    R.flatten,
+    Array.filterMap(R.identity)
   )
 }
 

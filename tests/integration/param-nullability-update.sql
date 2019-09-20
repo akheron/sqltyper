@@ -7,8 +7,8 @@ assigning should not.
 CREATE TABLE person (
   id serial PRIMARY KEY,
   constant integer,
-  name varchar(255) NOT NULL,
   age integer,
+  name varchar(255) NOT NULL,
   height_doubled integer
 );
 
@@ -17,8 +17,8 @@ CREATE TABLE person (
 UPDATE person
 SET
     constant = 42,
-    name = ${name},
     age = ${age},
+    name = ${name},
     height_doubled = ${height} * 2
 WHERE id = ${id}
 
@@ -30,7 +30,7 @@ zero
 
 --- expected param types --------------------------------------------------
 
-name: string
 age: number | null
+name: string
 height: number
 id: number

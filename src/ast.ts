@@ -133,25 +133,27 @@ export namespace Expression {
   ): T {
     switch (expr.kind) {
       case 'ColumnRef':
-        return (handlers.columnRef && handlers.columnRef(expr)) || elseVal
+        return handlers.columnRef == null ? elseVal : handlers.columnRef(expr)
       case 'TableColumnRef':
-        return (
-          (handlers.tableColumnRef && handlers.tableColumnRef(expr)) || elseVal
-        )
+        return handlers.tableColumnRef == null
+          ? elseVal
+          : handlers.tableColumnRef(expr)
       case 'Constant':
-        return (handlers.constant && handlers.constant(expr)) || elseVal
+        return handlers.constant == null ? elseVal : handlers.constant(expr)
       case 'Parameter':
-        return (handlers.parameter && handlers.parameter(expr)) || elseVal
+        return handlers.parameter == null ? elseVal : handlers.parameter(expr)
       case 'UnaryOp':
-        return (handlers.unaryOp && handlers.unaryOp(expr)) || elseVal
+        return handlers.unaryOp == null ? elseVal : handlers.unaryOp(expr)
       case 'BinaryOp':
-        return (handlers.binaryOp && handlers.binaryOp(expr)) || elseVal
+        return handlers.binaryOp == null ? elseVal : handlers.binaryOp(expr)
       case 'ExistsOp':
-        return (handlers.existsOp && handlers.existsOp(expr)) || elseVal
+        return handlers.existsOp == null ? elseVal : handlers.existsOp(expr)
       case 'InOp':
-        return (handlers.inOp && handlers.inOp(expr)) || elseVal
+        return handlers.inOp == null ? elseVal : handlers.inOp(expr)
       case 'FunctionCall':
-        return (handlers.functionCall && handlers.functionCall(expr)) || elseVal
+        return handlers.functionCall == null
+          ? elseVal
+          : handlers.functionCall(expr)
     }
   }
 
