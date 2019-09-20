@@ -35,9 +35,20 @@ describe('Integration tests', () => {
   fs.readdirSync(testDir, { withFileTypes: true }).forEach(dirent => {
     const fileName = dirent.name
     const filePath = path.join(testDir, fileName)
-    if (!dirent.isFile() || !isTestFileName(fileName)) return
+    if (!dirent.isFile() || !isTestFileName(fileName)) {
+      return
+    }
 
-    it(fileName, () =>
+    const testFn = makeTest(fileName, filePath)
+    if (isSkippedTestFileName(fileName)) {
+      it.skip(fileName, testFn)
+    } else {
+      it(fileName, testFn)
+    }
+  })
+
+  function makeTest(fileName: string, filePath: string) {
+    return () =>
       pipe(
         TaskEither.fromEither(parseTestFile(filePath)),
         TaskEither.chain(testFile => () =>
@@ -84,12 +95,15 @@ describe('Integration tests', () => {
           throw new Error(`Failed to run ${fileName}: ${errorMessage}`)
         })
       )()
-    )
-  })
+  }
 })
 
 function isTestFileName(fileName: string): boolean {
-  return /\.sql$/.test(fileName)
+  return /\.sql(\.skip)?$/.test(fileName)
+}
+
+function isSkippedTestFileName(fileName: string): boolean {
+  return /\.sql.skip$/.test(fileName)
 }
 
 type TestFile = {
