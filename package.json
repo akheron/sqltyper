@@ -10,7 +10,8 @@
     "sqltyper": "./dist/src/index.js"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "jest"
   },
   "devDependencies": {
     "@types/camelcase": "^5.2.0",
