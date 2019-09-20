@@ -8,7 +8,7 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
-import { functionNullSafety, operatorNullSafety } from './constants'
+import { functionNullSafety, operatorNullSafety } from './constHelpers'
 import { parse } from './parser'
 import {
   SchemaClient,

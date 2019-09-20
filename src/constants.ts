@@ -1,6 +1,3 @@
-import * as Option from 'fp-ts/lib/Option'
-import { pipe } from 'fp-ts/lib/pipeable'
-
 /// SQL reserved words
 
 export const sqlReservedWords: string[] = [
@@ -62,7 +59,9 @@ export const sqlReservedWords: string[] = [
 
 // SQL operators
 
-type Operator = {
+export type NullSafety = 'unsafe' | 'safe' | 'neverNull' | 'alwaysNull'
+
+export type Operator = {
   op: string
 
   // does `a op b` equal `b op a`. null means unary operator.
@@ -77,7 +76,7 @@ type Operator = {
 }
 
 export const operators: Operator[] = [
-  // name, commutative, nullSafety
+  // name (upper case!), commutative, nullSafety
   op('OR', true, 'safe'),
   op('AND', true, 'safe'),
   op('IS NULL', null, 'neverNull'),
@@ -90,31 +89,9 @@ export const operators: Operator[] = [
   op('::', false, 'safe'),
 ]
 
-export function findOperator(name: string): Option.Option<Operator> {
-  return Option.fromNullable(operators.find(op => op.op === name))
-}
-
-export function isOperatorCommutative(name: string): boolean {
-  return pipe(
-    findOperator(name),
-    Option.map(op => op.commutative || false),
-    Option.getOrElse<boolean>(() => false)
-  )
-}
-
-export function operatorNullSafety(name: string): NullSafety {
-  return pipe(
-    findOperator(name),
-    Option.map(op => op.nullSafety),
-    Option.getOrElse<NullSafety>(() => 'unsafe')
-  )
-}
-
 // SQL functions
 
-type NullSafety = 'unsafe' | 'safe' | 'neverNull' | 'alwaysNull'
-
-type Function = {
+export type Function = {
   name: string
 
   // is `func(a, b, ...)`:
@@ -126,23 +103,11 @@ type Function = {
 }
 
 export const functions: Function[] = [
-  //   name, nullSafety
+  //   name (lower case!), nullSafety
   func('now', 'neverNull'),
   func('count', 'neverNull'),
   func('sum', 'safe'),
 ]
-
-export function findFunction(name: string): Option.Option<Function> {
-  return Option.fromNullable(functions.find(f => f.name === name))
-}
-
-export function functionNullSafety(name: string): NullSafety {
-  return pipe(
-    findFunction(name),
-    Option.map(func => func.nullSafety),
-    Option.getOrElse<Function['nullSafety']>(() => 'unsafe')
-  )
-}
 
 /// Helpers
 
@@ -151,9 +116,9 @@ function op(
   commutative: boolean | null,
   nullSafety: NullSafety
 ): Operator {
-  return { op, commutative, nullSafety }
+  return { op: op.toUpperCase(), commutative, nullSafety }
 }
 
 function func(name: string, nullSafety: NullSafety): Function {
-  return { name, nullSafety }
+  return { name: name.toLowerCase(), nullSafety }
 }
