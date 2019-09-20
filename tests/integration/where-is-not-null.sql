@@ -19,7 +19,7 @@ SELECT
   height,
   height + 5 as height_plus_5,
   height / 2 as height_per_2
-  FROM person
+FROM person
 WHERE
   age IS NOT NULL AND
   shoe_size NOTNULL AND

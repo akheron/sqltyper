@@ -81,7 +81,11 @@ export const operators: Operator[] = [
   op('AND', true, 'safe'),
   op('IS NULL', null, 'neverNull'),
   op('IS NOT NULL', null, 'neverNull'),
+  op('<', false, 'safe'),
+  op('>', false, 'safe'),
   op('=', true, 'safe'),
+  op('<=', false, 'safe'),
+  op('>=', false, 'safe'),
   op('+', true, 'safe'),
   op('-', false, 'safe'),
   op('*', true, 'safe'),
@@ -104,6 +108,7 @@ export type Function = {
 
 export const functions: Function[] = [
   //   name (lower case!), nullSafety
+  func('bool', 'safe'),
   func('now', 'neverNull'),
   func('count', 'neverNull'),
   func('sum', 'safe'),

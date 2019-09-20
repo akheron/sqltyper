@@ -319,11 +319,20 @@ function getNonNullExpressionsFromWhere(
           ...getNonNullExpressionsFromWhere(rhs),
         ]
       }
+      if (operatorNullSafety(op) === 'safe') {
+        return [lhs, rhs]
+      }
       return []
     },
     unaryOp: ({ op, operand }) => {
       if (op === 'IS NOT NULL' || op === 'NOTNULL') {
         return [operand]
+      }
+      return []
+    },
+    functionCall: ({ funcName, argList }) => {
+      if (functionNullSafety(funcName) === 'safe') {
+        return argList
       }
       return []
     },
