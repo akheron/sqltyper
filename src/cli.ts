@@ -41,14 +41,16 @@ async function main(): Promise<number> {
       clients.right,
       fileExtensions,
       dirPaths,
-      args.prettify
+      args.prettify,
+      args['pg-module']
     )
   } else {
     await processDirectories(
       clients.right,
       fileExtensions,
       dirPaths,
-      args.prettify
+      args.prettify,
+      args['pg-module']
     )
   }
 
@@ -83,6 +85,11 @@ function parseArgs() {
       type: 'boolean',
       default: false,
     })
+    .option('pg-module', {
+      description: 'Where to import node-postgres from',
+      type: 'string',
+      default: 'pg',
+    })
     .epilogue(
       `\
 Generate TypeScript functions for SQL statements in all files in the \
@@ -104,9 +111,16 @@ async function watchDirectories(
   clients: Clients,
   fileExtensions: string[],
   dirPaths: string[],
-  prettify: boolean
+  prettify: boolean,
+  pgModule: string
 ) {
-  await processDirectories(clients, fileExtensions, dirPaths, prettify)
+  await processDirectories(
+    clients,
+    fileExtensions,
+    dirPaths,
+    prettify,
+    pgModule
+  )
   dirPaths.forEach(dirPath =>
     watch(
       dirPath,
@@ -114,7 +128,7 @@ async function watchDirectories(
       async (event, filePath) => {
         switch (event) {
           case 'update':
-            processSQLFile(clients, filePath, prettify)
+            processSQLFile(clients, filePath, prettify, pgModule)
             return
           case 'remove':
             removeOutputFile(filePath)
@@ -130,14 +144,16 @@ async function processDirectories(
   clients: Clients,
   fileExtensions: string[],
   dirPaths: string[],
-  prettify: boolean
+  prettify: boolean,
+  pgModule: string
 ) {
   for (const dirPath of dirPaths) {
     const success = await processDirectory(
       clients,
       dirPath,
       fileExtensions,
-      prettify
+      prettify,
+      pgModule
     )
     if (!success) {
       break
@@ -149,7 +165,8 @@ async function processDirectory(
   clients: Clients,
   dirPath: string,
   fileExtensions: string[],
-  prettify: boolean
+  prettify: boolean,
+  pgModule: string
 ): Promise<boolean> {
   for (const dirent of await fs.readdir(dirPath, {
     encoding: 'utf-8',
@@ -160,7 +177,7 @@ async function processDirectory(
     }
 
     const filePath = path.join(dirPath, dirent.name)
-    if (!(await processSQLFile(clients, filePath, prettify))) {
+    if (!(await processSQLFile(clients, filePath, prettify, pgModule))) {
       return false
     }
   }
@@ -170,7 +187,8 @@ async function processDirectory(
 async function processSQLFile(
   clients: Clients,
   filePath: string,
-  prettify: boolean
+  prettify: boolean,
+  pgModule: string
 ): Promise<boolean> {
   const tsPath = getOutputPath(filePath)
   console.log('---------------------------------------------------------')
@@ -181,7 +199,10 @@ async function processSQLFile(
       Task.of(fs.readFile(filePath)),
       Task.map(s => s.toString()),
       Task.chain(source =>
-        sqlToTS(clients, source, funcName(filePath), prettify ? tsPath : null)
+        sqlToTS(clients, source, funcName(filePath), {
+          prettierFileName: prettify ? tsPath : null,
+          pgModule,
+        })
       ),
       TaskEither.chain(tsCode => () =>
         fs.writeFile(tsPath, tsCode).then(Either.right)

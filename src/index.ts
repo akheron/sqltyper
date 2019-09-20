@@ -29,12 +29,19 @@ export function sqlToTS(
   clients: Clients,
   sql: string,
   funcName: string,
-  prettierFileName?: string | null | undefined
+  options?: {
+    prettierFileName?: string | null | undefined
+    pgModule?: string | null | undefined
+  }
 ): TaskEither.TaskEither<string, string> {
+  const { prettierFileName = null, pgModule } = options || {}
+
   return pipe(
     sqlToStatementDescription(clients, sql),
     TaskEither.chain(stmt =>
-      TaskEither.rightTask(generateTypeScript(clients.types, funcName, stmt))
+      TaskEither.rightTask(
+        generateTypeScript(clients.types, pgModule || 'pg', funcName, stmt)
+      )
     ),
     TaskEither.chain(tsCode =>
       prettierFileName != null

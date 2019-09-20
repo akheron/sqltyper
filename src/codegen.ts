@@ -30,12 +30,13 @@ export function validateStatement(
 
 export function generateTypeScript(
   types: TypeClient,
+  pgModule: string,
   funcName: string,
   stmt: StatementDescription
 ): Task.Task<string> {
   const positionalOnly = hasOnlyPositionalParams(stmt)
   return pipe(
-    Task.of(typeScriptString(funcName, stmt.sql)),
+    Task.of(typeScriptString(pgModule, funcName, stmt.sql)),
     Task.ap(funcParams(types, stmt, positionalOnly)),
     Task.ap(funcReturnType(types, stmt)),
     Task.ap(Task.of(queryValues(stmt, positionalOnly))),
@@ -43,12 +44,12 @@ export function generateTypeScript(
   )
 }
 
-const typeScriptString = (funcName: string, sql: string) => (
+const typeScriptString = (pgModule: string, funcName: string, sql: string) => (
   params: string
 ) => (returnType: string) => (queryValues: string) => (
   outputValue: string
 ): string => `\
-import { ClientBase } from 'pg'
+import { ClientBase } from '${pgModule}'
 
 export async function ${funcName}(
   client: ClientBase${params}
@@ -134,8 +135,11 @@ function positionalFuncParams(
   stmt: StatementDescription
 ): Task.Task<string> {
   return pipe(
-    stmt.params.map(param => async () =>
-      `${param.name}: ${await types.tsType(param.type, param.nullable)}`
+    stmt.params.map(param =>
+      pipe(
+        types.tsType(param.type, param.nullable),
+        Task.map(tsType => `${param.name}: ${tsType}`)
+      )
     ),
     sequenceATs,
     Task.map(params => params.join(', '))
