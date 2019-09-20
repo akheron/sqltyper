@@ -163,6 +163,8 @@ function inferSelectListItemNullability(
         pipe(
           sourceTables.map(sourceTable => sourceTable.table.columns),
           R.flatten,
+          // hidden column aren't selected by SELECT *
+          R.filter(column => !column.hidden),
           R.map(column => column.nullable)
         )
       ),
@@ -170,8 +172,14 @@ function inferSelectListItemNullability(
     allTableFields: ({ tableName }) =>
       pipe(
         findSourceTable(sourceTables, tableName),
-        Either.map(sourceTable => sourceTable.table.columns),
-        Either.map(columns => columns.map(column => column.nullable))
+        Either.map(sourceTable =>
+          pipe(
+            sourceTable.table.columns,
+            // hidden column aren't selected by SELECT table.*
+            R.filter(column => !column.hidden),
+            R.map(column => column.nullable)
+          )
+        )
       ),
 
     selectListExpression: ({ expression }) =>

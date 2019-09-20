@@ -9,6 +9,7 @@ export type Table = {
 }
 
 export type Column = {
+  hidden: boolean
   name: string
   nullable: boolean
   type: Oid
@@ -48,17 +49,16 @@ WHERE
 
       const colResult = await pgClient.query(
         `
-SELECT attname, atttypid, attnotnull
+SELECT attnum, attname, atttypid, attnotnull
 FROM pg_attribute
-WHERE
-    attrelid = $1
-    AND attnum > 0
+WHERE attrelid = $1
 ORDER BY attnum
 `,
         [tableOid]
       )
 
       const columns: {
+        attnum: number
         attname: string
         atttypid: Oid
         attnotnull: boolean
@@ -67,6 +67,7 @@ ORDER BY attnum
       return Either.right({
         name: tableName,
         columns: columns.map(col => ({
+          hidden: col.attnum < 0,
           name: col.attname,
           nullable: !col.attnotnull,
           type: col.atttypid,
