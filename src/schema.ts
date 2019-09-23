@@ -52,27 +52,7 @@ export function schemaClient(pgClient: Client) {
   }
 
   async function getEnums(): Promise<Enum[]> {
-    const result = await pgClient.query<{
-      oid: number
-      typname: string
-      labels: string[]
-    }>(
-      `
-SELECT
-  oid,
-  typname,
-  array(
-    SELECT enumlabel
-    FROM pg_catalog.pg_enum e
-    WHERE e.enumtypid = t.oid
-    ORDER BY e.enumsortorder
-  )::text[] AS labels
-FROM pg_type t
-WHERE t.typtype = 'e'
-`
-    )
-
-    return result.rows.map(row => ({
+    return (await sql.enums(pgClient)).map(row => ({
       oid: row.oid,
       name: row.typname,
       labels: row.labels,
