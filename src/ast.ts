@@ -304,6 +304,7 @@ export namespace TableRef {
 
 export type TableExpression =
   | TableExpression.Table
+  | TableExpression.SubQuery
   | TableExpression.CrossJoin
   | TableExpression.QualifiedJoin
 
@@ -316,6 +317,16 @@ export namespace TableExpression {
 
   export function createTable(table: TableRef, as: string | null): Table {
     return { kind: 'Table', table, as }
+  }
+
+  export type SubQuery = {
+    kind: 'SubQuery'
+    query: AST
+    as: string
+  }
+
+  export function createSubQuery(query: AST, as: string): SubQuery {
+    return { kind: 'SubQuery', query, as }
   }
 
   export type CrossJoin = {
@@ -361,6 +372,7 @@ export namespace TableExpression {
     tableExpr: TableExpression,
     handlers: {
       table: (node: Table) => T
+      subQuery: (node: SubQuery) => T
       crossJoin: (node: CrossJoin) => T
       qualifiedJoin: (node: QualifiedJoin) => T
     }
@@ -368,6 +380,8 @@ export namespace TableExpression {
     switch (tableExpr.kind) {
       case 'Table':
         return handlers.table(tableExpr)
+      case 'SubQuery':
+        return handlers.subQuery(tableExpr)
       case 'CrossJoin':
         return handlers.crossJoin(tableExpr)
       case 'QualifiedJoin':

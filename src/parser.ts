@@ -511,7 +511,19 @@ function tableExprReducer(
 const tableExpression: Parser<TableExpression> = seq(
   (lhs, rest) => (rest.length === 0 ? lhs : rest.reduce(tableExprReducer, lhs)),
   oneOf(
-    seq($3, symbol('('), _, lazy(() => tableExpression), symbol(')')),
+    attempt(seq($3, symbol('('), _, lazy(() => tableExpression), symbol(')'))),
+    attempt(
+      seq(
+        (_lp, _ws1, stmt, _rp, _ws2, as) =>
+          TableExpression.createSubQuery(stmt, as),
+        symbol('('),
+        _,
+        lazy(() => statementParser),
+        symbol(')'),
+        _,
+        as
+      )
+    ),
     seq($1, table, _)
   ),
   many(oneOf(crossJoin, qualifiedJoin, naturalJoin)),

@@ -84,7 +84,7 @@ function getOutputColumns(
       pipe(
         combineVirtualTables(
           outsideCTEs,
-          getVirtualTablesForWithQuery(client, ctes)
+          getVirtualTablesForWithQueries(client, ctes)
         ),
         TaskEither.chain(combinedCTEs =>
           getSourceColumnsForTableExpr(client, combinedCTEs, body.from)
@@ -108,7 +108,7 @@ function getOutputColumns(
       pipe(
         combineVirtualTables(
           outsideCTEs,
-          getVirtualTablesForWithQuery(client, ctes)
+          getVirtualTablesForWithQueries(client, ctes)
         ),
         TaskEither.chain(combinedCTEs =>
           combineSourceColumns(
@@ -632,7 +632,7 @@ function inferRowCount(
   return { ...statement, rowCount }
 }
 
-function getVirtualTablesForWithQuery(
+function getVirtualTablesForWithQueries(
   client: SchemaClient,
   withQueries: ast.WithQuery[]
 ): TaskEither.TaskEither<string, VirtualTable[]> {
@@ -711,6 +711,8 @@ function getSourceColumnsForTableExpr(
     ast.TableExpression.walk(tableExpr, {
       table: ({ table, as }) =>
         getSourceColumnsForTable(client, ctes, table, as),
+      subQuery: ({ query, as }) =>
+        getSourceColumnsForSubQuery(client, ctes, query, as),
       crossJoin: ({ left, right }) =>
         combineSourceColumns(
           getSourceColumnsForTableExpr(client, ctes, left, false),
@@ -736,6 +738,25 @@ function getSourceColumnsForTableExpr(
     }),
     TaskEither.map(sourceColumns =>
       setNullable ? setSourceColumnsAsNullable(sourceColumns) : sourceColumns
+    )
+  )
+}
+
+function getSourceColumnsForSubQuery(
+  client: SchemaClient,
+  outsideCTEs: VirtualTable[],
+  subquery: ast.AST,
+  as: string
+): TaskEither.TaskEither<string, SourceColumn[]> {
+  return pipe(
+    getOutputColumns(client, outsideCTEs, subquery),
+    TaskEither.map(columns =>
+      columns.map(column => ({
+        tableAlias: as,
+        columnName: column.name,
+        nullable: column.nullable,
+        hidden: false,
+      }))
     )
   )
 }
