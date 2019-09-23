@@ -30,21 +30,18 @@ export function schemaClient(pgClient: Client) {
     tableName: string
   ): TaskEither.TaskEither<string, Table> {
     return async () => {
-      const tblResult = await sql.tableOid(pgClient, {
+      const result = await sql.tableColumns(pgClient, {
         schemaName: schemaName || 'public',
         tableName,
       })
-      if (tblResult == null)
+      if (result.length === 0) {
         return Either.left(
           `No such table: ${fullTableName(schemaName, tableName)}`
         )
-
-      const colResult = await sql.tableColumns(pgClient, {
-        tableOid: tblResult.oid,
-      })
+      }
       return Either.right({
         name: tableName,
-        columns: colResult.map(col => ({
+        columns: result.map(col => ({
           hidden: col.attnum < 0,
           name: col.attname,
           nullable: !col.attnotnull,

@@ -2,7 +2,7 @@ import { ClientBase } from '../pg'
 
 export async function tableColumns(
   client: ClientBase,
-  params: { tableOid: number }
+  params: { schemaName: string; tableName: string }
 ): Promise<
   Array<{
     attnum: number
@@ -14,11 +14,16 @@ export async function tableColumns(
   const result = await client.query(
     `\
 SELECT attnum, attname, atttypid, attnotnull
-FROM pg_catalog.pg_attribute
-WHERE attrelid = $1
+FROM pg_catalog.pg_attribute attr
+JOIN pg_catalog.pg_class cls on attr.attrelid = cls.oid
+JOIN pg_catalog.pg_namespace nsp ON nsp.oid = cls.relnamespace
+WHERE
+    cls.relkind = 'r'
+    AND nsp.nspname = $1
+    AND cls.relname = $2
 ORDER BY attnum
 `,
-    [params.tableOid]
+    [params.schemaName, params.tableName]
   )
   return result.rows
 }
