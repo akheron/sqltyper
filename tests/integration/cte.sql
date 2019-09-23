@@ -8,7 +8,12 @@ CREATE TABLE person (
 
 --- query -----------------------------------------------------------------
 
-SELECT * FROM person
+WITH youngsters AS (
+  SELECT * FROM person
+  WHERE age < ${maximumAge}
+)
+SELECT *
+FROM youngsters
 
 --- expected row count ----------------------------------------------------
 
@@ -18,6 +23,8 @@ many
 
 id: number
 name: string
-age: number | null
+age: number
 
 --- expected param types --------------------------------------------------
+
+maximumAge: number

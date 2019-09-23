@@ -5,6 +5,7 @@ import * as Either from 'fp-ts/lib/Either'
 import * as Option from 'fp-ts/lib/Option'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
+import { identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
@@ -12,14 +13,27 @@ import { sequenceAE, sequenceATE } from './fp-utils'
 import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
-import { Oid, StatementDescription, StatementRowCount } from './types'
+import { StatementDescription, StatementRowCount } from './types'
 
 export type SourceColumn = {
   tableAlias: string
   columnName: string
-  type: Oid
   nullable: boolean
   hidden: boolean
+}
+
+export type VirtualField = {
+  name: string
+  nullable: boolean
+}
+
+function virtualField(name: string, nullable: boolean): VirtualField {
+  return { name, nullable }
+}
+
+export type VirtualTable = {
+  name: string
+  columns: VirtualField[]
 }
 
 export function inferStatementNullability(
@@ -53,61 +67,66 @@ export function inferColumnNullability(
   tree: ast.AST
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
-    getColumnNullability(client, tree),
-    TaskEither.chain(columnNullability =>
-      TaskEither.fromEither(
-        applyColumnNullability(statement, columnNullability)
-      )
+    getOutputColumns(client, [], tree),
+    TaskEither.chain(outputColumns =>
+      TaskEither.fromEither(applyColumnNullability(statement, outputColumns))
     )
   )
 }
 
-type ColumnNullability = boolean
-
-function getColumnNullability(
+function getOutputColumns(
   client: SchemaClient,
+  outsideCTEs: VirtualTable[],
   tree: ast.AST
-): TaskEither.TaskEither<string, ColumnNullability[]> {
+): TaskEither.TaskEither<string, VirtualField[]> {
   return ast.walk(tree, {
-    select: ({ body }) =>
+    select: ({ ctes, body }) =>
       pipe(
-        getSourceColumnsForTableExpr(client, body.from),
+        combineVirtualTables(
+          outsideCTEs,
+          getVirtualTablesForWithQuery(client, ctes)
+        ),
+        TaskEither.chain(combinedCTEs =>
+          getSourceColumnsForTableExpr(client, combinedCTEs, body.from)
+        ),
         TaskEither.chain(sourceColumns =>
           TaskEither.fromEither(
-            inferSelectListNullability(
-              sourceColumns,
-              body.where,
-              body.selectList
-            )
+            inferSelectListOutput(sourceColumns, body.where, body.selectList)
           )
         )
       ),
     insert: ({ table, as, returning }) =>
       pipe(
-        getSourceColumnsForTable(client, table, as),
+        getSourceColumnsForTable(client, outsideCTEs, table, as),
         TaskEither.chain(sourceColumns =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceColumns, null, returning)
+            inferSelectListOutput(sourceColumns, null, returning)
           )
         )
       ),
-    update: ({ table, as, from, where, returning }) =>
+    update: ({ ctes, table, as, from, where, returning }) =>
       pipe(
-        combineSourceColumns(
-          getSourceColumnsForTableExpr(client, from),
-          getSourceColumnsForTable(client, table, as)
+        combineVirtualTables(
+          outsideCTEs,
+          getVirtualTablesForWithQuery(client, ctes)
+        ),
+        TaskEither.chain(combinedCTEs =>
+          combineSourceColumns(
+            getSourceColumnsForTableExpr(client, combinedCTEs, from),
+            getSourceColumnsForTable(client, combinedCTEs, table, as)
+          )
         ),
         TaskEither.chain(sourceColumns =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceColumns, where, returning)
+            inferSelectListOutput(sourceColumns, where, returning)
           )
         )
       ),
     delete: ({ table, as, where, returning }) =>
       pipe(
-        getSourceColumnsForTable(client, table, as),
+        getSourceColumnsForTable(client, outsideCTEs, table, as),
         TaskEither.chain(sourceColumns =>
-          Task.of(inferSelectListNullability(sourceColumns, where, returning))
+          Task.of(inferSelectListOutput(sourceColumns, where, returning))
         )
       ),
   })
@@ -115,37 +134,43 @@ function getColumnNullability(
 
 function applyColumnNullability(
   stmt: StatementDescription,
-  columnNullability: ColumnNullability[]
+  outputColumns: VirtualField[]
 ): Either.Either<string, StatementDescription> {
-  if (columnNullability.length != stmt.columns.length) {
+  if (outputColumns.length != stmt.columns.length) {
     return Either.left(`BUG: Non-equal number of columns: \
-inferred ${columnNullability.length}, actual ${stmt.columns.length}`)
+inferred ${outputColumns.length}, actual ${stmt.columns.length}`)
   }
+
+  const inferredColumnNames = outputColumns.map(({ name }) => name).join(', ')
+  const actualColumnNames = stmt.columns.map(({ name }) => name).join(', ')
+
+  if (inferredColumnNames != actualColumnNames) {
+    return Either.left(`BUG: Inferred output column names do not equal \
+actual output column names: inferred "${inferredColumnNames}", \
+actual: "${actualColumnNames}"`)
+  }
+
   return Either.right({
     ...stmt,
     columns: R.zipWith(
-      (column, nullable) => ({ ...column, nullable }),
+      (column, inferred) => ({ ...column, nullable: inferred.nullable }),
       stmt.columns,
-      columnNullability
+      outputColumns
     ),
   })
 }
 
-function inferSelectListNullability(
+function inferSelectListOutput(
   sourceColumns: SourceColumn[],
   where: ast.Expression | null,
   selectList: ast.SelectListItem[]
-): Either.Either<string, ColumnNullability[]> {
+): Either.Either<string, VirtualField[]> {
   return pipe(
     Either.right(getNonNullExpressionsFromWhere(where)),
     Either.chain(nonNullExpressions =>
       pipe(
         selectList.map(item =>
-          inferSelectListItemNullability(
-            sourceColumns,
-            nonNullExpressions,
-            item
-          )
+          inferSelectListItemOutput(sourceColumns, nonNullExpressions, item)
         ),
         sequenceAE,
         Either.map(R.flatten)
@@ -154,34 +179,100 @@ function inferSelectListNullability(
   )
 }
 
-function inferSelectListItemNullability(
+function inferSelectListItemOutput(
   sourceColumns: SourceColumn[],
   nonNullExpressions: ast.Expression[],
   selectListItem: ast.SelectListItem
-): Either.Either<string, ColumnNullability[]> {
+): Either.Either<string, VirtualField[]> {
   return ast.SelectListItem.walk(selectListItem, {
     allFields: () =>
       pipe(
         // hidden columns aren't selected by SELECT *
         findNonHiddenSourceColumns(sourceColumns),
-        Either.map(columns => columns.map(column => column.nullable))
+        Either.map(columns =>
+          applyExpressionNonNullability(nonNullExpressions, columns)
+        ),
+        Either.map(columns =>
+          columns.map(column => ({
+            name: column.columnName,
+            nullable: column.nullable,
+          }))
+        )
       ),
 
     allTableFields: ({ tableName }) =>
       pipe(
         findNonHiddenSourceTableColumns(tableName, sourceColumns),
-        Either.map(columns => columns.map(column => column.nullable))
+        Either.map(columns =>
+          applyExpressionNonNullability(nonNullExpressions, columns)
+        ),
+        Either.map(columns =>
+          columns.map(column => ({
+            name: column.columnName,
+            nullable: column.nullable,
+          }))
+        )
       ),
 
-    selectListExpression: ({ expression }) =>
+    selectListExpression: ({ expression, as }) =>
       pipe(
         inferExpressionNullability(
           sourceColumns,
           nonNullExpressions,
           expression
         ),
-        Either.map(x => [x])
+        Either.map(nullable => [
+          virtualField(as || inferExpressionName(expression), nullable),
+        ])
       ),
+  })
+}
+
+type NonNullableColumn = { tableName: string | null; columnName: string }
+
+function isColumnNonNullable(
+  nonNullableColumns: NonNullableColumn[],
+  sourceColumn: SourceColumn
+): boolean {
+  return nonNullableColumns.some(nonNull =>
+    nonNull.tableName
+      ? sourceColumn.tableAlias === nonNull.tableName
+      : true && sourceColumn.columnName === nonNull.columnName
+  )
+}
+
+function applyExpressionNonNullability(
+  nonNullableExpressions: ast.Expression[],
+  sourceColumns: SourceColumn[]
+): SourceColumn[] {
+  const nonNullableColumns = pipe(
+    nonNullableExpressions,
+    R.map(expr =>
+      ast.Expression.walkSome<Option.Option<NonNullableColumn>>(
+        expr,
+        Option.none,
+        {
+          columnRef: ({ column }) =>
+            Option.some({ tableName: null, columnName: column }),
+          tableColumnRef: ({ table, column }) =>
+            Option.some({ tableName: table, columnName: column }),
+        }
+      )
+    ),
+    Array.filterMap(identity)
+  )
+  return sourceColumns.map(sourceColumn => ({
+    ...sourceColumn,
+    nullable: isColumnNonNullable(nonNullableColumns, sourceColumn)
+      ? false
+      : sourceColumn.nullable,
+  }))
+}
+
+function inferExpressionName(expression: ast.Expression): string {
+  return ast.Expression.walkSome(expression, '?column?', {
+    columnRef: ({ column }) => column,
+    tableColumnRef: ({ column }) => column,
   })
 }
 
@@ -278,7 +369,7 @@ function inferExpressionNullability(
               inferExpressionNullability(sourceColumns, nonNullExprs, arg)
             ),
             sequenceAE,
-            Either.map(R.any(R.identity))
+            Either.map(R.any(identity))
           )
         case 'unsafe':
         case 'alwaysNull':
@@ -406,7 +497,7 @@ function findParamNullabilityFromUpdates(
     TaskEither.map(paramNullabilities =>
       pipe(
         paramNullabilities,
-        Array.filterMap(R.identity)
+        Array.filterMap(identity)
       )
     )
   )
@@ -475,7 +566,7 @@ const combineParamNullability = (
       )
     ),
     R.flatten,
-    Array.filterMap(R.identity)
+    Array.filterMap(identity)
   )
 }
 
@@ -541,18 +632,64 @@ function inferRowCount(
   return { ...statement, rowCount }
 }
 
+function getVirtualTablesForWithQuery(
+  client: SchemaClient,
+  withQueries: ast.WithQuery[]
+): TaskEither.TaskEither<string, VirtualTable[]> {
+  return async () => {
+    const virtualTables: VirtualTable[] = []
+    for (const withQuery of withQueries) {
+      // "Virtual tables" from previous WITH queries are available
+      const virtualTable = pipe(
+        await getOutputColumns(client, virtualTables, withQuery.query)(),
+        Either.map(columns => ({ name: withQuery.as, columns }))
+      )
+      if (Either.isLeft(virtualTable)) {
+        return virtualTable
+      }
+      virtualTables.push(virtualTable.right)
+    }
+    return Either.right(virtualTables)
+  }
+}
+
+function combineVirtualTables(
+  outsideCTEs: VirtualTable[],
+  ctes: TaskEither.TaskEither<string, VirtualTable[]>
+): TaskEither.TaskEither<string, VirtualTable[]> {
+  return pipe(
+    ctes,
+    TaskEither.map(virtualTables => [...outsideCTEs, ...virtualTables])
+  )
+}
+
 function getSourceColumnsForTable(
   client: SchemaClient,
+  ctes: VirtualTable[],
   table: ast.TableRef,
   as: string | null
 ): TaskEither.TaskEither<string, SourceColumn[]> {
+  if (table.schema == null) {
+    // Try to find a matching CTE
+    const result = ctes.find(virtualTable => virtualTable.name === table.table)
+    if (result)
+      return TaskEither.right(
+        result.columns.map(col => ({
+          tableAlias: as || table.table,
+          columnName: col.name,
+          nullable: col.nullable,
+          hidden: false,
+        }))
+      )
+  }
+
+  // No matching CTE, try to find a database table
   return pipe(
     client.getTable(table.schema, table.table),
     TaskEither.map(table =>
       table.columns.map(col => ({
         tableAlias: as || table.name,
         columnName: col.name,
-        type: col.type,
         nullable: col.nullable,
         hidden: col.hidden,
       }))
@@ -562,6 +699,7 @@ function getSourceColumnsForTable(
 
 function getSourceColumnsForTableExpr(
   client: SchemaClient,
+  ctes: VirtualTable[],
   tableExpr: ast.TableExpression | null,
   setNullable: boolean = false
 ): TaskEither.TaskEither<string, SourceColumn[]> {
@@ -571,22 +709,25 @@ function getSourceColumnsForTableExpr(
 
   return pipe(
     ast.TableExpression.walk(tableExpr, {
-      table: ({ table, as }) => getSourceColumnsForTable(client, table, as),
+      table: ({ table, as }) =>
+        getSourceColumnsForTable(client, ctes, table, as),
       crossJoin: ({ left, right }) =>
         combineSourceColumns(
-          getSourceColumnsForTableExpr(client, left, false),
-          getSourceColumnsForTableExpr(client, right, false)
+          getSourceColumnsForTableExpr(client, ctes, left, false),
+          getSourceColumnsForTableExpr(client, ctes, right, false)
         ),
       qualifiedJoin: ({ left, joinType, right }) =>
         combineSourceColumns(
           getSourceColumnsForTableExpr(
             client,
+            ctes,
             left,
             // RIGHT or FULL JOIN -> The left side columns becomes nullable
             joinType === 'RIGHT' || joinType === 'FULL'
           ),
           getSourceColumnsForTableExpr(
             client,
+            ctes,
             right,
             // LEFT or FULL JOIN -> The right side columns becomes nullable
             joinType === 'LEFT' || joinType === 'FULL'
