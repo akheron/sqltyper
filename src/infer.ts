@@ -11,17 +11,15 @@ import * as ast from './ast'
 import { sequenceAE, sequenceATE } from './fp-utils'
 import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
-import {
-  SchemaClient,
-  Table,
-  Column,
-  setTableColumnsAsNullable,
-} from './schema'
-import { StatementDescription, StatementRowCount } from './types'
+import { SchemaClient, Table, Column } from './schema'
+import { Oid, StatementDescription, StatementRowCount } from './types'
 
-export type SourceTable = {
-  table: Table
-  as: string
+export type SourceColumn = {
+  tableAlias: string
+  columnName: string
+  type: Oid
+  nullable: boolean
+  hidden: boolean
 }
 
 export function inferStatementNullability(
@@ -73,11 +71,11 @@ function getColumnNullability(
   return ast.walk(tree, {
     select: ({ body }) =>
       pipe(
-        getSourceTablesForTableExpr(client, body.from),
-        TaskEither.chain(sourceTables =>
+        getSourceColumnsForTableExpr(client, body.from),
+        TaskEither.chain(sourceColumns =>
           TaskEither.fromEither(
             inferSelectListNullability(
-              sourceTables,
+              sourceColumns,
               body.where,
               body.selectList
             )
@@ -86,30 +84,30 @@ function getColumnNullability(
       ),
     insert: ({ table, as, returning }) =>
       pipe(
-        getSourceTable(client, table, as),
-        TaskEither.chain(sourceTables =>
+        getSourceColumnsForTable(client, table, as),
+        TaskEither.chain(sourceColumns =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceTables, null, returning)
+            inferSelectListNullability(sourceColumns, null, returning)
           )
         )
       ),
     update: ({ table, as, from, where, returning }) =>
       pipe(
-        combineSourceTables(
-          getSourceTablesForTableExpr(client, from),
-          getSourceTable(client, table, as)
+        combineSourceColumns(
+          getSourceColumnsForTableExpr(client, from),
+          getSourceColumnsForTable(client, table, as)
         ),
-        TaskEither.chain(sourceTables =>
+        TaskEither.chain(sourceColumns =>
           TaskEither.fromEither(
-            inferSelectListNullability(sourceTables, where, returning)
+            inferSelectListNullability(sourceColumns, where, returning)
           )
         )
       ),
     delete: ({ table, as, where, returning }) =>
       pipe(
-        getSourceTable(client, table, as),
-        TaskEither.chain(sourceTables =>
-          Task.of(inferSelectListNullability(sourceTables, where, returning))
+        getSourceColumnsForTable(client, table, as),
+        TaskEither.chain(sourceColumns =>
+          Task.of(inferSelectListNullability(sourceColumns, where, returning))
         )
       ),
   })
@@ -134,7 +132,7 @@ inferred ${columnNullability.length}, actual ${stmt.columns.length}`)
 }
 
 function inferSelectListNullability(
-  sourceTables: SourceTable[],
+  sourceColumns: SourceColumn[],
   where: ast.Expression | null,
   selectList: ast.SelectListItem[]
 ): Either.Either<string, ColumnNullability[]> {
@@ -143,7 +141,11 @@ function inferSelectListNullability(
     Either.chain(nonNullExpressions =>
       pipe(
         selectList.map(item =>
-          inferSelectListItemNullability(sourceTables, nonNullExpressions, item)
+          inferSelectListItemNullability(
+            sourceColumns,
+            nonNullExpressions,
+            item
+          )
         ),
         sequenceAE,
         Either.map(R.flatten)
@@ -153,39 +155,28 @@ function inferSelectListNullability(
 }
 
 function inferSelectListItemNullability(
-  sourceTables: SourceTable[],
+  sourceColumns: SourceColumn[],
   nonNullExpressions: ast.Expression[],
   selectListItem: ast.SelectListItem
 ): Either.Either<string, ColumnNullability[]> {
   return ast.SelectListItem.walk(selectListItem, {
     allFields: () =>
-      Either.right(
-        pipe(
-          sourceTables.map(sourceTable => sourceTable.table.columns),
-          R.flatten,
-          // hidden column aren't selected by SELECT *
-          R.filter(column => !column.hidden),
-          R.map(column => column.nullable)
-        )
+      pipe(
+        // hidden columns aren't selected by SELECT *
+        findNonHiddenSourceColumns(sourceColumns),
+        Either.map(columns => columns.map(column => column.nullable))
       ),
 
     allTableFields: ({ tableName }) =>
       pipe(
-        findSourceTable(sourceTables, tableName),
-        Either.map(sourceTable =>
-          pipe(
-            sourceTable.table.columns,
-            // hidden column aren't selected by SELECT table.*
-            R.filter(column => !column.hidden),
-            R.map(column => column.nullable)
-          )
-        )
+        findNonHiddenSourceTableColumns(tableName, sourceColumns),
+        Either.map(columns => columns.map(column => column.nullable))
       ),
 
     selectListExpression: ({ expression }) =>
       pipe(
         inferExpressionNullability(
-          sourceTables,
+          sourceColumns,
           nonNullExpressions,
           expression
         ),
@@ -195,7 +186,7 @@ function inferSelectListItemNullability(
 }
 
 function inferExpressionNullability(
-  sourceTables: SourceTable[],
+  sourceColumns: SourceColumn[],
   nonNullExprs: ast.Expression[],
   expression: ast.Expression
 ): Either.Either<string, boolean> {
@@ -211,7 +202,7 @@ function inferExpressionNullability(
     // have a NOT NULL constraint
     tableColumnRef: ({ table, column }) =>
       pipe(
-        findSourceTableColumn(sourceTables, table, column),
+        findSourceTableColumn(table, column, sourceColumns),
         Either.map(column => column.nullable)
       ),
 
@@ -219,7 +210,7 @@ function inferExpressionNullability(
     // have a NOT NULL constraint
     columnRef: ({ column }) =>
       pipe(
-        findSourceColumn(sourceTables, column),
+        findSourceColumn(column, sourceColumns),
         Either.map(column => column.nullable)
       ),
 
@@ -233,7 +224,11 @@ function inferExpressionNullability(
     unaryOp: ({ op, operand }) => {
       switch (operatorNullSafety(op)) {
         case 'safe':
-          return inferExpressionNullability(sourceTables, nonNullExprs, operand)
+          return inferExpressionNullability(
+            sourceColumns,
+            nonNullExprs,
+            operand
+          )
         case 'unsafe':
         case 'alwaysNull':
           return Either.right(true)
@@ -253,8 +248,8 @@ function inferExpressionNullability(
       switch (operatorNullSafety(op)) {
         case 'safe':
           return (
-            inferExpressionNullability(sourceTables, nonNullExprs, lhs) ||
-            inferExpressionNullability(sourceTables, nonNullExprs, rhs)
+            inferExpressionNullability(sourceColumns, nonNullExprs, lhs) ||
+            inferExpressionNullability(sourceColumns, nonNullExprs, rhs)
           )
         case 'unsafe':
         case 'alwaysNull':
@@ -280,7 +275,7 @@ function inferExpressionNullability(
         case 'safe':
           return pipe(
             argList.map(arg =>
-              inferExpressionNullability(sourceTables, nonNullExprs, arg)
+              inferExpressionNullability(sourceColumns, nonNullExprs, arg)
             ),
             sequenceAE,
             Either.map(R.any(R.identity))
@@ -295,7 +290,7 @@ function inferExpressionNullability(
 
     // expr IN (subquery) returns NULL if expr is NULL
     inOp: ({ lhs }) =>
-      inferExpressionNullability(sourceTables, nonNullExprs, lhs),
+      inferExpressionNullability(sourceColumns, nonNullExprs, lhs),
 
     // A constant is never NULL
     constant: () => Either.right(false),
@@ -437,7 +432,7 @@ function updateToParamNullability(
   return pipe(
     Either.right(makeParamNullability),
     Either.ap(Either.right(paramIndexFromExpr(update.value))),
-    Either.ap(findTableColumn(dbTable, update.columnName))
+    Either.ap(findTableColumn(update.columnName, dbTable))
   )
 }
 
@@ -459,7 +454,7 @@ function findInsertColumns(
     TaskEither.chain(dbTable =>
       TaskEither.fromEither(
         pipe(
-          columnNames.map(columnName => findTableColumn(dbTable, columnName)),
+          columnNames.map(columnName => findTableColumn(columnName, dbTable)),
           sequenceAE
         )
       )
@@ -546,77 +541,78 @@ function inferRowCount(
   return { ...statement, rowCount }
 }
 
-function getSourceTable(
+function getSourceColumnsForTable(
   client: SchemaClient,
   table: ast.TableRef,
   as: string | null
-): TaskEither.TaskEither<string, SourceTable[]> {
+): TaskEither.TaskEither<string, SourceColumn[]> {
   return pipe(
     client.getTable(table.schema, table.table),
-    TaskEither.map(table => [
-      {
-        table,
-        as: as || table.name,
-      },
-    ])
+    TaskEither.map(table =>
+      table.columns.map(col => ({
+        tableAlias: as || table.name,
+        columnName: col.name,
+        type: col.type,
+        nullable: col.nullable,
+        hidden: col.hidden,
+      }))
+    )
   )
 }
 
-function getSourceTablesForTableExpr(
+function getSourceColumnsForTableExpr(
   client: SchemaClient,
   tableExpr: ast.TableExpression | null,
   setNullable: boolean = false
-): TaskEither.TaskEither<string, SourceTable[]> {
+): TaskEither.TaskEither<string, SourceColumn[]> {
   if (!tableExpr) {
     return TaskEither.right([])
   }
 
   return pipe(
     ast.TableExpression.walk(tableExpr, {
-      table: ({ table, as }) => getSourceTable(client, table, as),
+      table: ({ table, as }) => getSourceColumnsForTable(client, table, as),
       crossJoin: ({ left, right }) =>
-        combineSourceTables(
-          getSourceTablesForTableExpr(client, left, false),
-          getSourceTablesForTableExpr(client, right, false)
+        combineSourceColumns(
+          getSourceColumnsForTableExpr(client, left, false),
+          getSourceColumnsForTableExpr(client, right, false)
         ),
       qualifiedJoin: ({ left, joinType, right }) =>
-        combineSourceTables(
-          getSourceTablesForTableExpr(
+        combineSourceColumns(
+          getSourceColumnsForTableExpr(
             client,
             left,
-            // RIGHT or FULL JOIN -> The left side columns becomes is nullable
+            // RIGHT or FULL JOIN -> The left side columns becomes nullable
             joinType === 'RIGHT' || joinType === 'FULL'
           ),
-          getSourceTablesForTableExpr(
+          getSourceColumnsForTableExpr(
             client,
             right,
-            // LEFT or FULL JOIN -> The right side columns becomes is nullable
+            // LEFT or FULL JOIN -> The right side columns becomes nullable
             joinType === 'LEFT' || joinType === 'FULL'
           )
         ),
     }),
-    TaskEither.map(sourceTables =>
-      setNullable
-        ? sourceTables.map(setSourceTableColumnsAsNullable)
-        : sourceTables
+    TaskEither.map(sourceColumns =>
+      setNullable ? setSourceColumnsAsNullable(sourceColumns) : sourceColumns
     )
   )
 }
 
-function setSourceTableColumnsAsNullable(
-  sourceTable: SourceTable
-): SourceTable {
-  return {
-    ...sourceTable,
-    table: setTableColumnsAsNullable(sourceTable.table),
-  }
+function setSourceColumnsAsNullable(
+  sourceColumns: SourceColumn[]
+): SourceColumn[] {
+  return sourceColumns.map(col => ({
+    ...col,
+    nullable: true,
+  }))
 }
 
-function combineSourceTables(
-  ...tables: Array<TaskEither.TaskEither<string, SourceTable[]>>
-): TaskEither.TaskEither<string, SourceTable[]> {
+function combineSourceColumns(
+  ...sourceColumns: Array<TaskEither.TaskEither<string, SourceColumn[]>>
+): TaskEither.TaskEither<string, SourceColumn[]> {
   return pipe(
-    tables,
+    sourceColumns,
     sequenceATE,
     TaskEither.map(R.flatten)
   )
@@ -628,39 +624,57 @@ function isConstantExprOf(expectedValue: string, expr: ast.Expression) {
   })
 }
 
-function findSourceTable(sourceTables: SourceTable[], tableName: string) {
+function findNonHiddenSourceColumns(
+  sourceColumns: SourceColumn[]
+): Either.Either<string, SourceColumn[]> {
   return pipe(
-    sourceTables.find(sourceTable => sourceTable.as === tableName),
-    Either.fromNullable(`Unknown table ${tableName}`)
+    sourceColumns.filter(col => !col.hidden),
+    Either.fromPredicate(result => result.length > 0, () => `No columns`)
   )
 }
 
-function findSourceTableColumn(
-  sourceTables: SourceTable[],
+function findNonHiddenSourceTableColumns(
   tableName: string,
-  columnName: string
-) {
+  sourceColumns: SourceColumn[]
+): Either.Either<string, SourceColumn[]> {
   return pipe(
-    findSourceTable(sourceTables, tableName),
-    Either.chain(table =>
-      pipe(
-        table.table.columns.find(column => column.name === columnName),
-        Either.fromNullable(`Unknown column ${tableName}.${columnName}`)
-      )
+    findNonHiddenSourceColumns(sourceColumns),
+    Either.map(sourceColumns =>
+      sourceColumns.filter(col => col.tableAlias === tableName)
+    ),
+    Either.chain(result =>
+      result.length > 0
+        ? Either.right(result)
+        : Either.left(`No visible columns for table ${tableName}`)
     )
   )
 }
 
-function findSourceColumn(sourceTables: SourceTable[], columnName: string) {
+function findSourceTableColumn(
+  tableName: string,
+  columnName: string,
+  sourceColumns: SourceColumn[]
+): Either.Either<string, SourceColumn> {
   return pipe(
-    sourceTables.map(sourceTable => sourceTable.table.columns),
-    R.flatten,
-    R.find(column => column.name === columnName),
+    sourceColumns.find(
+      source =>
+        source.tableAlias === tableName && source.columnName === columnName
+    ),
+    Either.fromNullable(`Unknown column ${tableName}.${columnName}`)
+  )
+}
+
+function findSourceColumn(
+  columnName: string,
+  sourceColumns: SourceColumn[]
+): Either.Either<string, SourceColumn> {
+  return pipe(
+    sourceColumns.find(col => col.columnName === columnName),
     Either.fromNullable(`Unknown column ${columnName}`)
   )
 }
 
-function findTableColumn(table: Table, columnName: string) {
+function findTableColumn(columnName: string, table: Table) {
   return pipe(
     table.columns.find(column => column.name === columnName),
     Either.fromNullable(`Unknown column ${columnName}`)
