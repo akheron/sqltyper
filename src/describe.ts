@@ -3,7 +3,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
 
 import { Client, QueryResult } from './pg'
-import { StatementDescription } from './types'
+import { StatementDescription, ValueType } from './types'
 
 export function describeStatement(
   pgClient: Client,
@@ -28,14 +28,14 @@ function describeResult(
     columns: queryResult.fields.map(field => ({
       name: field.name,
       nullable: true, // columns are nullable by default
-      type: field.dataTypeID,
+      type: ValueType.any(field.dataTypeID),
     })),
     rowCount: 'many',
     params: R.zipWith(
       (name, type) => ({
         name,
         nullable: false, // params are non-nullable by default
-        type,
+        type: ValueType.any(type),
       }),
       paramNames,
       queryResult.params

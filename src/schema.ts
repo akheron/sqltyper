@@ -22,6 +22,11 @@ export type Enum = {
   labels: string[]
 }
 
+export type ArrayType = {
+  oid: Oid
+  elemType: Oid
+}
+
 export type SchemaClient = ReturnType<typeof schemaClient>
 
 export function schemaClient(pgClient: Client) {
@@ -59,7 +64,14 @@ export function schemaClient(pgClient: Client) {
     }))
   }
 
-  return { getTable, getEnums }
+  async function getArrayTypes(): Promise<ArrayType[]> {
+    return (await sql.arrayTypes(pgClient)).map(row => ({
+      oid: row.oid,
+      elemType: row.typelem,
+    }))
+  }
+
+  return { getTable, getEnums, getArrayTypes }
 }
 
 function fullTableName(schemaName: string | null, tableName: string): string {
