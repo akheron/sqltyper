@@ -620,21 +620,7 @@ export namespace WithQuery {
 
 export type Statement = Select | Insert | Update | Delete
 
-export type AST = {
-  statement: Statement
-  startOffset: number
-  endOffset: number
-}
-
-export namespace AST {
-  export function create(
-    statement: Statement,
-    startOffset: number,
-    endOffset: number
-  ): AST {
-    return { statement, startOffset, endOffset }
-  }
-}
+export type AST = Statement
 
 export function walk<T>(
   ast: AST,
@@ -645,14 +631,14 @@ export function walk<T>(
     delete: (node: Delete) => T
   }
 ): T {
-  switch (ast.statement.kind) {
+  switch (ast.kind) {
     case 'Select':
-      return handlers.select(ast.statement)
+      return handlers.select(ast)
     case 'Insert':
-      return handlers.insert(ast.statement)
+      return handlers.insert(ast)
     case 'Update':
-      return handlers.update(ast.statement)
+      return handlers.update(ast)
     case 'Delete':
-      return handlers.delete(ast.statement)
+      return handlers.delete(ast)
   }
 }

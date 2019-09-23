@@ -139,37 +139,6 @@ function parenthesized<T>(parser: Parser<T>): Parser<T> {
   return seq($3, symbol('('), _, parser, symbol(')'), _)
 }
 
-type RangeMatch<T> = {
-  result: T
-  startOffset: number
-  endOffset: number
-}
-
-// typed-parser doesn't export the Failure interface, so we have to do
-// some digging to get hold of it :)
-type Failure = Exclude<ReturnType<Parser<'foo'>>, 'foo'>
-
-function isFailure(a: any): a is Failure {
-  return (
-    a instanceof Object &&
-    ['scope', 'offset', 'message'].every(prop => a.hasOwnProperty(prop))
-  )
-}
-
-function withRange<T>(parser: Parser<T>): Parser<RangeMatch<T>> {
-  return (source, context) => {
-    const startOffset = context.offset
-
-    const result = parser(source, context)
-    if (isFailure(result)) {
-      return result
-    }
-
-    const endOffset = context.offset
-    return { result, startOffset, endOffset }
-  }
-}
-
 // [ AS ] identifier
 const as: Parser<string> = seq(
   (_as, id, _ws1) => id,
@@ -832,10 +801,11 @@ const delete_: Parser<Delete> = seq(
 
 // parse
 
-const statementParser: Parser<AST> = seq(
-  ({ result, startOffset, endOffset }) =>
-    AST.create(result, startOffset, endOffset),
-  withRange(oneOf<Statement>(select, insert, update, delete_))
+const statementParser: Parser<AST> = oneOf<Statement>(
+  select,
+  insert,
+  update,
+  delete_
 )
 
 const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)
