@@ -383,6 +383,15 @@ function inferExpressionNullability(
     inOp: ({ lhs }) =>
       inferExpressionNullability(sourceColumns, nonNullExprs, lhs),
 
+    // ARRAY(subquery) is never null as a whole. The nullability of
+    // the inside depends on the inside select list expression
+    arraySubQuery: () => Either.right(false),
+
+    // A type cast evaluates to NULL if the expression to be casted is
+    // NULL.
+    typeCast: ({ lhs }) =>
+      inferExpressionNullability(sourceColumns, nonNullExprs, lhs),
+
     // A constant is never NULL
     constant: () => Either.right(false),
 

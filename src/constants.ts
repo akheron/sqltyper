@@ -3,6 +3,7 @@
 export const sqlReservedWords: string[] = [
   'ALL',
   'AND',
+  'ARRAY',
   'AS',
   'ASC',
   'BETWEEN',

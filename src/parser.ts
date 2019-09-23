@@ -23,6 +23,7 @@ import {
   seq,
   stringBefore,
   symbol,
+  expectString,
 } from 'typed-parser'
 import {
   AST,
@@ -161,6 +162,13 @@ const tableRef: Parser<TableRef> = seq(
 
 // Expressions
 
+const arraySubQueryExpr: Parser<Expression> = seq(
+  (_arr, _ws, subquery) => Expression.createArraySubQuery(subquery),
+  reservedWord('ARRAY'),
+  _,
+  parenthesized(lazy(() => select))
+)
+
 const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
     // func(*} means no arguments
@@ -223,11 +231,25 @@ const parenthesizedExpr: Parser<Expression> = parenthesized(
   lazy(() => expression)
 )
 
-const primaryExpr = oneOf(
-  columnRefOrFunctionCallExpr,
-  constantExpr,
-  parameterExpr,
-  parenthesizedExpr
+const typeName: Parser<string> = seq(
+  (id, _ws1, arraySuffix, _ws2) => id + arraySuffix,
+  identifier,
+  _,
+  oneOf<'[]' | ''>(seq(_ => '[]', symbol('['), _, symbol(']')), constant('')),
+  _
+)
+
+const primaryExpr: Parser<Expression> = seq(
+  (expr, typeCast) =>
+    typeCast != null ? Expression.createTypeCast(expr, typeCast) : expr,
+  oneOf(
+    arraySubQueryExpr,
+    columnRefOrFunctionCallExpr,
+    constantExpr,
+    parameterExpr,
+    parenthesizedExpr
+  ),
+  optional(seq($3, symbol('::'), _, typeName))
 )
 
 function makeUnaryOp(
@@ -264,11 +286,10 @@ function makeBinaryOp(
 const oneOfOperators = (...ops: string[]): Parser<string> =>
   oneOf(...ops.map(operator))
 
-const typeCastExpr = makeBinaryOp(seq(_ => '::', symbol('::')), primaryExpr)
 const subscriptExpr = seq(
   (next, _ws, subs) =>
     subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next),
-  typeCastExpr,
+  primaryExpr,
   _,
   many(seq($3, symbol('['), _, lazy(() => expression), symbol(']'), _))
 )

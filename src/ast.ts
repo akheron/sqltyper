@@ -12,6 +12,8 @@ export type Expression =
   | Expression.ExistsOp
   | Expression.InOp
   | Expression.FunctionCall
+  | Expression.ArraySubQuery
+  | Expression.TypeCast
 
 export namespace Expression {
   export type ColumnRef = {
@@ -116,6 +118,28 @@ export namespace Expression {
     return { kind: 'FunctionCall', funcName, argList }
   }
 
+  export type ArraySubQuery = {
+    kind: 'ArraySubQuery'
+    subquery: Select
+  }
+
+  export function createArraySubQuery(subquery: Select): ArraySubQuery {
+    return { kind: 'ArraySubQuery', subquery }
+  }
+
+  export type TypeCast = {
+    kind: 'TypeCast'
+    lhs: Expression
+    targetType: string
+  }
+
+  export function createTypeCast(
+    lhs: Expression,
+    targetType: string
+  ): TypeCast {
+    return { kind: 'TypeCast', lhs, targetType }
+  }
+
   export function walkSome<T>(
     expr: Expression,
     elseVal: T,
@@ -129,6 +153,8 @@ export namespace Expression {
       existsOp?: (value: ExistsOp) => T
       inOp?: (value: InOp) => T
       functionCall?: (value: FunctionCall) => T
+      arraySubQuery?: (value: ArraySubQuery) => T
+      typeCast?: (value: TypeCast) => T
     }
   ): T {
     switch (expr.kind) {
@@ -154,6 +180,12 @@ export namespace Expression {
         return handlers.functionCall == null
           ? elseVal
           : handlers.functionCall(expr)
+      case 'ArraySubQuery':
+        return handlers.arraySubQuery == null
+          ? elseVal
+          : handlers.arraySubQuery(expr)
+      case 'TypeCast':
+        return handlers.typeCast == null ? elseVal : handlers.typeCast(expr)
     }
   }
 
@@ -169,6 +201,8 @@ export namespace Expression {
       existsOp: (value: ExistsOp) => T
       inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
+      arraySubQuery: (value: ArraySubQuery) => T
+      typeCast: (value: TypeCast) => T
     }
   ): T {
     switch (expr.kind) {
@@ -190,6 +224,10 @@ export namespace Expression {
         return handlers.inOp(expr)
       case 'FunctionCall':
         return handlers.functionCall(expr)
+      case 'ArraySubQuery':
+        return handlers.arraySubQuery(expr)
+      case 'TypeCast':
+        return handlers.typeCast(expr)
     }
   }
 
@@ -231,6 +269,13 @@ export namespace Expression {
           a.funcName === b.funcName &&
           R.zip(a.argList, b.argList).every(([ap, bp]) => equals(ap, bp))
         )
+      case 'ArraySubQuery':
+        if (a.kind !== b.kind) return false
+        return false // TODO
+
+      case 'TypeCast':
+        if (a.kind !== b.kind) return false
+        return equals(a.lhs, b.lhs) && a.targetType == b.targetType
     }
   }
 }
