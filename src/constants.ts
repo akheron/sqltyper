@@ -85,6 +85,7 @@ export const operators: Operator[] = [
   op('<', false, 'safe'),
   op('>', false, 'safe'),
   op('=', true, 'safe'),
+  op('<>', true, 'safe'),
   op('<=', false, 'safe'),
   op('>=', false, 'safe'),
   op('+', true, 'safe'),
@@ -113,6 +114,7 @@ export const functions: Function[] = [
   func('now', 'neverNull'),
   func('count', 'neverNull'),
   func('sum', 'safe'),
+  func('to_char', 'safe'),
 ]
 
 /// Helpers
