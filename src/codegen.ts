@@ -1,3 +1,5 @@
+import * as path from 'path'
+
 import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import { pipe } from 'fp-ts/lib/pipeable'
@@ -5,6 +7,8 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import { sequenceATs } from './fp-utils'
 import { TypeClient } from './tstype'
 import { StatementDescription, NamedValue } from './types'
+
+////////////////////////////////////////////////////////////////////////
 
 export function validateStatement(
   stmt: StatementDescription
@@ -27,6 +31,8 @@ export function validateStatement(
 
   return Either.right(stmt)
 }
+
+////////////////////////////////////////////////////////////////////////
 
 export function generateTypeScript(
   types: TypeClient,
@@ -168,4 +174,30 @@ function queryValues(
   return (
     ', [ ' + stmt.params.map(param => prefix + param.name).join(', ') + ' ]'
   )
+}
+
+////////////////////////////////////////////////////////////////////////
+
+export type TsModule = {
+  sqlFileName: string
+  tsFileName: string
+  funcName: string
+}
+
+export type TsModuleDir = {
+  dirPath: string
+  modules: TsModule[]
+}
+
+export function generateIndexModule(modules: TsModule[]): string {
+  return modules
+    .map(
+      ({ tsFileName, funcName }) =>
+        `export { ${funcName} } from './${baseNameWithoutExt(tsFileName)}';`
+    )
+    .join('\n')
+}
+
+function baseNameWithoutExt(filePath: string): string {
+  return path.parse(filePath).name
 }

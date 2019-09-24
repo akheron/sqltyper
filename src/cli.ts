@@ -4,14 +4,20 @@ import watch from 'node-watch'
 import * as path from 'path'
 
 import camelCase = require('camelcase')
+import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
+import * as Option from 'fp-ts/lib/Option'
+import * as Ord from 'fp-ts/lib/Ord'
+import * as Ordering from 'fp-ts/lib/Ordering'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 import * as yargs from 'yargs'
 
 import { Clients, connect, disconnect } from './clients'
-import { sqlToTS } from './index'
+import { sqlToTS, indexModuleTS, TsModule, TsModuleDir } from './index'
+import { sequenceATs } from './fp-utils'
+import { identity } from 'fp-ts/lib/function'
 
 async function main(): Promise<number> {
   const args = parseArgs()
@@ -41,6 +47,7 @@ async function main(): Promise<number> {
       clients.right,
       fileExtensions,
       dirPaths,
+      args.index,
       args.prettify,
       args['pg-module']
     )
@@ -49,9 +56,10 @@ async function main(): Promise<number> {
       clients.right,
       fileExtensions,
       dirPaths,
+      args.index,
       args.prettify,
       args['pg-module']
-    )
+    )()
   }
 
   await disconnect(clients.right)
@@ -72,6 +80,12 @@ function parseArgs() {
       default: 'sql',
       describe: 'File extensions to consider, e.g. -e sql,psql',
       type: 'string',
+    })
+    .option('index', {
+      describe:
+        'Generate an index.ts file that exports all generated functions',
+      type: 'boolean',
+      default: true,
     })
     .option('watch', {
       alias: 'w',
@@ -107,111 +121,296 @@ the SQL queries, so it's safe to run against any database.
     .help().argv
 }
 
+type WatchEvent = {
+  type: 'update' | 'remove'
+  dirPath: string
+  fileName: string
+}
+
+type WatchEventHandler = (
+  modules: TsModule[],
+  type: 'update' | 'remove',
+  dirPath: string,
+  fileName: string
+) => Promise<TsModule[]>
+
 async function watchDirectories(
   clients: Clients,
   fileExtensions: string[],
   dirPaths: string[],
+  index: boolean,
   prettify: boolean,
   pgModule: string
-) {
-  await processDirectories(
+): Promise<void> {
+  let moduleDirs = await processDirectories(
     clients,
     fileExtensions,
     dirPaths,
+    index,
     prettify,
     pgModule
-  )
+  )()
+
+  const eventBuffer: WatchEvent[] = []
+  let handlingEvents = false
+  const eventHandler = makeWatchEventHandler(clients, index, prettify, pgModule)
+
   dirPaths.forEach(dirPath =>
     watch(
       dirPath,
       { filter: fileName => hasOneOfExtensions(fileExtensions, fileName) },
-      async (event, filePath) => {
-        switch (event) {
-          case 'update':
-            processSQLFile(clients, filePath, prettify, pgModule)
-            return
-          case 'remove':
-            removeOutputFile(filePath)
-            return
+      async (event: 'update' | 'remove', filePath: string) => {
+        eventBuffer.push({
+          type: event,
+          dirPath,
+          fileName: path.relative(dirPath, filePath),
+        })
+        if (!handlingEvents) {
+          handlingEvents = true
+          moduleDirs = await handleWatchEvents(
+            moduleDirs,
+            eventBuffer,
+            eventHandler
+          )
+          handlingEvents = false
         }
       }
     )
   )
+
   return new Promise(() => {})
 }
 
-async function processDirectories(
+async function handleWatchEvents(
+  moduleDirs: TsModuleDir[],
+  events: WatchEvent[],
+  eventHandler: WatchEventHandler
+): Promise<TsModuleDir[]> {
+  while (events.length > 0) {
+    const { type, dirPath, fileName } = events.shift()!
+
+    const moduleDir = moduleDirs.find(dir => dir.dirPath === dirPath)
+    if (moduleDir == null) return moduleDirs
+
+    const newModules = await eventHandler(
+      moduleDir.modules,
+      type,
+      dirPath,
+      fileName
+    )
+    moduleDirs = pipe(
+      modifyWhere(
+        moduleDir => moduleDir.dirPath === dirPath,
+        moduleDir => ({ dirPath: moduleDir.dirPath, modules: newModules }),
+        moduleDirs
+      ),
+      Option.getOrElse(() => moduleDirs)
+    )
+  }
+  return moduleDirs
+}
+
+function makeWatchEventHandler(
+  clients: Clients,
+  index: boolean,
+  prettify: boolean,
+  pgModule: string
+): WatchEventHandler {
+  return async (
+    tsModules: TsModule[],
+    type: 'update' | 'remove',
+    dirPath: string,
+    sqlFileName: string
+  ) => {
+    const sqlFilePath = path.join(dirPath, sqlFileName)
+
+    let result: Task.Task<TsModule[]>
+    switch (type) {
+      case 'update':
+        result = pipe(
+          processSQLFile(clients, sqlFilePath, prettify, pgModule),
+          Task.map(tsModuleOption =>
+            pipe(
+              tsModuleOption,
+              Option.map(tsModule => replaceOrAddTsModule(tsModule, tsModules)),
+              Option.getOrElse(() => tsModules)
+            )
+          )
+        )
+        break
+      case 'remove':
+        await removeOutputFile(sqlFilePath)
+        result = pipe(Task.of(removeTsModule(sqlFileName, tsModules)))
+        break
+
+      default:
+        throw new Error('never reached')
+    }
+
+    result = pipe(
+      result,
+      Task.chain(newModules =>
+        maybeWriteIndexModule(index, dirPath, newModules, prettify)
+      )
+    )
+
+    return await result()
+  }
+}
+
+function replaceOrAddTsModule(
+  tsModule: TsModule,
+  tsModules: TsModule[]
+): TsModule[] {
+  return pipe(
+    modifyWhere(
+      mod => mod.sqlFileName === tsModule.sqlFileName,
+      () => tsModule,
+      tsModules
+    ),
+    Option.getOrElse((): TsModule[] => Array.snoc(tsModules, tsModule))
+  )
+}
+
+function modifyWhere<A>(
+  pred: (value: A) => boolean,
+  replacer: (found: A) => A,
+  where: A[]
+): Option.Option<A[]> {
+  return pipe(
+    where.findIndex(pred),
+    Option.fromNullable,
+    Option.chain(index =>
+      pipe(
+        where,
+        Array.modifyAt(index, () => replacer(where[index]))
+      )
+    )
+  )
+}
+
+function removeTsModule(
+  sqlFileName: string,
+  tsModules: TsModule[]
+): TsModule[] {
+  return tsModules.filter(mod => mod.sqlFileName != sqlFileName)
+}
+
+function processDirectories(
   clients: Clients,
   fileExtensions: string[],
   dirPaths: string[],
+  index: boolean,
   prettify: boolean,
   pgModule: string
-) {
-  for (const dirPath of dirPaths) {
-    const success = await processDirectory(
-      clients,
-      dirPath,
-      fileExtensions,
-      prettify,
-      pgModule
-    )
-    if (!success) {
-      break
-    }
-  }
+): Task.Task<TsModuleDir[]> {
+  return pipe(
+    dirPaths.map(dirPath =>
+      processDirectory(
+        clients,
+        dirPath,
+        fileExtensions,
+        index,
+        prettify,
+        pgModule
+      )
+    ),
+    sequenceATs
+  )
 }
 
-async function processDirectory(
+function processDirectory(
   clients: Clients,
   dirPath: string,
   fileExtensions: string[],
+  index: boolean,
   prettify: boolean,
   pgModule: string
-): Promise<boolean> {
-  for (const dirent of await fs.readdir(dirPath, {
-    encoding: 'utf-8',
-    withFileTypes: true,
-  })) {
-    if (!(await isSQLFile(fileExtensions, dirPath, dirent.name))) {
-      continue
-    }
-
-    const filePath = path.join(dirPath, dirent.name)
-    if (!(await processSQLFile(clients, filePath, prettify, pgModule))) {
-      return false
-    }
-  }
-  return true
+): Task.Task<TsModuleDir> {
+  return pipe(
+    findSQLFilePaths(dirPath, fileExtensions),
+    Task.chain(filePaths =>
+      pipe(
+        filePaths.map(filePath =>
+          processSQLFile(clients, filePath, prettify, pgModule)
+        ),
+        sequenceATs,
+        Task.map(Array.filterMap(identity))
+      )
+    ),
+    Task.chain(modules =>
+      maybeWriteIndexModule(index, dirPath, modules, prettify)
+    ),
+    Task.map(modules => ({ dirPath, modules }))
+  )
 }
 
-async function processSQLFile(
+function processSQLFile(
   clients: Clients,
   filePath: string,
   prettify: boolean,
   pgModule: string
-): Promise<boolean> {
+): Task.Task<Option.Option<TsModule>> {
   const tsPath = getOutputPath(filePath)
+  const fnName = funcName(filePath)
   console.log('---------------------------------------------------------')
   console.log(`${filePath} => ${tsPath}`)
 
-  return Either.isRight(
-    await pipe(
-      Task.of(fs.readFile(filePath)),
-      Task.map(s => s.toString()),
-      Task.chain(source =>
-        sqlToTS(clients, source, funcName(filePath), {
+  return pipe(
+    Task.of(fs.readFile(filePath)),
+    Task.map(s => s.toString()),
+    Task.chain(source =>
+      sqlToTS(clients, source, fnName, {
+        prettierFileName: prettify ? tsPath : null,
+        pgModule,
+      })
+    ),
+    TaskEither.chain(tsCode => () =>
+      fs.writeFile(tsPath, tsCode).then(Either.right)
+    ),
+    TaskEither.mapLeft(errorMessage => {
+      console.error(errorMessage)
+    }),
+    TaskEither.map(() => ({
+      sqlFileName: path.basename(filePath),
+      tsFileName: path.basename(tsPath),
+      funcName: fnName,
+    })),
+    Task.map(Option.fromEither)
+  )
+}
+
+function maybeWriteIndexModule(
+  write: boolean,
+  dirPath: string,
+  tsModules: TsModule[],
+  prettify: boolean
+): Task.Task<TsModule[]> {
+  const tsPath = path.join(dirPath, 'index.ts')
+
+  if (write) {
+    return pipe(
+      Task.of(tsModules),
+      Task.map(modules =>
+        pipe(
+          modules,
+          Array.sort(
+            Ord.fromCompare((a: TsModule, b: TsModule) =>
+              Ordering.sign(a.tsFileName.localeCompare(b.tsFileName))
+            )
+          )
+        )
+      ),
+      Task.chain(sortedModules =>
+        indexModuleTS(sortedModules, {
           prettierFileName: prettify ? tsPath : null,
-          pgModule,
         })
       ),
-      TaskEither.chain(tsCode => () =>
-        fs.writeFile(tsPath, tsCode).then(Either.right)
-      ),
-      TaskEither.mapLeft(errorMessage => {
-        console.error(errorMessage)
-      })
-    )()
-  )
+      Task.chain(tsCode => () => fs.writeFile(tsPath, tsCode)),
+      Task.map(() => tsModules)
+    )
+  }
+  return Task.of(tsModules)
 }
 
 function funcName(filePath: string) {
@@ -230,6 +429,34 @@ async function removeOutputFile(filePath: string): Promise<void> {
   console.log(`Removed ${tsPath}`)
 }
 
+function findSQLFilePaths(
+  dirPath: string,
+  fileExtensions: string[]
+): Task.Task<string[]> {
+  return pipe(
+    () =>
+      fs.readdir(dirPath, {
+        encoding: 'utf-8',
+        withFileTypes: true,
+      }),
+    Task.chain(dirents =>
+      pipe(
+        dirents.map(dirent =>
+          pipe(
+            isSQLFile(fileExtensions, dirPath, dirent.name),
+            Task.map(is => (is ? Option.some(dirent) : Option.none))
+          )
+        ),
+        sequenceATs,
+        Task.map(Array.filterMap(identity)),
+        Task.map(dirents =>
+          dirents.map(dirent => path.join(dirPath, dirent.name))
+        )
+      )
+    )
+  )
+}
+
 function getOutputPath(filePath: string): string {
   return path.format({
     ...path.parse(filePath),
@@ -242,18 +469,20 @@ function extensions(e: string): string[] {
   return e.split(',').map(ext => `.${ext}`)
 }
 
-async function isSQLFile(
+function isSQLFile(
   extensions: string[],
   dirPath: string,
   fileName: string
-) {
-  let stats
-  try {
-    stats = await fs.stat(path.join(dirPath, fileName))
-  } catch (_err) {
-    return false
+): Task.Task<boolean> {
+  return async () => {
+    let stats
+    try {
+      stats = await fs.stat(path.join(dirPath, fileName))
+    } catch (_err) {
+      return false
+    }
+    return stats.isFile() && hasOneOfExtensions(extensions, fileName)
   }
-  return stats.isFile() && hasOneOfExtensions(extensions, fileName)
 }
 
 function hasOneOfExtensions(exts: string[], fileName: string): boolean {

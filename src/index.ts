@@ -3,7 +3,12 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import { Clients } from './clients'
-import { generateTypeScript, validateStatement } from './codegen'
+import {
+  generateTypeScript,
+  validateStatement,
+  TsModule,
+  generateIndexModule,
+} from './codegen'
 import { describeStatement } from './describe'
 import { inferStatementNullability } from './infer'
 import { preprocessSQL } from './preprocess'
@@ -47,6 +52,25 @@ export function sqlToTS(
       prettierFileName != null
         ? TaskEither.rightTask(() => runPrettier(prettierFileName, tsCode))
         : TaskEither.right(tsCode)
+    )
+  )
+}
+
+export { TsModule, TsModuleDir } from './codegen'
+
+export function indexModuleTS(
+  tsModules: TsModule[],
+  options?: {
+    prettierFileName?: string | null | undefined
+  }
+): Task.Task<string> {
+  const { prettierFileName = null } = options || {}
+  return pipe(
+    Task.of(generateIndexModule(tsModules)),
+    Task.chain(tsCode =>
+      prettierFileName != null
+        ? () => runPrettier(prettierFileName, tsCode)
+        : Task.of(tsCode)
     )
   )
 }
