@@ -377,165 +377,177 @@ function inferExpressionNullability(
     // `WHERE expr IS NOT NULL` clause
     return anyTE(false)
   }
-  return ast.Expression.walk(expression, {
-    // A column reference may evaluate to NULL if the column doesn't
-    // have a NOT NULL constraint
-    tableColumnRef: ({ table, column }) =>
-      pipe(
-        TaskEither.fromEither(
-          findSourceTableColumn(table, column, sourceColumns)
+  return ast.Expression.walk<TaskEither.TaskEither<string, FieldNullability>>(
+    expression,
+    {
+      // A column reference may evaluate to NULL if the column doesn't
+      // have a NOT NULL constraint
+      tableColumnRef: ({ table, column }) =>
+        pipe(
+          TaskEither.fromEither(
+            findSourceTableColumn(table, column, sourceColumns)
+          ),
+          TaskEither.map(column => column.nullability)
         ),
-        TaskEither.map(column => column.nullability)
-      ),
 
-    // A column reference may evaluate to NULL if the column doesn't
-    // have a NOT NULL constraint
-    columnRef: ({ column }) =>
-      pipe(
-        TaskEither.fromEither(findSourceColumn(column, sourceColumns)),
-        TaskEither.map(column => column.nullability)
-      ),
+      // A column reference may evaluate to NULL if the column doesn't
+      // have a NOT NULL constraint
+      columnRef: ({ column }) =>
+        pipe(
+          TaskEither.fromEither(findSourceColumn(column, sourceColumns)),
+          TaskEither.map(column => column.nullability)
+        ),
 
-    // A unary operator has two options:
-    //
-    // - The operator is known to be NULL safe: it returns NULL only
-    //   if its operand is NULL
-    //
-    // - The operator is not NULL safe: it can return NULL even if its
-    // - operand is not NULL
-    unaryOp: ({ op, operand }) => {
-      switch (operatorNullSafety(op)) {
-        case 'safe':
-          return inferExpressionNullability(
-            client,
-            outsideCTEs,
-            sourceColumns,
-            nonNullExprs,
-            operand
-          )
-        case 'unsafe':
-        case 'alwaysNull':
-          return anyTE(true)
-        case 'neverNull':
-          return anyTE(false)
-      }
-    },
-
-    // A binary operator has two options:
-    //
-    // - The operator is known to be NULL safe: it returns NULL only
-    //   if any of its operands is NULL
-    //
-    // - The function is not NULL safe: it can return NULL even if all
-    //   of its operands are non-NULL
-    binaryOp: ({ op, lhs, rhs }) => {
-      switch (operatorNullSafety(op)) {
-        case 'safe':
-          return (
-            inferExpressionNullability(
+      // A unary operator has two options:
+      //
+      // - The operator is known to be NULL safe: it returns NULL only
+      //   if its operand is NULL
+      //
+      // - The operator is not NULL safe: it can return NULL even if its
+      // - operand is not NULL
+      unaryOp: ({ op, operand }) => {
+        switch (operatorNullSafety(op)) {
+          case 'safe':
+            return inferExpressionNullability(
               client,
               outsideCTEs,
               sourceColumns,
               nonNullExprs,
-              lhs
-            ) ||
-            inferExpressionNullability(
-              client,
-              outsideCTEs,
-              sourceColumns,
-              nonNullExprs,
-              rhs
+              operand
             )
-          )
-        case 'unsafe':
-        case 'alwaysNull':
-          return anyTE(true)
-        case 'neverNull':
-          return anyTE(false)
-      }
-    },
+          case 'unsafe':
+          case 'alwaysNull':
+            return anyTE(true)
+          case 'neverNull':
+            return anyTE(false)
+        }
+      },
 
-    // EXISTS (subquery) never returns NULL
-    existsOp: () => anyTE(false),
-
-    // A function call has two options:
-    //
-    // - The function is known to be NULL safe: it returns NULL only
-    //   if any of its arguments is NULL
-    //
-    // - The function is not NULL safe: it can return NULL even if all
-    //   of its arguments are non-NULL
-    //
-    functionCall: ({ funcName, argList }) => {
-      switch (functionNullSafety(funcName)) {
-        case 'safe':
-          return pipe(
-            argList.map(arg =>
-              inferExpressionNullability(
-                client,
-                outsideCTEs,
-                sourceColumns,
-                nonNullExprs,
-                arg
+      // A binary operator has two options:
+      //
+      // - The operator is known to be NULL safe: it returns NULL only
+      //   if any of its operands is NULL
+      //
+      // - The function is not NULL safe: it can return NULL even if all
+      //   of its operands are non-NULL
+      binaryOp: ({ op, lhs, rhs }) => {
+        switch (operatorNullSafety(op)) {
+          case 'safe':
+            return pipe(
+              TaskEither.right(
+                (lhsNullability: FieldNullability) => (
+                  rhsNullability: FieldNullability
+                ) => any(lhsNullability.nullable || rhsNullability.nullable)
+              ),
+              TaskEither.ap(
+                inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  nonNullExprs,
+                  lhs
+                )
+              ),
+              TaskEither.ap(
+                inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  nonNullExprs,
+                  rhs
+                )
               )
-            ),
-            sequenceATE,
-            TaskEither.chain(argNullability =>
-              anyTE(argNullability.some(identity))
             )
-          )
-        case 'unsafe':
-        case 'alwaysNull':
-          return anyTE(true)
-        case 'neverNull':
-          return anyTE(false)
-      }
-    },
+          case 'unsafe':
+          case 'alwaysNull':
+            return anyTE(true)
+          case 'neverNull':
+            return anyTE(false)
+        }
+      },
 
-    // expr IN (subquery) returns NULL if expr is NULL
-    inOp: ({ lhs }) =>
-      inferExpressionNullability(
-        client,
-        outsideCTEs,
-        sourceColumns,
-        nonNullExprs,
-        lhs
-      ),
+      // EXISTS (subquery) never returns NULL
+      existsOp: () => anyTE(false),
 
-    // ARRAY(subquery) is never null as a whole. The nullability of
-    // the inside depends on the inside select list expression
-    arraySubQuery: ({ subquery }) =>
-      pipe(
-        getOutputColumns(client, outsideCTEs, subquery),
-        TaskEither.chain(columns => {
-          if (columns.length != 1)
-            return TaskEither.left('subquery must return only one column')
-          return arrayTE(
-            // An array constructed from a subquery is never NULL itself
-            false,
-            // Element nullability depends on the subquery column nullability
-            columns[0].nullability.nullable
-          )
-        })
-      ),
+      // A function call has two options:
+      //
+      // - The function is known to be NULL safe: it returns NULL only
+      //   if any of its arguments is NULL
+      //
+      // - The function is not NULL safe: it can return NULL even if all
+      //   of its arguments are non-NULL
+      //
+      functionCall: ({ funcName, argList }) => {
+        switch (functionNullSafety(funcName)) {
+          case 'safe':
+            return pipe(
+              argList.map(arg =>
+                inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  nonNullExprs,
+                  arg
+                )
+              ),
+              sequenceATE,
+              TaskEither.chain(argNullability =>
+                anyTE(argNullability.some(nullability => nullability.nullable))
+              )
+            )
+          case 'unsafe':
+          case 'alwaysNull':
+            return anyTE(true)
+          case 'neverNull':
+            return anyTE(false)
+        }
+      },
 
-    // A type cast evaluates to NULL if the expression to be casted is
-    // NULL.
-    typeCast: ({ lhs }) =>
-      inferExpressionNullability(
-        client,
-        outsideCTEs,
-        sourceColumns,
-        nonNullExprs,
-        lhs
-      ),
+      // expr IN (subquery) returns NULL if expr is NULL
+      inOp: ({ lhs }) =>
+        inferExpressionNullability(
+          client,
+          outsideCTEs,
+          sourceColumns,
+          nonNullExprs,
+          lhs
+        ),
 
-    // A constant is never NULL
-    constant: () => anyTE(false),
+      // ARRAY(subquery) is never null as a whole. The nullability of
+      // the inside depends on the inside select list expression
+      arraySubQuery: ({ subquery }) =>
+        pipe(
+          getOutputColumns(client, outsideCTEs, subquery),
+          TaskEither.chain(columns => {
+            if (columns.length != 1)
+              return TaskEither.left('subquery must return only one column')
+            return arrayTE(
+              // An array constructed from a subquery is never NULL itself
+              false,
+              // Element nullability depends on the subquery column nullability
+              columns[0].nullability.nullable
+            )
+          })
+        ),
 
-    // A parameter can be NULL
-    parameter: () => anyTE(true),
-  })
+      // A type cast evaluates to NULL if the expression to be casted is
+      // NULL.
+      typeCast: ({ lhs }) =>
+        inferExpressionNullability(
+          client,
+          outsideCTEs,
+          sourceColumns,
+          nonNullExprs,
+          lhs
+        ),
+
+      // A constant is never NULL
+      constant: () => anyTE(false),
+
+      // A parameter can be NULL
+      parameter: () => anyTE(true),
+    }
+  )
 }
 
 function getNonNullExpressionsFromWhere(
