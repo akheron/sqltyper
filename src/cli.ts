@@ -17,7 +17,7 @@ import * as yargs from 'yargs'
 
 import { Clients, connect, disconnect } from './clients'
 import { sqlToTS, indexModuleTS, TsModule, TsModuleDir } from './index'
-import { sequenceATs } from './fp-utils'
+import { traverseATs } from './fp-utils'
 import { identity } from 'fp-ts/lib/function'
 
 type Options = {
@@ -311,11 +311,8 @@ function processDirectories(
   dirPaths: string[],
   options: Options
 ): Task.Task<TsModuleDir[]> {
-  return pipe(
-    dirPaths.map(dirPath =>
-      processDirectory(clients, dirPath, fileExtensions, options)
-    ),
-    sequenceATs
+  return traverseATs(dirPaths, dirPath =>
+    processDirectory(clients, dirPath, fileExtensions, options)
   )
 }
 
@@ -329,8 +326,9 @@ function processDirectory(
     findSQLFilePaths(dirPath, fileExtensions),
     Task.chain(filePaths =>
       pipe(
-        filePaths.map(filePath => processSQLFile(clients, filePath, options)),
-        sequenceATs,
+        traverseATs(filePaths, filePath =>
+          processSQLFile(clients, filePath, options)
+        ),
         Task.map(Array.filterMap(identity))
       )
     ),
@@ -437,13 +435,12 @@ function findSQLFilePaths(
       }),
     Task.chain(dirents =>
       pipe(
-        dirents.map(dirent =>
+        traverseATs(dirents, dirent =>
           pipe(
             isSQLFile(fileExtensions, dirPath, dirent.name),
             Task.map(is => (is ? Option.some(dirent) : Option.none))
           )
         ),
-        sequenceATs,
         Task.map(Array.filterMap(identity)),
         Task.map(dirents =>
           dirents.map(dirent => path.join(dirPath, dirent.name))

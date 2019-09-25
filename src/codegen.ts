@@ -4,7 +4,7 @@ import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import { pipe } from 'fp-ts/lib/pipeable'
 
-import { sequenceATs } from './fp-utils'
+import { traverseATs } from './fp-utils'
 import { TypeClient } from './tstype'
 import { StatementDescription, NamedValue } from './types'
 
@@ -75,8 +75,7 @@ function funcReturnType(
   stmt: StatementDescription
 ): Task.Task<string> {
   return pipe(
-    stmt.columns.map(columnType(types)),
-    sequenceATs,
+    traverseATs(stmt.columns, columnType(types)),
     Task.map(columnTypes => {
       const rowType = '{ ' + columnTypes.join('; ') + ' }'
       switch (stmt.rowCount) {
@@ -141,13 +140,12 @@ function positionalFuncParams(
   stmt: StatementDescription
 ): Task.Task<string> {
   return pipe(
-    stmt.params.map(param =>
+    traverseATs(stmt.params, param =>
       pipe(
         types.tsType(param.type, param.nullable),
         Task.map(tsType => `${param.name}: ${tsType}`)
       )
     ),
-    sequenceATs,
     Task.map(params => params.join(', '))
   )
 }

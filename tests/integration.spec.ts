@@ -3,7 +3,6 @@ import * as path from 'path'
 
 import * as pg from '../src/pg'
 
-import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
@@ -12,7 +11,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import { sqlToStatementDescription } from '../src/index'
 import * as C from '../src/clients'
 import { StatementRowCount, StatementDescription } from '../src/types'
-import { sequenceATs } from '../src/fp-utils'
+import { traverseATs, traverseAE } from '../src/fp-utils'
 
 // Dynamically create a test case from each integration/*.sql file
 
@@ -93,20 +92,18 @@ function checkExpectations(
 
     // Expected column types
     await pipe(
-      statementDescription.columns.map(clients.types.columnType),
-      sequenceATs,
+      traverseATs(statementDescription.columns, clients.types.columnType),
       Task.map(columnTypes => expect(columnTypes).toEqual(testFile.columnTypes))
     )()
 
     // Expected param types
     await pipe(
-      statementDescription.params.map(param =>
+      traverseATs(statementDescription.params, param =>
         pipe(
           clients.types.tsType(param.type, param.nullable),
           Task.map(tsType => ({ name: param.name, type: tsType }))
         )
       ),
-      sequenceATs,
       Task.map(paramTypes => expect(paramTypes).toEqual(testFile.paramTypes))
     )()
   }
@@ -181,9 +178,7 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
 }
 
 async function testSetup(pgClient: pg.Client, setupStatements: string[]) {
-  return Array.array.sequence(Task.taskSeq)(
-    setupStatements.map(stmt => () => pgClient.query(stmt))
-  )()
+  return traverseATs(setupStatements, stmt => () => pgClient.query(stmt))()
 }
 
 function extractSection(
@@ -205,14 +200,11 @@ function sectionRegex(sectionName: string): RegExp {
 
 function splitFields(text: string): Either.Either<string, Field[]> {
   if (!text) return Either.right([])
-  return pipe(
-    text.split('\n').map(line => {
-      let parts = splitOnce(': ', line.trimRight())
-      if (parts.length !== 2) return Either.left(`Invalid line: "${line}"`)
-      return Either.right({ name: parts[0], type: parts[1] })
-    }),
-    Array.array.sequence(Either.either)
-  )
+  return traverseAE(text.split('\n'), line => {
+    let parts = splitOnce(': ', line.trimRight())
+    if (parts.length !== 2) return Either.left(`Invalid line: "${line}"`)
+    return Either.right({ name: parts[0], type: parts[1] })
+  })
 }
 
 function splitOnce(separator: string, text: string): string[] {

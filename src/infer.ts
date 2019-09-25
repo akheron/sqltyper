@@ -8,7 +8,7 @@ import { identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
-import { sequenceAE, sequenceATE } from './fp-utils'
+import { sequenceATE, traverseATE, traverseAE } from './fp-utils'
 import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
@@ -241,7 +241,7 @@ function inferSelectListOutput(
     TaskEither.right(getNonNullExpressionsFromWhere(where)),
     TaskEither.chain(nonNullExpressions =>
       pipe(
-        selectList.map(item =>
+        traverseATE(selectList, item =>
           inferSelectListItemOutput(
             client,
             outsideCTEs,
@@ -250,7 +250,6 @@ function inferSelectListOutput(
             item
           )
         ),
-        sequenceATE,
         TaskEither.map(R.flatten)
       )
     )
@@ -499,7 +498,7 @@ function inferExpressionNullability(
         switch (functionNullSafety(funcName)) {
           case 'safe':
             return pipe(
-              argList.map(arg =>
+              traverseATE(argList, arg =>
                 inferExpressionNullability(
                   client,
                   outsideCTEs,
@@ -508,7 +507,6 @@ function inferExpressionNullability(
                   arg
                 )
               ),
-              sequenceATE,
               TaskEither.chain(argNullability =>
                 anyTE(argNullability.some(nullability => nullability.nullable))
               )
@@ -665,10 +663,7 @@ function findParamNullabilityFromUpdates(
     client.getTable(table.schema, table.table),
     TaskEither.chain(dbTable =>
       TaskEither.fromEither(
-        pipe(
-          updates.map(update => updateToParamNullability(dbTable, update)),
-          sequenceAE
-        )
+        traverseAE(updates, update => updateToParamNullability(dbTable, update))
       )
     ),
     TaskEither.map(paramNullabilities =>
@@ -721,9 +716,8 @@ function findInsertColumns(
     client.getTable(table.schema, table.table),
     TaskEither.chain(dbTable =>
       TaskEither.fromEither(
-        pipe(
-          columnNames.map(columnName => findTableColumn(columnName, dbTable)),
-          sequenceAE
+        traverseAE(columnNames, columnName =>
+          findTableColumn(columnName, dbTable)
         )
       )
     )
