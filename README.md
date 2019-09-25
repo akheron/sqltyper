@@ -100,16 +100,17 @@ File extensions to consider, e.g. `-e sql,psql`. Default: `sql`.
 `--verbose`, `-v`
 
 Give verbose output about problems with inferring statement
-nullability.
+nullability. Default: `false`.
 
 `--watch`, `-w`
 
-Watch files and run the conversion when something changes.
+Watch files and run the conversion when something changes. Default:
+`false`.
 
 `--prettify`, `-p`
 
 Apply `prettier` to output TypeScript files. `prettier` must be
-installed and configured for your project.
+installed and configured for your project. Default: `false`.
 
 `--index`
 
@@ -126,7 +127,7 @@ Where to import node-postgres from. Default: `pg`.
 ## How does it work?
 
 sqltyper connects to your database to look up the schema: which
-types there are, which tables there are, what types and constraints
+types there are, which tables there are, what columns and constraints
 the tables have, etc. The only queries it executes look up this
 information from various `pg_catalog.*` tables.
 
