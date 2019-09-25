@@ -52,6 +52,7 @@ export type VirtualTable = {
 
 export function inferStatementNullability(
   client: SchemaClient,
+  verbose: boolean,
   statement: StatementDescription
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
@@ -64,12 +65,29 @@ export function inferStatementNullability(
       )
     ),
     TaskEither.orElse(parseErrorStr => {
-      console.warn(
-        `WARNING: The internal SQL parser failed to parse the SQL \
-statement. The inferred types may be inaccurate with respect to nullability.`
-      )
-      // tslint-disable-next-line no-console
-      console.warn(`Parse error: ${parseErrorStr}`)
+      // tslint-disable:no-console
+      console.warn(`
+WARNING: The internal SQL parser failed to parse the SQL statement. The
+inferred types may be inaccurate with respect to nullability.
+`)
+      if (verbose) {
+        console.warn(`\
+Parse error: ${parseErrorStr}
+
+Please open an issue on https://github.com/akheron/sqltyper.
+
+Include the above error message, relevant parts of your database
+schema (CREATE TABLE statements, CREATE TYPE statements, etc.) and the
+SQL statement that failed to parse.
+
+Thank you in advance!
+`)
+      } else {
+        console.warn(`\
+Re-run with --verbose for instructions on how to report or fix this.
+`)
+      }
+      // tslint-enable:no-console
       return TaskEither.right(statement)
     })
   )

@@ -17,7 +17,8 @@ import { StatementDescription } from './types'
 
 export function sqlToStatementDescription(
   clients: Clients,
-  sql: string
+  sql: string,
+  verbose: boolean = false
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     Task.of(sql),
@@ -26,7 +27,9 @@ export function sqlToStatementDescription(
       describeStatement(clients.pg, processed.sql, processed.paramNames)
     ),
     TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
-    TaskEither.chain(stmt => inferStatementNullability(clients.schema, stmt))
+    TaskEither.chain(stmt =>
+      inferStatementNullability(clients.schema, verbose, stmt)
+    )
   )
 }
 
@@ -35,17 +38,19 @@ export function sqlToTS(
   sql: string,
   funcName: string,
   options?: {
-    prettierFileName?: string | null | undefined
-    pgModule?: string | null | undefined
+    prettierFileName?: string | undefined
+    pgModule?: string | undefined
+    verbose?: boolean | undefined
   }
 ): TaskEither.TaskEither<string, string> {
-  const { prettierFileName = null, pgModule } = options || {}
+  const { prettierFileName = null, pgModule = 'pg', verbose = false } =
+    options || {}
 
   return pipe(
-    sqlToStatementDescription(clients, sql),
+    sqlToStatementDescription(clients, sql, verbose),
     TaskEither.chain(stmt =>
       TaskEither.rightTask(
-        generateTypeScript(clients.types, pgModule || 'pg', funcName, stmt)
+        generateTypeScript(clients.types, pgModule, funcName, stmt)
       )
     ),
     TaskEither.chain(tsCode =>

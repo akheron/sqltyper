@@ -97,6 +97,11 @@ relies on environment variables.
 
 File extensions to consider, e.g. `-e sql,psql`. Default: `sql`.
 
+`--verbose`, `-v`
+
+Give verbose output about problems with inferring statement
+nullability.
+
 `--watch`, `-w`
 
 Watch files and run the conversion when something changes.

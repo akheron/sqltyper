@@ -19,11 +19,25 @@ import { sqlToTS, indexModuleTS, TsModule, TsModuleDir } from './index'
 import { sequenceATs } from './fp-utils'
 import { identity } from 'fp-ts/lib/function'
 
+type Options = {
+  verbose: boolean
+  index: boolean
+  prettify: boolean
+  pgModule: string
+}
+
 async function main(): Promise<number> {
   const args = parseArgs()
   if (!args._.length) {
     console.error('No input files. Try with `--help`.')
     return 1
+  }
+
+  const options: Options = {
+    verbose: args.verbose,
+    index: args.index,
+    prettify: args.prettify,
+    pgModule: args['pg-module'],
   }
 
   const dirPaths: string[] = []
@@ -43,23 +57,9 @@ async function main(): Promise<number> {
   }
 
   if (args.watch) {
-    await watchDirectories(
-      clients.right,
-      fileExtensions,
-      dirPaths,
-      args.index,
-      args.prettify,
-      args['pg-module']
-    )
+    await watchDirectories(clients.right, fileExtensions, dirPaths, options)
   } else {
-    await processDirectories(
-      clients.right,
-      fileExtensions,
-      dirPaths,
-      args.index,
-      args.prettify,
-      args['pg-module']
-    )()
+    await processDirectories(clients.right, fileExtensions, dirPaths, options)()
   }
 
   await disconnect(clients.right)
@@ -79,9 +79,16 @@ function parseArgs() {
     })
     .option('ext', {
       alias: 'e',
-      default: 'sql',
       describe: 'File extensions to consider, e.g. -e sql,psql',
       type: 'string',
+      default: 'sql',
+    })
+    .option('verbose', {
+      alias: 'v',
+      describe:
+        'Give verbose output about problems with inferring statement nullability.',
+      type: 'boolean',
+      default: false,
     })
     .option('index', {
       describe:
@@ -140,22 +147,18 @@ async function watchDirectories(
   clients: Clients,
   fileExtensions: string[],
   dirPaths: string[],
-  index: boolean,
-  prettify: boolean,
-  pgModule: string
+  options: Options
 ): Promise<void> {
   let moduleDirs = await processDirectories(
     clients,
     fileExtensions,
     dirPaths,
-    index,
-    prettify,
-    pgModule
+    options
   )()
 
   const eventBuffer: WatchEvent[] = []
   let handlingEvents = false
-  const eventHandler = makeWatchEventHandler(clients, index, prettify, pgModule)
+  const eventHandler = makeWatchEventHandler(clients, options)
 
   dirPaths.forEach(dirPath =>
     watch(
@@ -214,9 +217,7 @@ async function handleWatchEvents(
 
 function makeWatchEventHandler(
   clients: Clients,
-  index: boolean,
-  prettify: boolean,
-  pgModule: string
+  options: Options
 ): WatchEventHandler {
   return async (
     tsModules: TsModule[],
@@ -230,7 +231,7 @@ function makeWatchEventHandler(
     switch (type) {
       case 'update':
         result = pipe(
-          processSQLFile(clients, sqlFilePath, prettify, pgModule),
+          processSQLFile(clients, sqlFilePath, options),
           Task.map(tsModuleOption =>
             pipe(
               tsModuleOption,
@@ -252,7 +253,12 @@ function makeWatchEventHandler(
     result = pipe(
       result,
       Task.chain(newModules =>
-        maybeWriteIndexModule(index, dirPath, newModules, prettify)
+        maybeWriteIndexModule(
+          options.index,
+          dirPath,
+          newModules,
+          options.prettify
+        )
       )
     )
 
@@ -302,20 +308,11 @@ function processDirectories(
   clients: Clients,
   fileExtensions: string[],
   dirPaths: string[],
-  index: boolean,
-  prettify: boolean,
-  pgModule: string
+  options: Options
 ): Task.Task<TsModuleDir[]> {
   return pipe(
     dirPaths.map(dirPath =>
-      processDirectory(
-        clients,
-        dirPath,
-        fileExtensions,
-        index,
-        prettify,
-        pgModule
-      )
+      processDirectory(clients, dirPath, fileExtensions, options)
     ),
     sequenceATs
   )
@@ -325,23 +322,19 @@ function processDirectory(
   clients: Clients,
   dirPath: string,
   fileExtensions: string[],
-  index: boolean,
-  prettify: boolean,
-  pgModule: string
+  options: Options
 ): Task.Task<TsModuleDir> {
   return pipe(
     findSQLFilePaths(dirPath, fileExtensions),
     Task.chain(filePaths =>
       pipe(
-        filePaths.map(filePath =>
-          processSQLFile(clients, filePath, prettify, pgModule)
-        ),
+        filePaths.map(filePath => processSQLFile(clients, filePath, options)),
         sequenceATs,
         Task.map(Array.filterMap(identity))
       )
     ),
     Task.chain(modules =>
-      maybeWriteIndexModule(index, dirPath, modules, prettify)
+      maybeWriteIndexModule(options.index, dirPath, modules, options.prettify)
     ),
     Task.map(modules => ({ dirPath, modules }))
   )
@@ -350,8 +343,7 @@ function processDirectory(
 function processSQLFile(
   clients: Clients,
   filePath: string,
-  prettify: boolean,
-  pgModule: string
+  options: Options
 ): Task.Task<Option.Option<TsModule>> {
   const tsPath = getOutputPath(filePath)
   const fnName = funcName(filePath)
@@ -363,8 +355,9 @@ function processSQLFile(
     Task.map(s => s.toString()),
     Task.chain(source =>
       sqlToTS(clients, source, fnName, {
-        prettierFileName: prettify ? tsPath : null,
-        pgModule,
+        prettierFileName: options.prettify ? tsPath : undefined,
+        pgModule: options.pgModule,
+        verbose: options.verbose,
       })
     ),
     TaskEither.chain(tsCode => () =>
