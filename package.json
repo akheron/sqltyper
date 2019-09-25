@@ -1,13 +1,16 @@
 {
   "name": "sqltyper",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Typed SQL queries in PostgreSQL",
-  "main": "index.js",
+  "main": "dist/index.js",
   "repository": "https://github.com/akheron/sqltyper",
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
+  "files": [
+    "dist"
+  ],
   "bin": {
-    "sqltyper": "./dist/src/cli.js"
+    "sqltyper": "dist/cli.js"
   },
   "scripts": {
     "sql": "ts-node src/cli.ts --prettify --pg-module ../pg src/sql/",
