@@ -72,7 +72,9 @@ function parseArgs() {
     .option('database', {
       alias: 'd',
       describe:
-        'Database URI to connect to, e.g. -d postgres://user:pass@localhost/mydb',
+        'Database URI to connect to, e.g. -d postgres://user:pass@localhost/mydb. ' +
+        'If not given, relies node-postgres default connecting logic which uses ' +
+        'environment variables',
       type: 'string',
     })
     .option('ext', {
@@ -83,7 +85,7 @@ function parseArgs() {
     })
     .option('index', {
       describe:
-        'Generate an index.ts file that exports all generated functions',
+        'Generate an index.ts file that re-exports all generated functions',
       type: 'boolean',
       default: true,
     })
@@ -100,7 +102,7 @@ function parseArgs() {
       default: false,
     })
     .option('pg-module', {
-      description: 'Where to import node-postgres from',
+      description: 'Where to import node-postgres from.',
       type: 'string',
       default: 'pg',
     })
