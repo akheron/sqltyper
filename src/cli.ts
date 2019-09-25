@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // tslint:disable:no-console
 import { promises as fs } from 'fs'
 import watch from 'node-watch'
