@@ -23,7 +23,6 @@ import {
   seq,
   stringBefore,
   symbol,
-  expectString,
 } from 'typed-parser'
 import {
   AST,
@@ -323,20 +322,23 @@ const inExpr: Parser<InExprRhs> = seq(
 type OtherExprRhs = { op: string; rhs: Expression }
 const otherOpExpr: Parser<OtherExprRhs> = seq(
   (op, _ws, rhs) => ({ op, rhs }),
-  anyOperatorExcept([
-    '<',
-    '>',
-    '=',
-    '<=',
-    '>=',
-    '<>',
-    '+',
-    '-',
-    '*',
-    '/',
-    '%',
-    '^',
-  ]),
+  oneOf(
+    anyOperatorExcept([
+      '<',
+      '>',
+      '=',
+      '<=',
+      '>=',
+      '<>',
+      '+',
+      '-',
+      '*',
+      '/',
+      '%',
+      '^',
+    ]),
+    reservedWord('LIKE')
+  ),
   _,
   addSubExpr
 )

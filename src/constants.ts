@@ -83,6 +83,7 @@ export const operators: Operator[] = [
   op('NOT', null, 'safe'),
   op('IS NULL', null, 'neverNull'),
   op('IS NOT NULL', null, 'neverNull'),
+  op('LIKE', false, 'safe'),
   op('<', false, 'safe'),
   op('>', false, 'safe'),
   op('=', true, 'safe'),
