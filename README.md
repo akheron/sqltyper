@@ -233,7 +233,9 @@ to/from PostgreSQL.
 
 ## Prior art
 
-- [sqlτyped](https://github.com/jonifreeman/sqltyped) - a macro which infers Scala types by analysing SQL statements
-
+The main motivator for sqltyper was [sqlτyped] by @jonifreeman. It
+does more or less the same as sqltyper, but for Scala, and meant to be
+used with MySQL. It uses JDBC, and is implemented as a Scala macro
+rather than an offline code generation tool.
 
 [sqlτyped]: https://github.com/jonifreeman/sqltyped
