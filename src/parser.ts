@@ -6,10 +6,10 @@ import {
   $null,
   ParseError,
   Parser,
-  _,
   attempt,
   constant,
   end,
+  expectString,
   int,
   keyword,
   lazy,
@@ -21,6 +21,7 @@ import {
   sepBy,
   sepBy1,
   seq,
+  skip,
   stringBefore,
   symbol,
 } from 'typed-parser'
@@ -58,6 +59,13 @@ function optional<A>(parser: Parser<A>): Parser<A | null> {
 }
 
 // Token parsers etc.
+
+// whitespace and comments
+const _: Parser<null> = seq(
+  $null,
+  skip('\\s*'),
+  many(seq($null, expectString('--'), stringBefore('\n'), skip('\\s*')))
+)
 
 const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
 

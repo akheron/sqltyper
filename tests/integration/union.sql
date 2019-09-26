@@ -21,30 +21,30 @@ CREATE TABLE dimensions (
 --- query -----------------------------------------------------------------
 
 SELECT
-    age AS val1,
-    shoe_size AS val2
+    age AS val1,         -- not null
+    shoe_size AS val2    -- not null
 FROM person
 
 UNION
 
 SELECT
-    height,
-    weight FROM person
+    height,              -- not null because of WHERE
+    weight FROM person   -- may be null
 WHERE
     height IS NOT NULL
 
 INTERSECT
 
 SELECT
-    x,
-    y
+    x,                   -- not null
+    y                    -- not null
 FROM dimensions
 
 EXCEPT
 
 SELECT
-    z,
-    w
+    z,                   -- may be null (ignored because of EXCEPT)
+    w                    -- may be null (ignored because of EXCEPT)
 FROM dimensions
 
 --- expected row count ----------------------------------------------------
