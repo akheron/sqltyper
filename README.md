@@ -78,33 +78,41 @@ in files in a single directory, like this:
 src/
 |-- app.ts
 |-- ...
-`-- sqls
+`-- sqls/
     |-- my-query.sql
-    |-- other-query.sql
-    `-- ...
+    `-- other-query.sql
 ```
 
 Run sqltyper on the `sqls` directory:
 
 ```
-yarn sqltyper src/sqls
+yarn sqltyper --database postgres://user:pass@host/dbname src/sqls 
 
 # or npx sqltyper, or ./node_modules/.bin/sqltyper, ...
 ```
+
+sqltyper connects to the PostgreSQL database you give in the
+`--database` option, finds out the input and output types of each of
+the SQL queries, and outputs the corresponding TypeScript functions in
+the same directory.
 
 You should now have the following files:
 ```
 src/
 |-- app.ts
 |-- ...
-`-- sqls
+`-- sqls/
     |-- index.ts
     |-- my-query.sql
     |-- my-query.ts
     |-- other-query.sql
-    |-- other-query.ts
-    `-- ...
+    `-- other-query.ts
 ```
+
+Each `.sql` file got a `.ts` file next to it. Each `.ts` file exports
+a single function, whose name is the `.sql` file name with the
+extension removed and camelCased. Furthermore, it generates an
+`index.ts` file that re-exports all these functions.
 
 In `app.ts`, import the SQL query functions:
 
