@@ -4,7 +4,7 @@ import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
 import * as Option from 'fp-ts/lib/Option'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import { identity } from 'fp-ts/lib/function'
+import { flow, identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
@@ -14,16 +14,60 @@ import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
 import { StatementDescription, StatementRowCount, ValueType } from './types'
 
-type FieldNullability =
-  | { kind: 'Any'; nullable: boolean }
-  | { kind: 'Array'; nullable: boolean; elemNullable: boolean }
+type FieldNullability = FieldNullability.Any | FieldNullability.Array
 
-function any(nullable: boolean): FieldNullability {
-  return { kind: 'Any', nullable }
-}
+namespace FieldNullability {
+  export type Any = { kind: 'Any'; nullable: boolean }
+  export type Array = {
+    kind: 'Array'
+    nullable: boolean
+    elemNullable: boolean
+  }
 
-function array(nullable: boolean, elemNullable: boolean): FieldNullability {
-  return { kind: 'Array', nullable, elemNullable }
+  export function any(nullable: boolean): FieldNullability {
+    return { kind: 'Any', nullable }
+  }
+
+  export function array(
+    nullable: boolean,
+    elemNullable: boolean
+  ): FieldNullability {
+    return { kind: 'Array', nullable, elemNullable }
+  }
+
+  export function walk<T>(
+    nullability: FieldNullability,
+    handlers: {
+      any: (value: Any) => T
+      array: (value: Array) => T
+    }
+  ): T {
+    switch (nullability.kind) {
+      case 'Any':
+        return handlers.any(nullability)
+      case 'Array':
+        return handlers.array(nullability)
+    }
+  }
+
+  export function disjunction(a: FieldNullability, b: FieldNullability) {
+    return walk(a, {
+      any: aAny =>
+        walk(b, {
+          any: bAny => any(aAny.nullable || bAny.nullable),
+          array: bArray => any(aAny.nullable || bArray.nullable),
+        }),
+      array: aArray =>
+        walk(b, {
+          any: bAny => any(aArray.nullable || bAny.nullable),
+          array: bArray =>
+            array(
+              aArray.nullable || bArray.nullable,
+              aArray.elemNullable || bArray.elemNullable
+            ),
+        }),
+    })
+  }
 }
 
 export type SourceColumn = {
@@ -48,6 +92,12 @@ function virtualField(
 export type VirtualTable = {
   name: string
   columns: VirtualField[]
+}
+
+function cast<A>() {
+  return <B extends A>(value: B): A => {
+    return value
+  }
 }
 
 export function inferStatementNullability(
@@ -112,25 +162,14 @@ function getOutputColumns(
   tree: ast.AST
 ): TaskEither.TaskEither<string, VirtualField[]> {
   return ast.walk(tree, {
-    select: ({ ctes, body }) =>
+    select: ({ ctes, body, setOps }) =>
       pipe(
         combineVirtualTables(
           outsideCTEs,
           getVirtualTablesForWithQueries(client, ctes)
         ),
         TaskEither.chain(combinedCTEs =>
-          pipe(
-            getSourceColumnsForTableExpr(client, combinedCTEs, body.from),
-            TaskEither.chain(sourceColumns =>
-              inferSelectListOutput(
-                client,
-                combinedCTEs,
-                sourceColumns,
-                body.where,
-                body.selectList
-              )
-            )
-          )
+          inferSetOpsOutput(client, combinedCTEs, body, setOps)
         )
       ),
     insert: ({ table, as, returning }) =>
@@ -228,6 +267,75 @@ actual: "${actualColumnNames}"`)
       outputColumns
     ),
   })
+}
+
+function inferSetOpsOutput(
+  client: SchemaClient,
+  outsideCTEs: VirtualTable[],
+  first: ast.SelectBody,
+  setOps: ast.SelectOp[]
+): TaskEither.TaskEither<string, VirtualField[]> {
+  // fp-ts's foldM is not stack safe so a manual loop is needed
+  return async () => {
+    let curr = await inferSelectBodyOutput(client, outsideCTEs, first)()
+    if (Either.isLeft(curr)) {
+      return curr
+    }
+
+    let result = curr.right
+
+    for (const setOp of setOps) {
+      const next = await inferSelectBodyOutput(
+        client,
+        outsideCTEs,
+        setOp.select
+      )()
+      if (Either.isLeft(next)) {
+        return next
+      }
+      const columns = next.right
+
+      if (result.length != columns.length) {
+        return Either.left(`Inequal number of columns in ${setOp.op}`)
+      }
+
+      // EXCEPT has no effect on nullability of the output, because
+      // its output is not indluded
+      if (setOp.op !== 'EXCEPT') {
+        result = pipe(
+          Array.zip(result, columns),
+          Array.map(([a, b]) => ({
+            // Column names are determined by the first SELECT
+            name: a.name,
+            nullability: FieldNullability.disjunction(
+              a.nullability,
+              b.nullability
+            ),
+          }))
+        )
+      }
+    }
+    return Either.right(result)
+  }
+}
+
+function inferSelectBodyOutput(
+  client: SchemaClient,
+  outsideCTEs: VirtualTable[],
+  body: ast.SelectBody
+): TaskEither.TaskEither<string, VirtualField[]> {
+  return pipe(
+    getSourceColumnsForTableExpr(client, outsideCTEs, body.from),
+    TaskEither.chain(sourceColumns =>
+      inferSelectListOutput(
+        client,
+        outsideCTEs,
+        sourceColumns,
+        body.where,
+        body.selectList
+      )
+    )
+  )
 }
 
 function inferSelectListOutput(
@@ -355,7 +463,7 @@ function applyExpressionNonNullability(
   return sourceColumns.map(sourceColumn => ({
     ...sourceColumn,
     nullability: isColumnNonNullable(nonNullableColumns, sourceColumn)
-      ? any(false)
+      ? FieldNullability.any(false)
       : sourceColumn.nullability,
   }))
 }
@@ -367,19 +475,6 @@ function inferExpressionName(expression: ast.Expression): string {
   })
 }
 
-function anyTE(
-  nullable: boolean
-): TaskEither.TaskEither<string, FieldNullability> {
-  return TaskEither.right(any(nullable))
-}
-
-function arrayTE(
-  nullable: boolean,
-  elemNullable: boolean
-): TaskEither.TaskEither<string, FieldNullability> {
-  return TaskEither.right(array(nullable, elemNullable))
-}
-
 function inferExpressionNullability(
   client: SchemaClient,
   outsideCTEs: VirtualTable[],
@@ -387,6 +482,16 @@ function inferExpressionNullability(
   nonNullExprs: ast.Expression[],
   expression: ast.Expression
 ): TaskEither.TaskEither<string, FieldNullability> {
+  const anyTE = flow(
+    FieldNullability.any,
+    TaskEither.right
+  )
+
+  const arrayTE = flow(
+    FieldNullability.array,
+    TaskEither.right
+  )
+
   if (
     nonNullExprs.some(nonNull => ast.Expression.equals(expression, nonNull))
   ) {
@@ -454,7 +559,10 @@ function inferExpressionNullability(
               TaskEither.right(
                 (lhsNullability: FieldNullability) => (
                   rhsNullability: FieldNullability
-                ) => any(lhsNullability.nullable || rhsNullability.nullable)
+                ) =>
+                  FieldNullability.any(
+                    lhsNullability.nullable || rhsNullability.nullable
+                  )
               ),
               TaskEither.ap(
                 inferExpressionNullability(
@@ -508,7 +616,11 @@ function inferExpressionNullability(
                 )
               ),
               TaskEither.chain(argNullability =>
-                anyTE(argNullability.some(nullability => nullability.nullable))
+                cast<TaskEither.TaskEither<string, FieldNullability>>()(
+                  anyTE(
+                    argNullability.some(nullability => nullability.nullable)
+                  )
+                )
               )
             )
           case 'unsafe':
@@ -861,7 +973,7 @@ function getSourceColumnsForTable(
       table.columns.map(col => ({
         tableAlias: as || table.name,
         columnName: col.name,
-        nullability: any(col.nullable),
+        nullability: FieldNullability.any(col.nullable),
         hidden: col.hidden,
       }))
     )
