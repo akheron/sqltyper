@@ -1,7 +1,8 @@
 # sqltyper - Type your SQL queries!
 
-sqltyper takes raw PostgreSQL queries and generates TypeScript
-functions that run those queries AND are typed correctly.
+SQL is a typed language. sqltyper takes raw PostgreSQL queries and
+generates TypeScript functions that run those queries AND are typed
+correctly, based on the database schema.
 
 For example, given the following schema:
 
@@ -42,7 +43,7 @@ export function findPersons(
 ```
 
 sqltyper does this without actually executing your query, so it's
-safe to use, too.
+perfectly safe to use in any environment.
 
 
 ## Installation
@@ -66,6 +67,69 @@ dependency.
 
 
 [node-postgres]: https://node-postgres.com/
+
+
+## Tutorial
+
+Assuming you have a TypeScrip app and a bunch of SQL queries, put them
+in files in a single directory, like this:
+
+```
+src/
+|-- app.ts
+|-- ...
+`-- sqls
+    |-- my-query.sql
+    |-- other-query.sql
+    `-- ...
+```
+
+Run sqltyper on the `sqls` directory:
+
+```
+yarn sqltyper src/sqls
+
+# or npx sqltyper, or ./node_modules/.bin/sqltyper, ...
+```
+
+You should now have the following files:
+```
+src/
+|-- app.ts
+|-- ...
+`-- sqls
+    |-- index.ts
+    |-- my-query.sql
+    |-- my-query.ts
+    |-- other-query.sql
+    |-- other-query.ts
+    `-- ...
+```
+
+In `app.ts`, import the SQL query functions:
+
+```
+import * as sql from './sql'
+```
+
+And that's it! Now you can use `sql.myQuery()` and `sql.otherQuery()`
+to run the queries in a type-safe manner.
+
+These functions a `Client` or `Pool` from [node-postgres] as the first
+argument and possible query parameters as the second parameter.
+
+It will return one of the following, wrapped in a `Promise`:
+
+- An array of result objects, with object keys corresponding to output
+  column names. Note that all of the output columns in your query must
+  have a unique name, because otherwise some of them would be not
+  accessible.
+
+- A single result row or `null` if the query only ever returns zero or
+  one row (e.g. `SELECT` query with `LIMIT 1`).
+
+- A number which denotes the number of affected rows (`INSERT`,
+  `UPDATE` or `DELETE` without a `RETURNING` clause).
 
 
 ## CLI
@@ -148,7 +212,11 @@ and operators, `WHERE` clause expressions, etc. to rule out as many
 possibilities of `NULL` as possible, and amends the original statement
 description with this information.
 
-It also uses this information to narrow down the result
+It also uses the parsing result to find out the possible number of
+results. For example, `UPDATE`, `DELETE` and `INSERT` queries without
+a `RETURNING` clause will return the number of affected rows instead
+of any columns. Furthermore, a `SELECT` query with `LIMIT 1` will
+return `{ ... } | null` instead of `Array<{ ... }>`.
 
 Then, it outputs a TypeScript function that is correctly typed, and
 when run, executes your query and converts input and output data
