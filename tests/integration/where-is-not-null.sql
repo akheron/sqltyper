@@ -1,14 +1,13 @@
-`WHERE expr IS NOT NULL` should infer `expr` as not null, even if
-`expr` is something more than a column reference. Should also support
-the non-standard NOTNULL operator.
-
+-- `WHERE expr IS NOT NULL` or `WHERE expr NOTNULL` should infer
+-- `expr` as not null. It should also recurse to safe operators and
+-- functions.
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  id serial PRIMARY KEY,
   age integer,
   shoe_size integer,
-  height integer
+  height integer,
+  weight integer
 );
 
 --- query -----------------------------------------------------------------
@@ -16,15 +15,14 @@ CREATE TABLE person (
 SELECT
   age,
   shoe_size,
-  height,
-  height + 5 as height_plus_5,
-  height / 2 as height_per_2
+  height,  -- not null because height + 5 is not null and + is safe
+  weight   -- not null because bool(weight) is not null and bool() is safe
 FROM person
 WHERE
   age IS NOT NULL AND
   shoe_size NOTNULL AND
   height + 5 IS NOT NULL AND
-  height / 2 NOTNULL
+  bool(weight) IS NOT NULL
 
 --- expected row count ----------------------------------------------------
 
@@ -34,8 +32,7 @@ many
 
 age: number
 shoe_size: number
-height: number | null
-height_plus_5: number
-height_per_2: number
+height: number
+weight: number
 
 --- expected param types --------------------------------------------------

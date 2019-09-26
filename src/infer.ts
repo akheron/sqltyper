@@ -50,8 +50,8 @@ namespace FieldNullability {
     }
   }
 
-  export function disjunction(a: FieldNullability, b: FieldNullability) {
-    return walk(a, {
+  export const disjunction = (a: FieldNullability) => (b: FieldNullability) =>
+    walk(a, {
       any: aAny =>
         walk(b, {
           any: bAny => any(aAny.nullable || bAny.nullable),
@@ -67,7 +67,6 @@ namespace FieldNullability {
             ),
         }),
     })
-  }
 }
 
 export type SourceColumn = {
@@ -307,8 +306,7 @@ function inferSetOpsOutput(
           Array.map(([a, b]) => ({
             // Column names are determined by the first SELECT
             name: a.name,
-            nullability: FieldNullability.disjunction(
-              a.nullability,
+            nullability: FieldNullability.disjunction(a.nullability)(
               b.nullability
             ),
           }))
@@ -346,7 +344,7 @@ function inferSelectListOutput(
   selectList: ast.SelectListItem[]
 ): TaskEither.TaskEither<string, VirtualField[]> {
   return pipe(
-    TaskEither.right(getNonNullExpressionsFromWhere(where)),
+    TaskEither.right(getNonNullSubExpressions(where)),
     TaskEither.chain(nonNullExpressions =>
       pipe(
         traverseATE(selectList, item =>
@@ -556,14 +554,7 @@ function inferExpressionNullability(
         switch (operatorNullSafety(op)) {
           case 'safe':
             return pipe(
-              TaskEither.right(
-                (lhsNullability: FieldNullability) => (
-                  rhsNullability: FieldNullability
-                ) =>
-                  FieldNullability.any(
-                    lhsNullability.nullable || rhsNullability.nullable
-                  )
-              ),
+              TaskEither.right(FieldNullability.disjunction),
               TaskEither.ap(
                 inferExpressionNullability(
                   client,
@@ -678,36 +669,57 @@ function inferExpressionNullability(
   )
 }
 
-function getNonNullExpressionsFromWhere(
-  where: ast.Expression | null
+function getNonNullSubExpressions(
+  expression: ast.Expression | null
 ): ast.Expression[] {
-  if (where == null) {
+  if (expression == null) {
     return []
   }
-  return ast.Expression.walkSome<ast.Expression[]>(where, [], {
+  return ast.Expression.walkSome<ast.Expression[]>(expression, [], {
+    columnRef: () => {
+      return [expression]
+    },
+    tableColumnRef: () => {
+      return [expression]
+    },
     binaryOp: ({ lhs, op, rhs }) => {
-      if (op === 'AND') {
+      if (operatorNullSafety(op) === 'safe' && op !== 'OR') {
+        // For safe operators, both sides must be non-nullable for the
+        // result to be non-nullable
         return [
-          ...getNonNullExpressionsFromWhere(lhs),
-          ...getNonNullExpressionsFromWhere(rhs),
+          ...getNonNullSubExpressions(lhs),
+          ...getNonNullSubExpressions(rhs),
         ]
       }
-      if (operatorNullSafety(op) === 'safe') {
-        return [lhs, rhs]
-      }
-      return []
+
+      // Otherwise, the whole expression is non-null because it must
+      // evaluate to true, but cannot say anything about the operands
+      return [expression]
     },
     unaryOp: ({ op, operand }) => {
       if (op === 'IS NOT NULL' || op === 'NOTNULL') {
-        return [operand]
+        // IS NOT NULL / NOTNULL promise that the operand is not null
+        return getNonNullSubExpressions(operand)
       }
-      return []
+      if (operatorNullSafety(op) === 'safe') {
+        // For safe operators, the operator must non-nullable for the
+        // result to evaluate to non-null
+        return getNonNullSubExpressions(operand)
+      }
+
+      // Otherwise, the whole expression is non-null because it must
+      // evaluate to true, but cannot say anything about the operands
+      return [expression]
     },
     functionCall: ({ funcName, argList }) => {
       if (functionNullSafety(funcName) === 'safe') {
-        return argList
+        return pipe(
+          argList,
+          Array.map(getNonNullSubExpressions),
+          Array.flatten
+        )
       }
-      return []
+      return [expression]
     },
   })
 }
