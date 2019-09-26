@@ -23,6 +23,7 @@ import {
   seq,
   skip,
   stringBefore,
+  stringBeforeEndOr,
 } from 'typed-parser'
 import {
   AST,
@@ -59,7 +60,7 @@ function optional<A>(parser: Parser<A>): Parser<A | null> {
 const _: Parser<null> = seq(
   $null,
   skip('\\s*'),
-  many(seq($null, expectString('--'), stringBefore('\n'), skip('\\s*')))
+  many(seq($null, expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')))
 )
 
 function symbol(s: string) {
@@ -364,23 +365,6 @@ const otherOrInExpr = seq(
 )
 const otherExpr = oneOf(existsExpr, otherOrInExpr)
 
-makeBinaryOp(
-  anyOperatorExcept([
-    '<',
-    '>',
-    '=',
-    '<=',
-    '>=',
-    '<>',
-    '+',
-    '-',
-    '*',
-    '/',
-    '%',
-    '^',
-  ]),
-  addSubExpr
-)
 const comparisonExpr = makeBinaryOp(
   oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
   otherExpr
