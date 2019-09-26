@@ -20,6 +20,7 @@ export const sqlReservedWords: string[] = [
   'FROM',
   'FULL',
   'GROUP',
+  'HAVING',
   'ILIKE',
   'IN',
   'INNER',

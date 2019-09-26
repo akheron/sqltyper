@@ -179,7 +179,7 @@ function getOutputColumns(
             client,
             outsideCTEs,
             sourceColumns,
-            null,
+            [],
             returning
           )
         )
@@ -201,7 +201,7 @@ function getOutputColumns(
             client,
             outsideCTEs,
             sourceColumns,
-            where,
+            [where],
             returning
           )
         )
@@ -214,7 +214,7 @@ function getOutputColumns(
             client,
             outsideCTEs,
             sourceColumns,
-            where,
+            [where],
             returning
           )
         )
@@ -329,7 +329,7 @@ function inferSelectBodyOutput(
         client,
         outsideCTEs,
         sourceColumns,
-        body.where,
+        [body.where, body.having],
         body.selectList
       )
     )
@@ -340,11 +340,16 @@ function inferSelectListOutput(
   client: SchemaClient,
   outsideCTEs: VirtualTable[],
   sourceColumns: SourceColumn[],
-  where: ast.Expression | null,
+  conditions: Array<ast.Expression | null>,
   selectList: ast.SelectListItem[]
 ): TaskEither.TaskEither<string, VirtualField[]> {
   return pipe(
-    TaskEither.right(getNonNullSubExpressions(where)),
+    TaskEither.right(
+      pipe(
+        conditions.map(getNonNullSubExpressions),
+        Array.flatten
+      )
+    ),
     TaskEither.chain(nonNullExpressions =>
       pipe(
         traverseATE(selectList, item =>

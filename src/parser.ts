@@ -543,7 +543,7 @@ const from: Parser<TableExpression> = seq(
 
 const where: Parser<Expression> = seq($2, reservedWord('WHERE'), expression)
 
-// GROUP BY
+// GROUP BY & HAVING
 
 const groupBy: Parser<Expression[]> = seq(
   $3,
@@ -551,6 +551,8 @@ const groupBy: Parser<Expression[]> = seq(
   reservedWord('BY'),
   sepBy1(symbol(','), expression)
 )
+
+const having: Parser<Expression> = seq($2, reservedWord('HAVING'), expression)
 
 // ORDER BY
 
@@ -618,13 +620,14 @@ const selectListItem = oneOf(
 const selectList: Parser<SelectListItem[]> = sepBy1(symbol(','), selectListItem)
 
 const selectBody: Parser<SelectBody> = seq(
-  (_sel, list, from, where, groupBy) =>
-    SelectBody.create(list, from, where, groupBy || []),
+  (_sel, list, from, where, groupBy, having) =>
+    SelectBody.create(list, from, where, groupBy || [], having),
   reservedWord('SELECT'),
   selectList,
   optional(from),
   optional(where),
-  optional(groupBy)
+  optional(groupBy),
+  optional(having)
 )
 
 const selectSetOps: Parser<SelectOp[]> = many(

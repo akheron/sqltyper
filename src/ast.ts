@@ -473,6 +473,7 @@ export type SelectBody = {
   from: TableExpression | null
   where: Expression | null
   groupBy: Expression[]
+  having: Expression | null
 }
 
 export namespace SelectBody {
@@ -480,9 +481,10 @@ export namespace SelectBody {
     selectList: SelectListItem[],
     from: TableExpression | null,
     where: Expression | null,
-    groupBy: Expression[]
+    groupBy: Expression[],
+    having: Expression | null
   ): SelectBody {
-    return { selectList, from, where, groupBy }
+    return { selectList, from, where, groupBy, having }
   }
 }
 
