@@ -13,7 +13,7 @@ export function describeStatement(
   return pipe(
     TaskEither.tryCatch(
       () => pgClient.query({ text: sql, describe: true }),
-      error => describeError(error as PGError, sql)
+      error => pgErrorToString(error as PGError, sql)
     ),
     TaskEither.map(queryResult => describeResult(sql, paramNames, queryResult))
   )
@@ -64,7 +64,7 @@ type PGError = {
   routine: string | undefined
 }
 
-function describeError(error: PGError, sql: string): string {
+export function pgErrorToString(error: PGError, sql: string): string {
   const sourceLines = sql.split('\n')
   const errorPos =
     error.position && findPositionInFile(Number(error.position), sourceLines)

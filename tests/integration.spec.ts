@@ -12,6 +12,7 @@ import { sqlToStatementDescription } from '../src/index'
 import * as C from '../src/clients'
 import { StatementRowCount, StatementDescription } from '../src/types'
 import { traverseATs, traverseAE } from '../src/fp-utils'
+import { pgErrorToString } from '../src/describe'
 
 // Dynamically create a test case from each integration/*.sql file
 
@@ -178,7 +179,13 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
 }
 
 async function testSetup(pgClient: pg.Client, setupStatements: string[]) {
-  return traverseATs(setupStatements, stmt => () => pgClient.query(stmt))()
+  return traverseATs(setupStatements, stmt => async () => {
+    try {
+      return await pgClient.query(stmt)
+    } catch (err) {
+      throw new Error(pgErrorToString(err, stmt))
+    }
+  })()
 }
 
 function extractSection(
