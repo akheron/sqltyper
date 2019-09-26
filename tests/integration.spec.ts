@@ -64,7 +64,7 @@ describe('Integration tests', () => {
 
           // Check expectations
           return await pipe(
-            sqlToStatementDescription(clients, testFile.query),
+            sqlToStatementDescription(clients, testFile.query, true),
             TaskEither.chain(statementDescription =>
               TaskEither.rightTask(
                 checkExpectations(clients, testFile, statementDescription)
