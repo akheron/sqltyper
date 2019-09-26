@@ -137,6 +137,7 @@ export const functions: Function[] = [
   func('btrim', 'safe'),
   func('chr', 'safe'),
   func('concat', 'neverNull'),
+  func('concat_ws', 'neverNull'),
   func('convert', 'safe'),
   func('convert_from', 'safe'),
   func('convert_to', 'safe'),
