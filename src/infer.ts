@@ -346,7 +346,7 @@ function inferSelectListOutput(
   return pipe(
     TaskEither.right(
       pipe(
-        conditions.map(getNonNullSubExpressions),
+        conditions.map(cond => getNonNullSubExpressionsFromRowCond(cond)),
         Array.flatten
       )
     ),
@@ -541,7 +541,6 @@ function inferExpressionNullability(
               operand
             )
           case 'unsafe':
-          case 'alwaysNull':
             return anyTE(true)
           case 'neverNull':
             return anyTE(false)
@@ -555,8 +554,13 @@ function inferExpressionNullability(
       //
       // - The function is not NULL safe: it can return NULL even if all
       //   of its operands are non-NULL
-      binaryOp: ({ op, lhs, rhs }) => {
-        switch (operatorNullSafety(op)) {
+      binaryOp: ({ lhs, op, rhs }) => {
+        // AND and OR are unsafe from the result side (e.g. FALSE AND
+        // NULL => NULL), but if both args are non-null, then the
+        // result is also guaranteed to be non-null.
+        const nullSafety =
+          op == 'AND' || op == 'OR' ? 'safe' : operatorNullSafety(op)
+        switch (nullSafety) {
           case 'safe':
             return pipe(
               TaskEither.right(FieldNullability.disjunction),
@@ -580,7 +584,6 @@ function inferExpressionNullability(
               )
             )
           case 'unsafe':
-          case 'alwaysNull':
             return anyTE(true)
           case 'neverNull':
             return anyTE(false)
@@ -620,7 +623,6 @@ function inferExpressionNullability(
               )
             )
           case 'unsafe':
-          case 'alwaysNull':
             return anyTE(true)
           case 'neverNull':
             return anyTE(false)
@@ -674,8 +676,9 @@ function inferExpressionNullability(
   )
 }
 
-function getNonNullSubExpressions(
-  expression: ast.Expression | null
+function getNonNullSubExpressionsFromRowCond(
+  expression: ast.Expression | null,
+  logicalNegation: boolean = false
 ): ast.Expression[] {
   if (expression == null) {
     return []
@@ -687,29 +690,47 @@ function getNonNullSubExpressions(
     tableColumnRef: () => {
       return [expression]
     },
-    binaryOp: ({ lhs, op, rhs }) => {
-      if (operatorNullSafety(op) === 'safe' && op !== 'OR') {
-        // For safe operators, both sides must be non-nullable for the
-        // result to be non-nullable
-        return [
-          ...getNonNullSubExpressions(lhs),
-          ...getNonNullSubExpressions(rhs),
-        ]
+    unaryOp: ({ op, operand }) => {
+      if (op === 'IS NOT NULL' || op === 'NOTNULL') {
+        // IS NOT NULL / NOTNULL promise that the operand is not null
+        return getNonNullSubExpressionsFromRowCond(operand, logicalNegation)
+      }
+      if (op === 'NOT') {
+        // Track logical negation across NOTs
+        return getNonNullSubExpressionsFromRowCond(operand, !logicalNegation)
+      }
+      if (operatorNullSafety(op) === 'safe') {
+        // For safe operators, the operator must non-nullable for the
+        // result to evaluate to non-null
+        return getNonNullSubExpressionsFromRowCond(operand, logicalNegation)
       }
 
       // Otherwise, the whole expression is non-null because it must
       // evaluate to true, but cannot say anything about the operands
       return [expression]
     },
-    unaryOp: ({ op, operand }) => {
-      if (op === 'IS NOT NULL' || op === 'NOTNULL') {
-        // IS NOT NULL / NOTNULL promise that the operand is not null
-        return getNonNullSubExpressions(operand)
+    binaryOp: ({ lhs, op, rhs }) => {
+      if (op === 'AND') {
+        if (logicalNegation) {
+          // `FALSE AND NULL` evaluates to NULL => NOT (FALSE AND
+          // NULL) evaluates to true, so we cannot say anything about
+          // the right hand side!
+          return [...getNonNullSubExpressionsFromRowCond(lhs, logicalNegation)]
+        } else {
+          // `a AND b` evaluates to TRUE
+          return [
+            ...getNonNullSubExpressionsFromRowCond(lhs, logicalNegation),
+            ...getNonNullSubExpressionsFromRowCond(rhs, logicalNegation),
+          ]
+        }
       }
-      if (operatorNullSafety(op) === 'safe') {
-        // For safe operators, the operator must non-nullable for the
-        // result to evaluate to non-null
-        return getNonNullSubExpressions(operand)
+      if (op === 'AND' || operatorNullSafety(op) === 'safe') {
+        // For safe operators, both sides must be non-nullable for the
+        // result to be non-nullable.
+        return [
+          ...getNonNullSubExpressionsFromRowCond(lhs, logicalNegation),
+          ...getNonNullSubExpressionsFromRowCond(rhs, logicalNegation),
+        ]
       }
 
       // Otherwise, the whole expression is non-null because it must
@@ -720,7 +741,9 @@ function getNonNullSubExpressions(
       if (functionNullSafety(funcName) === 'safe') {
         return pipe(
           argList,
-          Array.map(getNonNullSubExpressions),
+          Array.map(arg =>
+            getNonNullSubExpressionsFromRowCond(arg, logicalNegation)
+          ),
           Array.flatten
         )
       }

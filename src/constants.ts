@@ -59,9 +59,19 @@ export const sqlReservedWords: string[] = [
   'WITH',
 ]
 
-// SQL operators
+// An operator or function is:
+//
+// - `safe` if the result is NULL if and only if at least one the
+//   arguments/operands is NULL
+//
+// - `neverNull` if the result is is never NULL regardless of the
+//   arguments/operands
+//
+// - `unsafe` otherwise
+//
+export type NullSafety = 'safe' | 'neverNull' | 'unsafe'
 
-export type NullSafety = 'unsafe' | 'safe' | 'neverNull' | 'alwaysNull'
+// SQL operators
 
 export type Operator = {
   op: string
@@ -69,18 +79,15 @@ export type Operator = {
   // does `a op b` equal `b op a`. null means unary operator.
   commutative: boolean | null
 
-  // is `a op b` or `op a`:
-  // - safe: always non-NULL if the operand(s) are non-NULL
-  // - unsafe: may be NUL even the operand(s) are non-NULL
-  // - neverNull: is never NULL regardless of the operand(s)
-  // - alwaysNull: is always NULL regardless of the operand (s)
   nullSafety: NullSafety
 }
 
 export const operators: Operator[] = [
   // name (upper case!), commutative, nullSafety
-  op('OR', true, 'safe'),
-  op('AND', true, 'safe'),
+
+  // 9.1. Logical operators
+  op('AND', true, 'unsafe'), // FALSE AND NULL evaluates to NULL => unsafe
+  op('OR', true, 'unsafe'), // TRUE OR NULL evaluates to TRUE => unsafe
   op('NOT', null, 'safe'),
   op('IS NULL', null, 'neverNull'),
   op('IS NOT NULL', null, 'neverNull'),
@@ -105,12 +112,6 @@ export const operators: Operator[] = [
 
 export type Function = {
   name: string
-
-  // is `func(a, b, ...)`:
-  // - safe: always non-NULL if all the parameters are non-null
-  // - unsafe: may be NUL even if all the parameters are non-NULL
-  // - neverNull: is never NULL regardless of the parameters
-  // - alwaysNull: is always NULL regardless of the parameters
   nullSafety: NullSafety
 }
 
