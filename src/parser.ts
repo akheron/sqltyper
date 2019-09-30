@@ -126,7 +126,11 @@ const reservedWord = <A extends string>(word: A): Parser<A> => {
 
 const sepReserveds = (words: string): Parser<string> =>
   attempt(
-    seq(_ => words, ...words.split(/\s+/).map(word => reservedWord(word)))
+    seq(
+      _ => words,
+      ...words.split(/\s+/).map(word => seq($null, reservedWord(word), _)),
+      _
+    )
   )
 
 const anyOperator = seq($1, match('[-+*/<>=~!@#%^&|`?]{1,63}'), _)
@@ -310,64 +314,110 @@ const existsExpr = seq(
   parenthesized(lazy(() => select))
 )
 
-type InExprRhs = { op: 'IN' | 'NOT IN'; rhs: Select }
-function isInExprRhs(a: any): a is InExprRhs {
-  return a.op === 'IN' || a.op === 'NOT IN'
-}
-const inExpr: Parser<InExprRhs> = seq(
-  (op, rhs) => ({ op, rhs }),
-  attempt(
-    oneOf<'IN' | 'NOT IN'>(
-      reservedWord('IN'),
-      seq(_ => 'NOT IN', reservedWord('NOT'), reservedWord('IN'))
-    )
-  ),
-  parenthesized(lazy(() => select))
-)
+type OtherExprRhs =
+  | OtherExprRhs.InExprRhs
+  | OtherExprRhs.TernaryExprRhs
+  | OtherExprRhs.OtherOpExprRhs
 
-type OtherExprRhs = { op: string; rhs: Expression }
-const otherOpExpr: Parser<OtherExprRhs> = seq(
-  (op, rhs) => ({ op, rhs }),
-  oneOf(
-    anyOperatorExcept([
-      '<',
-      '>',
-      '=',
-      '<=',
-      '>=',
-      '<>',
-      '+',
-      '-',
-      '*',
-      '/',
-      '%',
-      '^',
-    ]),
-    reservedWord('LIKE')
-  ),
-  addSubExpr
-)
-const otherOrInExpr = seq(
-  (first, rest) =>
-    rest.reduce(
-      (acc, val) =>
-        isInExprRhs(val)
-          ? Expression.createInOp(acc, val.op, val.rhs)
-          : Expression.createBinaryOp(acc, val.op, val.rhs),
-      first
+namespace OtherExprRhs {
+  export type InExprRhs = {
+    kind: 'InExprRhs'
+    op: 'IN' | 'NOT IN'
+    rhs: Select
+  }
+  const inExprRhs: Parser<InExprRhs> = seq(
+    (op, rhs) => ({ kind: 'InExprRhs', op, rhs }),
+    attempt(
+      oneOf<'IN' | 'NOT IN'>(
+        reservedWord('IN'),
+        seq(_ => 'NOT IN', reservedWord('NOT'), reservedWord('IN'))
+      )
     ),
-  addSubExpr,
-  many(
-    oneOf<
-      { op: 'IN' | 'NOT IN'; rhs: Select } | { op: string; rhs: Expression }
-    >(otherOpExpr, inExpr)
+    parenthesized(lazy(() => select))
   )
+
+  export type TernaryExprRhs = {
+    kind: 'TernaryExprRhs'
+    op: string
+    rhs1: Expression
+    rhs2: Expression
+  }
+  const ternaryExprRhs: Parser<TernaryExprRhs> = seq(
+    (op, rhs1, _and, rhs2) => ({ kind: 'TernaryExprRhs', op, rhs1, rhs2 }),
+    oneOf(
+      attempt(sepReserveds('NOT BETWEEN SYMMETRIC')),
+      attempt(sepReserveds('BETWEEN SYMMETRIC')),
+      attempt(sepReserveds('NOT BETWEEN')),
+      attempt(reservedWord('BETWEEN'))
+    ),
+    addSubExpr,
+    reservedWord('AND'),
+    addSubExpr
+  )
+
+  export type OtherOpExprRhs = {
+    kind: 'OtherOpExprRhs'
+    op: string
+    rhs: Expression
+  }
+  const otherOpExprRhs: Parser<OtherOpExprRhs> = seq(
+    (op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }),
+    oneOf(
+      anyOperatorExcept([
+        '<',
+        '>',
+        '=',
+        '<=',
+        '>=',
+        '<>',
+        '+',
+        '-',
+        '*',
+        '/',
+        '%',
+        '^',
+      ]),
+      sepReserveds('IS DISTINCT FROM'),
+      sepReserveds('IS NOT DISTINCT FROM'),
+      reservedWord('LIKE')
+    ),
+    addSubExpr
+  )
+
+  export const parser = oneOf<OtherExprRhs>(
+    inExprRhs,
+    ternaryExprRhs,
+    otherOpExprRhs
+  )
+
+  export function createExpression(
+    lhs: Expression,
+    rhs: OtherExprRhs
+  ): Expression {
+    switch (rhs.kind) {
+      case 'InExprRhs':
+        return Expression.createInOp(lhs, rhs.op, rhs.rhs)
+
+      case 'TernaryExprRhs':
+        return Expression.createTernaryOp(lhs, rhs.op, rhs.rhs1, rhs.rhs2)
+
+      case 'OtherOpExprRhs':
+        return Expression.createBinaryOp(lhs, rhs.op, rhs.rhs)
+    }
+  }
+}
+
+const otherExpr = seq(
+  (first, rest) =>
+    rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first),
+  addSubExpr,
+  many(OtherExprRhs.parser)
 )
-const otherExpr = oneOf(existsExpr, otherOrInExpr)
+const existsOrOtherExpr = oneOf(existsExpr, otherExpr)
 
 const comparisonExpr = makeBinaryOp(
   oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
-  otherExpr
+  existsOrOtherExpr
 )
 
 const isExpr = seq(

@@ -590,6 +590,53 @@ function inferExpressionNullability(
         }
       },
 
+      ternaryOp: ({ lhs, op, rhs1, rhs2 }) => {
+        switch (operatorNullSafety(op)) {
+          case 'safe':
+            return pipe(
+              TaskEither.right(
+                (a: FieldNullability) => (b: FieldNullability) => (
+                  c: FieldNullability
+                ) =>
+                  FieldNullability.disjunction(
+                    FieldNullability.disjunction(a)(b)
+                  )(c)
+              ),
+              TaskEither.ap(
+                inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  nonNullExprs,
+                  lhs
+                )
+              ),
+              TaskEither.ap(
+                inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  nonNullExprs,
+                  rhs1
+                )
+              ),
+              TaskEither.ap(
+                inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  nonNullExprs,
+                  rhs2
+                )
+              )
+            )
+          case 'unsafe':
+            return anyTE(true)
+          case 'neverNull':
+            return anyTE(false)
+        }
+      },
+
       // EXISTS (subquery) never returns NULL
       existsOp: () => anyTE(false),
 
@@ -730,6 +777,21 @@ function getNonNullSubExpressionsFromRowCond(
         return [
           ...getNonNullSubExpressionsFromRowCond(lhs, logicalNegation),
           ...getNonNullSubExpressionsFromRowCond(rhs, logicalNegation),
+        ]
+      }
+
+      // Otherwise, the whole expression is non-null because it must
+      // evaluate to true, but cannot say anything about the operands
+      return [expression]
+    },
+    ternaryOp: ({ lhs, op, rhs1, rhs2 }) => {
+      if (operatorNullSafety(op) === 'safe') {
+        // For safe operators, all operands must be non-nullable for the
+        // result to be non-nullable.
+        return [
+          ...getNonNullSubExpressionsFromRowCond(lhs, logicalNegation),
+          ...getNonNullSubExpressionsFromRowCond(rhs1, logicalNegation),
+          ...getNonNullSubExpressionsFromRowCond(rhs2, logicalNegation),
         ]
       }
 

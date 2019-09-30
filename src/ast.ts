@@ -9,6 +9,7 @@ export type Expression =
   | Expression.Parameter
   | Expression.UnaryOp
   | Expression.BinaryOp
+  | Expression.TernaryOp
   | Expression.ExistsOp
   | Expression.InOp
   | Expression.FunctionCall
@@ -81,6 +82,23 @@ export namespace Expression {
     return { kind: 'BinaryOp', lhs, op, rhs }
   }
 
+  export type TernaryOp = {
+    kind: 'TernaryOp'
+    lhs: Expression
+    op: string
+    rhs1: Expression
+    rhs2: Expression
+  }
+
+  export function createTernaryOp(
+    lhs: Expression,
+    op: string,
+    rhs1: Expression,
+    rhs2: Expression
+  ): TernaryOp {
+    return { kind: 'TernaryOp', lhs, op, rhs1, rhs2 }
+  }
+
   export type ExistsOp = {
     kind: 'ExistsOp'
     subquery: Select
@@ -150,6 +168,7 @@ export namespace Expression {
       parameter?: (value: Parameter) => T
       unaryOp?: (value: UnaryOp) => T
       binaryOp?: (value: BinaryOp) => T
+      ternaryOp?: (value: TernaryOp) => T
       existsOp?: (value: ExistsOp) => T
       inOp?: (value: InOp) => T
       functionCall?: (value: FunctionCall) => T
@@ -172,6 +191,8 @@ export namespace Expression {
         return handlers.unaryOp == null ? elseVal : handlers.unaryOp(expr)
       case 'BinaryOp':
         return handlers.binaryOp == null ? elseVal : handlers.binaryOp(expr)
+      case 'TernaryOp':
+        return handlers.ternaryOp == null ? elseVal : handlers.ternaryOp(expr)
       case 'ExistsOp':
         return handlers.existsOp == null ? elseVal : handlers.existsOp(expr)
       case 'InOp':
@@ -198,6 +219,7 @@ export namespace Expression {
       parameter: (value: Parameter) => T
       unaryOp: (value: UnaryOp) => T
       binaryOp: (value: BinaryOp) => T
+      ternaryOp: (value: TernaryOp) => T
       existsOp: (value: ExistsOp) => T
       inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
@@ -218,6 +240,8 @@ export namespace Expression {
         return handlers.unaryOp(expr)
       case 'BinaryOp':
         return handlers.binaryOp(expr)
+      case 'TernaryOp':
+        return handlers.ternaryOp(expr)
       case 'ExistsOp':
         return handlers.existsOp(expr)
       case 'InOp':
@@ -256,7 +280,13 @@ export namespace Expression {
             equals(a.lhs, b.rhs) &&
             equals(a.rhs, b.lhs))
         )
-
+      case 'TernaryOp':
+        if (a.kind !== b.kind || a.op != b.op) return false
+        return (
+          equals(a.lhs, b.lhs) &&
+          equals(a.rhs1, b.rhs1) &&
+          equals(a.rhs2, b.rhs2)
+        )
       case 'ExistsOp':
         if (a.kind !== b.kind) return false
         return false // TODO

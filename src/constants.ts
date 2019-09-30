@@ -49,6 +49,7 @@ export const sqlReservedWords: string[] = [
   'SELECT',
   'SET',
   'SIMILAR',
+  'SYMMETRIC',
   'TRUE',
   'UNION',
   'UNKNOWN',
@@ -76,7 +77,7 @@ export type NullSafety = 'safe' | 'neverNull' | 'unsafe'
 export type Operator = {
   op: string
 
-  // does `a op b` equal `b op a`. null means unary operator.
+  // does `a op b` equal `b op a`. null means unary or ternary operator.
   commutative: boolean | null
 
   nullSafety: NullSafety
@@ -89,23 +90,42 @@ export const operators: Operator[] = [
   op('AND', true, 'unsafe'), // FALSE AND NULL evaluates to NULL => unsafe
   op('OR', true, 'unsafe'), // TRUE OR NULL evaluates to TRUE => unsafe
   op('NOT', null, 'safe'),
+
+  // 9.2. Comparison Functions and Operators
+  op('<', false, 'safe'),
+  op('>', false, 'safe'),
+  op('<=', false, 'safe'),
+  op('>=', false, 'safe'),
+  op('=', true, 'safe'),
+  op('<>', true, 'safe'),
+  op('!=', true, 'safe'),
+  op('BETWEEN', null, 'safe'),
+  op('NOT BETWEEN', null, 'safe'),
+  op('BETWEEN SYMMETRIC', null, 'safe'),
+  op('NOT BETWEEN SYMMETRIC', null, 'safe'),
+  op('IS DISTINCT FROM', false, 'neverNull'),
+  op('IS NOT DISTINCT FROM', false, 'neverNull'),
   op('IS NULL', null, 'neverNull'),
   op('IS NOT NULL', null, 'neverNull'),
   op('ISNULL', null, 'neverNull'),
   op('NOTNULL', null, 'neverNull'),
+  op('IS TRUE', null, 'neverNull'),
+  op('IS NOT TRUE', null, 'neverNull'),
+  op('IS FALSE', null, 'neverNull'),
+  op('IS NOT FALSE', null, 'neverNull'),
+  op('IS UNKNOWN', null, 'neverNull'),
+  op('IS NOT UNKNOWN', null, 'neverNull'),
+
+  // 9.4 String Functions and Operators
+  op('||', false, 'safe'),
+
+  // Not yet categorized
   op('LIKE', false, 'safe'),
-  op('<', false, 'safe'),
-  op('>', false, 'safe'),
-  op('=', true, 'safe'),
-  op('<>', true, 'safe'),
-  op('<=', false, 'safe'),
-  op('>=', false, 'safe'),
   op('+', true, 'safe'),
   op('-', false, 'safe'),
   op('*', true, 'safe'),
   op('/', false, 'safe'),
   op('::', false, 'safe'),
-  op('||', false, 'safe'),
 ]
 
 // SQL functions
@@ -117,11 +137,10 @@ export type Function = {
 
 export const functions: Function[] = [
   //   name (lower case!), nullSafety
-  func('bool', 'safe'),
-  func('now', 'neverNull'),
-  func('count', 'neverNull'),
-  func('sum', 'safe'),
-  func('to_char', 'safe'),
+
+  // 9.2. Comparison Functions and Operators
+  func('num_nonnulls', 'neverNull'),
+  func('num_nulls', 'neverNull'),
 
   // 9.4 String Functions and Operators
   func('bit_length', 'safe'),
@@ -134,7 +153,6 @@ export const functions: Function[] = [
   func('substring', 'safe'), // TODO: special arg syntax
   func('trim', 'safe'), // TODO: special arg syntax
   func('upper', 'safe'),
-  // ---
   func('ascii', 'safe'),
   func('btrim', 'safe'),
   func('chr', 'safe'),
@@ -175,6 +193,13 @@ export const functions: Function[] = [
   func('to_ascii', 'safe'),
   func('to_hex', 'safe'),
   func('translate', 'safe'),
+
+  // Not yet categorized
+  func('bool', 'safe'),
+  func('now', 'neverNull'),
+  func('count', 'neverNull'),
+  func('sum', 'safe'),
+  func('to_char', 'safe'),
 ]
 
 /// Helpers
