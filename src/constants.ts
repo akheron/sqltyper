@@ -87,8 +87,13 @@ export const operators: Operator[] = [
   // name (upper case!), commutative, nullSafety
 
   // 9.1. Logical operators
-  op('AND', true, 'unsafe'), // FALSE AND NULL evaluates to NULL => unsafe
-  op('OR', true, 'unsafe'), // TRUE OR NULL evaluates to TRUE => unsafe
+
+  // FALSE AND NULL evaluates to NULL => unsafe. Not commutitave due
+  // to short-circuiting.
+  op('AND', false, 'unsafe'),
+  // TRUE OR NULL evaluates to TRUE => unsafe. Not commutitave due to
+  // short-circuiting.
+  op('OR', false, 'unsafe'),
   op('NOT', null, 'safe'),
 
   // 9.2. Comparison Functions and Operators
@@ -116,15 +121,30 @@ export const operators: Operator[] = [
   op('IS UNKNOWN', null, 'neverNull'),
   op('IS NOT UNKNOWN', null, 'neverNull'),
 
-  // 9.4 String Functions and Operators
-  op('||', false, 'safe'),
-
-  // Not yet categorized
-  op('LIKE', false, 'safe'),
+  // 9.3. Mathematical Functions and Operators
   op('+', true, 'safe'),
   op('-', false, 'safe'),
   op('*', true, 'safe'),
   op('/', false, 'safe'),
+  op('%', false, 'safe'),
+  op('^', false, 'safe'),
+  op('|/', null, 'safe'),
+  op('||/', null, 'safe'),
+  op('!', null, 'safe'), // factorial suffix
+  op('!!', null, 'safe'),
+  op('@', null, 'safe'),
+  op('&', true, 'safe'),
+  op('|', true, 'safe'),
+  op('#', true, 'safe'),
+  op('~', null, 'safe'),
+  op('<<', false, 'safe'),
+  op('>>', false, 'safe'),
+
+  // 9.4. String Functions and Operators
+  op('||', false, 'safe'),
+
+  // Not yet categorized
+  op('LIKE', false, 'safe'),
   op('::', false, 'safe'),
 ]
 
@@ -142,7 +162,39 @@ export const functions: Function[] = [
   func('num_nonnulls', 'neverNull'),
   func('num_nulls', 'neverNull'),
 
-  // 9.4 String Functions and Operators
+  // 9.3. Mathematical Functions and Operators
+  func('abs', 'safe'),
+  func('cbrt', 'safe'),
+  func('ceil', 'safe'),
+  func('ceiling', 'safe'),
+  func('degrees', 'safe'),
+  func('div', 'safe'),
+  func('exp', 'safe'),
+  func('floor', 'safe'),
+  func('ln', 'safe'),
+  func('log', 'safe'),
+  func('mod', 'safe'),
+  func('pi', 'neverNull'),
+  func('power', 'safe'),
+  func('radians', 'safe'),
+  func('round', 'safe'),
+  func('scale', 'safe'),
+  func('sign', 'safe'),
+  func('sqrt', 'safe'),
+  func('trunc', 'safe'),
+  func('width_bucket', 'safe'),
+  func('random', 'safe'),
+  func('setseed', 'neverNull'),
+  func('acos', 'safe'),
+  func('asin', 'safe'),
+  func('atan', 'safe'),
+  func('atan2', 'safe'),
+  func('cos', 'safe'),
+  func('cot', 'safe'),
+  func('sin', 'safe'),
+  func('tan', 'safe'),
+
+  // 9.4. String Functions and Operators
   func('bit_length', 'safe'),
   func('char_length', 'safe'),
   func('character_length', 'safe'),

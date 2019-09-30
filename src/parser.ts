@@ -315,17 +315,18 @@ const existsExpr = seq(
 )
 
 type OtherExprRhs =
-  | OtherExprRhs.InExprRhs
-  | OtherExprRhs.TernaryExprRhs
-  | OtherExprRhs.OtherOpExprRhs
+  | OtherExprRhs.In
+  | OtherExprRhs.Ternary
+  | OtherExprRhs.UnarySuffix
+  | OtherExprRhs.OtherOp
 
 namespace OtherExprRhs {
-  export type InExprRhs = {
+  export type In = {
     kind: 'InExprRhs'
     op: 'IN' | 'NOT IN'
     rhs: Select
   }
-  const inExprRhs: Parser<InExprRhs> = seq(
+  const in_: Parser<In> = seq(
     (op, rhs) => ({ kind: 'InExprRhs', op, rhs }),
     attempt(
       oneOf<'IN' | 'NOT IN'>(
@@ -336,13 +337,13 @@ namespace OtherExprRhs {
     parenthesized(lazy(() => select))
   )
 
-  export type TernaryExprRhs = {
+  export type Ternary = {
     kind: 'TernaryExprRhs'
     op: string
     rhs1: Expression
     rhs2: Expression
   }
-  const ternaryExprRhs: Parser<TernaryExprRhs> = seq(
+  const ternary: Parser<Ternary> = seq(
     (op, rhs1, _and, rhs2) => ({ kind: 'TernaryExprRhs', op, rhs1, rhs2 }),
     oneOf(
       attempt(sepReserveds('NOT BETWEEN SYMMETRIC')),
@@ -355,12 +356,21 @@ namespace OtherExprRhs {
     addSubExpr
   )
 
-  export type OtherOpExprRhs = {
+  export type UnarySuffix = {
+    kind: 'UnarySuffix'
+    op: '!'
+  }
+  const unarySuffix: Parser<UnarySuffix> = seq(
+    _ => ({ kind: 'UnarySuffix', op: '!' }),
+    operator('!')
+  )
+
+  export type OtherOp = {
     kind: 'OtherOpExprRhs'
     op: string
     rhs: Expression
   }
-  const otherOpExprRhs: Parser<OtherOpExprRhs> = seq(
+  const otherOp: Parser<OtherOp> = seq(
     (op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }),
     oneOf(
       anyOperatorExcept([
@@ -384,11 +394,7 @@ namespace OtherExprRhs {
     addSubExpr
   )
 
-  export const parser = oneOf<OtherExprRhs>(
-    inExprRhs,
-    ternaryExprRhs,
-    otherOpExprRhs
-  )
+  export const parser = oneOf<OtherExprRhs>(in_, ternary, unarySuffix, otherOp)
 
   export function createExpression(
     lhs: Expression,
@@ -400,6 +406,9 @@ namespace OtherExprRhs {
 
       case 'TernaryExprRhs':
         return Expression.createTernaryOp(lhs, rhs.op, rhs.rhs1, rhs.rhs2)
+
+      case 'UnarySuffix':
+        return Expression.createUnaryOp(rhs.op, lhs)
 
       case 'OtherOpExprRhs':
         return Expression.createBinaryOp(lhs, rhs.op, rhs.rhs)

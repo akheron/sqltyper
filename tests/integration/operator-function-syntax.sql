@@ -1,16 +1,14 @@
--- Some operators and function have special syntax
+-- Some operators and functions have special syntax
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  id serial PRIMARY KEY,
-  name varchar(255) NOT NULL,
   age integer
 );
 
 --- query -----------------------------------------------------------------
 
 SELECT
-  age
+  (age!)::integer AS age_factorial  -- suffix operator
 FROM person
 WHERE age NOT BETWEEN SYMMETRIC 300 AND 200
 
@@ -20,6 +18,6 @@ many
 
 --- expected column types -------------------------------------------------
 
-age: number
+age_factorial: number
 
 --- expected param types --------------------------------------------------
