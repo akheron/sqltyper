@@ -39,6 +39,6 @@ export function functionNullSafety(name: string): NullSafety {
   return pipe(
     findFunction(name),
     Option.map(func => func.nullSafety),
-    Option.getOrElse<Function['nullSafety']>(() => 'unsafe')
+    Option.getOrElse<NullSafety>(() => 'unsafe')
   )
 }
