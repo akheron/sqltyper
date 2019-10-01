@@ -43,10 +43,8 @@ import {
   Values,
   Update,
   WithQuery,
-} from './ast'
-import { sqlReservedWords } from './constants'
-
-export { ParseError, isParseError } from 'typed-parser'
+} from '../ast'
+import { sqlReservedWords } from '../constants'
 
 // Helpers
 
