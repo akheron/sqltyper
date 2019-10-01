@@ -9,21 +9,17 @@ import {
   attempt,
   constant,
   end,
-  expectString,
   int,
   keyword,
   lazy,
   many,
-  map,
   match,
   oneOf,
   run,
   sepBy,
   sepBy1,
   seq,
-  skip,
   stringBefore,
-  stringBeforeEndOr,
 } from 'typed-parser'
 import {
   AST,
@@ -44,116 +40,22 @@ import {
   Update,
   WithQuery,
 } from '../ast'
-import { sqlReservedWords } from '../constants'
 
-// Helpers
+import { optional } from './utils'
+import {
+  _,
+  anyOperator,
+  anyOperatorExcept,
+  identifier,
+  operator,
+  reservedWord,
+  sepReserveds,
+  symbol,
+  symbolKeepWS,
+} from './token'
 
-function optional<A>(parser: Parser<A>): Parser<A | null> {
-  return oneOf(parser, seq($null, constant('')))
-}
-
-// Token parsers etc.
-
-// whitespace and comments
-const _: Parser<null> = seq(
-  $null,
-  skip('\\s*'),
-  many(seq($null, expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')))
-)
-
-function symbol(s: string) {
-  return seq($null, expectString(s, 'symbol'), _)
-}
-
-// Like symbol but doesn't skip whitespace
-function symbolOnly(s: string) {
-  return expectString(s, 'symbol')
-}
-
-const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
-
-const quotedEscape = seq(
-  $2,
-  symbolOnly('\\'),
-  oneOf(keyword('"', '"'), keyword('\\', '\\'))
-)
-const quotedInner: Parser<string> = seq(
-  (s, tail) => s + tail,
-  stringBefore('[\\"]'),
-  oneOf(
-    seq((e, t) => e + t, quotedEscape, lazy(() => quotedInner)),
-    constant('')
-  )
-)
-const quotedIdentifier = seq($2, symbolOnly('"'), quotedInner, symbol('"'))
-
-const identifier = seq(
-  $1,
-  attempt(
-    oneOf(
-      map(
-        (identifier, toError) =>
-          sqlReservedWords.includes(identifier.toUpperCase())
-            ? toError(`Expected an identifier, got reserved word ${identifier}`)
-            : identifier,
-        matchIdentifier
-      ),
-      quotedIdentifier
-    )
-  ),
-  _
-)
-
-const reservedWord = <A extends string>(word: A): Parser<A> => {
-  if (!sqlReservedWords.includes(word))
-    throw new Error(`INTERNAL ERROR: ${word} is not included in reservedWords`)
-  return seq(
-    $1,
-    attempt(
-      map(
-        (match, toError) =>
-          match.toUpperCase() !== word
-            ? toError(`Expected ${word}, got ${match}`)
-            : word,
-        matchIdentifier
-      )
-    ),
-    _
-  )
-}
-
-const sepReserveds = (words: string): Parser<string> =>
-  attempt(
-    seq(
-      _ => words,
-      ...words.split(/\s+/).map(word => seq($null, reservedWord(word), _)),
-      _
-    )
-  )
-
-const anyOperator = seq($1, match('[-+*/<>=~!@#%^&|`?]{1,63}'), _)
-
-const operator = (op: string) =>
-  attempt(
-    map(
-      (match, toError) =>
-        match != op ? toError(`Operator ${op} expected`) : match,
-      anyOperator
-    )
-  )
-
-const anyOperatorExcept = (exclude: string[]) =>
-  attempt(
-    map(
-      (match, toError) =>
-        exclude.includes(match)
-          ? toError(`Operator other than ${exclude.join(' ')} expected`)
-          : match,
-      anyOperator
-    )
-  )
-
-function parenthesized<T>(parser: Parser<T>): Parser<T> {
+// ( ... )
+export function parenthesized<T>(parser: Parser<T>): Parser<T> {
   return seq($2, symbol('('), parser, symbol(')'))
 }
 
@@ -207,7 +109,7 @@ const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
 
 const strEscape = seq(
   $2,
-  symbolOnly('\\'),
+  symbolKeepWS('\\'),
   oneOf(
     keyword("'", "'"),
     keyword('\\', '\\'),
@@ -225,7 +127,7 @@ const strInner: Parser<string> = seq(
   oneOf(seq((e, t) => e + t, strEscape, lazy(() => strInner)), constant(''))
 )
 
-const stringConstant = seq($2, symbolOnly("'"), strInner, symbol("'"))
+const stringConstant = seq($2, symbolKeepWS("'"), strInner, symbol("'"))
 
 const constantExpr: Parser<Expression> = seq(
   (val, _ws) => Expression.createConstant(val),
@@ -235,7 +137,7 @@ const constantExpr: Parser<Expression> = seq(
 
 const parameterExpr: Parser<Expression> = seq(
   (_$, index, _ws) => Expression.createParameter(index),
-  symbolOnly('$'),
+  symbolKeepWS('$'),
   int('[0-9]+'),
   _
 )
