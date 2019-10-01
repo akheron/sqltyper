@@ -200,10 +200,10 @@ export const functions: Function[] = [
   func('character_length', 'safe'),
   func('lower', 'safe'),
   func('octet_length', 'safe'),
-  func('overlay', 'safe'), // TODO: special arg syntax
-  func('position', 'safe'), // TODO: special arg syntax
-  func('substring', 'safe'), // TODO: special arg syntax
-  func('trim', 'safe'), // TODO: special arg syntax
+  func('overlay', 'safe'),
+  func('position', 'safe'),
+  func('substring', 'safe'),
+  func('trim', 'safe'),
   func('upper', 'safe'),
   func('ascii', 'safe'),
   func('btrim', 'safe'),

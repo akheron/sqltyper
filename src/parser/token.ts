@@ -76,6 +76,22 @@ export const identifier = seq(
   _
 )
 
+export function expectIdentifier<T extends string>(ident: T): Parser<T> {
+  return seq(
+    $1,
+    attempt(
+      map(
+        (match, toError) =>
+          match.toLowerCase() !== ident.toLowerCase()
+            ? toError(`Expected ${ident}, got ${match}`)
+            : ident,
+        matchIdentifier
+      )
+    ),
+    _
+  )
+}
+
 export const reservedWord = <A extends string>(word: A): Parser<A> => {
   if (!sqlReservedWords.includes(word))
     throw new Error(`INTERNAL ERROR: ${word} is not included in reservedWords`)

@@ -53,6 +53,7 @@ import {
   symbol,
   symbolKeepWS,
 } from './token'
+import { specialFunctionCall } from './special-functions'
 
 // ( ... )
 export function parenthesized<T>(parser: Parser<T>): Parser<T> {
@@ -157,6 +158,7 @@ const primaryExpr: Parser<Expression> = seq(
     typeCast != null ? Expression.createTypeCast(expr, typeCast) : expr,
   oneOf(
     arraySubQueryExpr,
+    attempt(specialFunctionCall(lazy(() => primaryExpr))),
     columnRefOrFunctionCallExpr,
     constantExpr,
     parameterExpr,
