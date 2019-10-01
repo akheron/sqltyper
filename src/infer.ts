@@ -3,6 +3,7 @@ import * as R from 'ramda'
 import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
 import * as Option from 'fp-ts/lib/Option'
+import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { flow, identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
@@ -13,6 +14,7 @@ import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
 import { StatementDescription, StatementRowCount, ValueType } from './types'
+import { warn } from './warnings'
 
 type FieldNullability = FieldNullability.Any | FieldNullability.Array
 
@@ -101,9 +103,8 @@ function cast<A>() {
 
 export function inferStatementNullability(
   client: SchemaClient,
-  verbose: boolean,
   statement: StatementDescription
-): TaskEither.TaskEither<string, StatementDescription> {
+): Task.Task<StatementDescription> {
   return pipe(
     TaskEither.fromEither(parse(statement.sql)),
     TaskEither.chain(astNode =>
@@ -113,32 +114,15 @@ export function inferStatementNullability(
         TaskEither.map(stmt => inferRowCount(stmt, astNode))
       )
     ),
-    TaskEither.orElse(parseErrorStr => {
-      // tslint-disable:no-console
-      console.warn(`
-WARNING: The internal SQL parser failed to parse the SQL statement. The
-inferred types may be inaccurate with respect to nullability.
-`)
-      if (verbose) {
-        console.warn(`\
-Parse error: ${parseErrorStr}
-
-Please open an issue on https://github.com/akheron/sqltyper.
-
-Include the above error message, relevant parts of your database
-schema (CREATE TABLE statements, CREATE TYPE statements, etc.) and the
-SQL statement that failed to parse.
-
-Thank you in advance!
-`)
-      } else {
-        console.warn(`\
-Re-run with --verbose for instructions on how to report or fix this.
-`)
-      }
-      // tslint-enable:no-console
-      return TaskEither.right(statement)
-    })
+    TaskEither.getOrElse(parseErrorStr =>
+      Task.of(
+        warn(
+          'The internal SQL parser failed to parse the SQL statement.',
+          `Parse error: ${parseErrorStr}`,
+          statement
+        )
+      )
+    )
   )
 }
 

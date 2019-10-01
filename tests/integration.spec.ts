@@ -13,6 +13,7 @@ import * as C from '../src/clients'
 import { StatementRowCount, StatementDescription } from '../src/types'
 import { traverseATs, traverseAE } from '../src/fp-utils'
 import { pgErrorToString } from '../src/describe'
+import { hasWarnings, formatWarnings } from '../src/warnings'
 
 // Dynamically create a test case from each integration/*.sql file
 
@@ -65,11 +66,16 @@ describe('Integration tests', () => {
 
           // Check expectations
           return await pipe(
-            sqlToStatementDescription(clients, testFile.query, true),
-            TaskEither.chain(statementDescription =>
-              TaskEither.rightTask(
-                checkExpectations(clients, testFile, statementDescription)
-              )
+            sqlToStatementDescription(clients, testFile.query),
+            TaskEither.chain(stmt =>
+              hasWarnings(stmt)
+                ? TaskEither.left(
+                    formatWarnings(stmt, true, process.stdout.columns || 78)
+                  )
+                : TaskEither.right(stmt)
+            ),
+            TaskEither.chain(stmt =>
+              TaskEither.rightTask(checkExpectations(clients, testFile, stmt))
             )
           )()
         })

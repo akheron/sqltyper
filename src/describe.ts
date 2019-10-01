@@ -41,6 +41,7 @@ function describeResult(
       queryResult.params
     ),
     sql,
+    warnings: [],
   }
 }
 

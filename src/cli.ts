@@ -12,19 +12,21 @@ import * as Ord from 'fp-ts/lib/Ord'
 import * as Ordering from 'fp-ts/lib/Ordering'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
+import { identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 import * as yargs from 'yargs'
 
 import { Clients, connect, disconnect } from './clients'
-import { sqlToTS, indexModuleTS, TsModule, TsModuleDir } from './index'
+import { sqlToStatementDescription, generateTSCode, indexModuleTS, TsModule, TsModuleDir } from './index'
 import { traverseATs } from './fp-utils'
-import { identity } from 'fp-ts/lib/function'
+import { hasWarnings, formatWarnings } from './warnings'
 
 type Options = {
   verbose: boolean
   index: boolean
   prettify: boolean
   pgModule: string
+  terminalColumns: number | undefined
 }
 
 async function main(): Promise<number> {
@@ -39,6 +41,7 @@ async function main(): Promise<number> {
     index: args.index,
     prettify: args.prettify,
     pgModule: args['pg-module'],
+    terminalColumns: process.stdout.columns
   }
 
   const dirPaths: string[] = []
@@ -346,17 +349,24 @@ function processSQLFile(
 ): Task.Task<Option.Option<TsModule>> {
   const tsPath = getOutputPath(filePath)
   const fnName = funcName(filePath)
-  console.log('---------------------------------------------------------')
-  console.log(`${filePath} => ${tsPath}`)
-
   return pipe(
-    Task.of(fs.readFile(filePath)),
-    Task.map(s => s.toString()),
-    Task.chain(source =>
-      sqlToTS(clients, source, fnName, {
+    async () => {
+      console.log('---------------------------------------------------------')
+      console.log(`${filePath} => ${tsPath}`)
+    },
+    Task.chain(() => () => fs.readFile(filePath)),
+    Task.map(sql => sql.toString()),
+    Task.chain(sql => sqlToStatementDescription(clients, sql)),
+    TaskEither.map(stmt => {
+      if (hasWarnings(stmt)) {
+        console.warn(formatWarnings(stmt, options.verbose, options.terminalColumns || 78))
+      }
+      return stmt
+    }),
+    TaskEither.chain(source =>
+      generateTSCode(clients, source, fnName, {
         prettierFileName: options.prettify ? tsPath : undefined,
         pgModule: options.pgModule,
-        verbose: options.verbose,
       })
     ),
     TaskEither.chain(tsCode => () =>

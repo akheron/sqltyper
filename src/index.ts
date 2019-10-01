@@ -17,8 +17,7 @@ import { StatementDescription } from './types'
 
 export function sqlToStatementDescription(
   clients: Clients,
-  sql: string,
-  verbose: boolean = false
+  sql: string
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     Task.of(sql),
@@ -28,26 +27,26 @@ export function sqlToStatementDescription(
     ),
     TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
     TaskEither.chain(stmt =>
-      inferStatementNullability(clients.schema, verbose, stmt)
+      TaskEither.rightTask(inferStatementNullability(clients.schema, stmt))
     )
   )
 }
 
-export function sqlToTS(
+export function generateTSCode(
   clients: Clients,
-  sql: string,
+  stmt: StatementDescription,
   funcName: string,
   options?: {
     prettierFileName?: string | undefined
     pgModule?: string | undefined
     verbose?: boolean | undefined
+    terminalColumns?: number | undefined
   }
 ): TaskEither.TaskEither<string, string> {
-  const { prettierFileName = null, pgModule = 'pg', verbose = false } =
-    options || {}
+  const { prettierFileName = null, pgModule = 'pg' } = options || {}
 
   return pipe(
-    sqlToStatementDescription(clients, sql, verbose),
+    TaskEither.right(stmt),
     TaskEither.chain(stmt =>
       TaskEither.rightTask(
         generateTypeScript(clients.types, pgModule, funcName, stmt)

@@ -5,6 +5,12 @@ export type StatementDescription = {
   columns: NamedValue[]
   params: NamedValue[]
   rowCount: StatementRowCount
+  warnings: Warning[]
+}
+
+export type Warning = {
+  summary: string
+  description: string
 }
 
 export type StatementType = 'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE'
