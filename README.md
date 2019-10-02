@@ -2,9 +2,14 @@
 
 [![CircleCI](https://circleci.com/gh/akheron/sqltyper.svg?style=shield)](https://circleci.com/gh/akheron/sqltyper)
 
-SQL is a typed language. sqltyper takes raw PostgreSQL queries and
-generates TypeScript functions that run those queries AND are typed
-correctly, based on the database schema.
+SQL is a typed language, but most solutions for using an SQL database
+from typed languages don't make use of that typing information in a
+way that would actually help you catch bugs during development.
+
+**sqltyper** takes raw PostgreSQL queries and generates TypeScript
+functions that run those queries AND are typed correctly, based on the
+database schema. This makes it possible for the TypeScript compiler to
+find bugs in your code that interacts with an SQL database.
 
 For example, given the following schema:
 
@@ -244,7 +249,7 @@ to/from PostgreSQL.
 
 ## Prior art
 
-The main motivator for sqltyper was [sqlτyped] by @jonifreeman. It
+The main motivator for sqltyper was [sqlτyped] by Joni Freeman. It
 does more or less the same as sqltyper, but for Scala, and meant to be
 used with MySQL. It uses JDBC, and is implemented as a Scala macro
 rather than an offline code generation tool.
