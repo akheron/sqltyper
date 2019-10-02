@@ -2,13 +2,16 @@
 
 CREATE TABLE person (
   name text NOT NULL,
-  age integer NOT NULL,
+  age integer,
   shoe_size integer
-);
+)
 
 --- query -----------------------------------------------------------------
 
-SELECT initcap(name) as name_capitalized, age, shoe_size
+SELECT
+  initcap(name) as name_capitalized,
+  age,
+  shoe_size
 FROM person
 WHERE
     name LIKE ${namePattern} AND
