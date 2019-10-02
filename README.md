@@ -133,20 +133,20 @@ import * as sql from './sql'
 And that's it! Now you can use `sql.myQuery()` and `sql.otherQuery()`
 to run the queries in a type-safe manner.
 
-These functions a `Client` or `Pool` from [node-postgres] as the first
-argument and possible query parameters as the second parameter.
+These functions take a `Client` or `Pool` from [node-postgres] as the
+first argument, and possible query parameters as the second parameter.
 
-It will return one of the following, wrapped in a `Promise`:
+They will return one of the following, wrapped in a `Promise`:
 
 - An array of result objects, with object keys corresponding to output
   column names. Note that all of the output columns in your query must
   have a unique name, because otherwise some of them would be not
   accessible.
 
-- A single result row or `null` if the query only ever returns zero or
-  one row (e.g. `SELECT` query with `LIMIT 1`).
+- A single result object or `null` if the query only ever returns zero
+  or one row (e.g. `SELECT` query with `LIMIT 1`).
 
-- A number which denotes the number of affected rows (`INSERT`,
+- A number which denotes the number of affected rows (e.g. `INSERT`,
   `UPDATE` or `DELETE` without a `RETURNING` clause).
 
 
@@ -172,8 +172,8 @@ Options:
 `--database`, `-d`
 
 Database URI to connect to, e.g. `-d postgres://user:pass@localhost:5432/mydb`.
-By default, uses the [connecting logic] of node-postgres that
-relies on environment variables.
+If not given, uses the [connecting logic] of node-postgres that relies
+on [libpq environment variables].
 
 `--ext`, `-e`
 
@@ -193,11 +193,11 @@ Watch files and run the conversion when something changes. Default:
 
 Check whether all output files are up-to-date without actually
 updating them. If they are, exit with status 0, otherwise exit with
-status 1. Useful for CI or pre-commit hooks.
+status 1. Useful for CI or pre-commit hooks. Default: `false`.
 
 `--prettify`, `-p`
 
-Apply `prettier` to output TypeScript files. `prettier` must be
+Apply [prettier] to generated TypeScript files. [prettier] must be
 installed and configured for your project. Default: `false`.
 
 `--index`
@@ -210,6 +210,8 @@ generated functions. Default: `true`.
 Where to import node-postgres from. Default: `pg`.
 
 [connecting logic]: https://node-postgres.com/features/connecting
+[libpq environment variables]: https://www.postgresql.org/docs/current/libpq-envars.html
+[prettier]: https://prettier.io/
 
 
 ## How does it work?
@@ -250,8 +252,8 @@ to/from PostgreSQL.
 ## Prior art
 
 The main motivator for sqltyper was [sqlτyped] by Joni Freeman. It
-does more or less the same as sqltyper, but for Scala, and meant to be
-used with MySQL. It uses JDBC, and is implemented as a Scala macro
-rather than an offline code generation tool.
+does more or less the same as sqltyper, but for Scala, and is designed
+to be used with MySQL. It uses JDBC, and is implemented as a Scala
+macro rather than an offline code generation tool.
 
 [sqlτyped]: https://github.com/jonifreeman/sqltyped
