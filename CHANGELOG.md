@@ -8,6 +8,7 @@
   - Comparison
   - Mathimatical
   - Add support for string functions with special syntax
+- Add `--check` CLI option
 - Better warning messages
 
 ## 0.1.0

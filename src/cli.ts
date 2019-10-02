@@ -17,7 +17,13 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import * as yargs from 'yargs'
 
 import { Clients, connect, disconnect } from './clients'
-import { sqlToStatementDescription, generateTSCode, indexModuleTS, TsModule, TsModuleDir } from './index'
+import {
+  sqlToStatementDescription,
+  generateTSCode,
+  indexModuleTS,
+  TsModule,
+  TsModuleDir,
+} from './index'
 import { traverseATs } from './fp-utils'
 import { hasWarnings, formatWarnings } from './warnings'
 
@@ -36,12 +42,17 @@ async function main(): Promise<number> {
     return 1
   }
 
+  if (args.watch && args.check) {
+    console.error('Cannot use --watch and --check together')
+    return 1
+  }
+
   const options: Options = {
     verbose: args.verbose,
     index: args.index,
     prettify: args.prettify,
     pgModule: args['pg-module'],
-    terminalColumns: process.stdout.columns
+    terminalColumns: process.stdout.columns,
   }
 
   const dirPaths: string[] = []
@@ -60,14 +71,27 @@ async function main(): Promise<number> {
     throw process.exit(1)
   }
 
+  let status = 0
   if (args.watch) {
     await watchDirectories(clients.right, fileExtensions, dirPaths, options)
+  } else if (args.check) {
+    const result = await checkDirectories(
+      clients.right,
+      fileExtensions,
+      dirPaths,
+      options
+    )()
+    if (!result.every(identity)) {
+      console.error(`
+Some files are out of date!`)
+      status = 1
+    }
   } else {
     await processDirectories(clients.right, fileExtensions, dirPaths, options)()
   }
 
   await disconnect(clients.right)
-  return 0
+  return status
 }
 
 function parseArgs() {
@@ -103,6 +127,15 @@ function parseArgs() {
     .option('watch', {
       alias: 'w',
       description: 'Watch files and run the conversion when something changes',
+      type: 'boolean',
+      default: false,
+    })
+    .option('check', {
+      alias: 'c',
+      description:
+        'Check whether all output files are up-to-date without actually updating ' +
+        'them. If they are, exit with status 0, otherwise exit with status 1. ' +
+        'Useful for CI or pre-commit hooks.',
       type: 'boolean',
       default: false,
     })
@@ -235,7 +268,7 @@ function makeWatchEventHandler(
     switch (type) {
       case 'update':
         result = pipe(
-          processSQLFile(clients, sqlFilePath, options),
+          processSQLFile(clients, sqlFilePath, false, options),
           Task.map(tsModuleOption =>
             pipe(
               tsModuleOption,
@@ -314,37 +347,62 @@ function processDirectories(
   dirPaths: string[],
   options: Options
 ): Task.Task<TsModuleDir[]> {
-  return traverseATs(dirPaths, dirPath =>
-    processDirectory(clients, dirPath, fileExtensions, options)
+  return mapDirectories(
+    dirPaths,
+    fileExtensions,
+    filePath => processSQLFile(clients, filePath, false, options),
+    (dirPath, tsModules) => processSQLDirectory(dirPath, tsModules, options)
   )
 }
 
-function processDirectory(
+function checkDirectories(
   clients: Clients,
+  fileExtensions: string[],
+  dirPaths: string[],
+  options: Options
+): Task.Task<boolean[]> {
+  return mapDirectories(
+    dirPaths,
+    fileExtensions,
+    filePath => processSQLFile(clients, filePath, true, options),
+    (_dirPath, tsModules) => checkDirectoryResult(tsModules)
+  )
+}
+
+function checkDirectoryResult(
+  tsModules: Option.Option<TsModule>[]
+): Task.Task<boolean> {
+  return Task.of(tsModules.every(Option.isSome))
+}
+
+function mapDirectories<T, U>(
+  dirPaths: string[],
+  fileExtensions: string[],
+  fileProcessor: (filePath: string) => Task.Task<T>,
+  dirProcessor: (dirPath: string, fileResults: T[]) => Task.Task<U>
+): Task.Task<U[]> {
+  return traverseATs(dirPaths, dirPath =>
+    mapDirectory(dirPath, fileExtensions, fileProcessor, dirProcessor)
+  )
+}
+
+function mapDirectory<T, U>(
   dirPath: string,
   fileExtensions: string[],
-  options: Options
-): Task.Task<TsModuleDir> {
+  fileProcessor: (filePath: string) => Task.Task<T>,
+  dirProcessor: (dirPath: string, fileResults: T[]) => Task.Task<U>
+): Task.Task<U> {
   return pipe(
     findSQLFilePaths(dirPath, fileExtensions),
-    Task.chain(filePaths =>
-      pipe(
-        traverseATs(filePaths, filePath =>
-          processSQLFile(clients, filePath, options)
-        ),
-        Task.map(Array.filterMap(identity))
-      )
-    ),
-    Task.chain(modules =>
-      maybeWriteIndexModule(options.index, dirPath, modules, options.prettify)
-    ),
-    Task.map(modules => ({ dirPath, modules }))
+    Task.chain(filePaths => traverseATs(filePaths, fileProcessor)),
+    Task.chain(results => dirProcessor(dirPath, results))
   )
 }
 
 function processSQLFile(
   clients: Clients,
   filePath: string,
+  checkOnly: boolean,
   options: Options
 ): Task.Task<Option.Option<TsModule>> {
   const tsPath = getOutputPath(filePath)
@@ -352,14 +410,20 @@ function processSQLFile(
   return pipe(
     async () => {
       console.log('---------------------------------------------------------')
-      console.log(`${filePath} => ${tsPath}`)
+      if (checkOnly) {
+        console.log(`Checking ${filePath}`)
+      } else {
+        console.log(`${filePath} => ${tsPath}`)
+      }
     },
     Task.chain(() => () => fs.readFile(filePath)),
     Task.map(sql => sql.toString()),
     Task.chain(sql => sqlToStatementDescription(clients, sql)),
     TaskEither.map(stmt => {
       if (hasWarnings(stmt)) {
-        console.warn(formatWarnings(stmt, options.verbose, options.terminalColumns || 78))
+        console.warn(
+          formatWarnings(stmt, options.verbose, options.terminalColumns || 78)
+        )
       }
       return stmt
     }),
@@ -369,9 +433,22 @@ function processSQLFile(
         pgModule: options.pgModule,
       })
     ),
-    TaskEither.chain(tsCode => () =>
-      fs.writeFile(tsPath, tsCode).then(Either.right)
-    ),
+    TaskEither.chain(tsCode => async () => {
+      if (checkOnly) {
+        let oldTsCode: string | null
+        try {
+          oldTsCode = await fs.readFile(tsPath, 'utf-8')
+        } catch (_err) {
+          oldTsCode = null
+        }
+        if (oldTsCode != tsCode) {
+          return Either.left(`=> out of date`)
+        }
+      } else {
+        await fs.writeFile(tsPath, tsCode).then(Either.right)
+      }
+      return Either.right(undefined)
+    }),
     TaskEither.mapLeft(errorMessage => {
       console.error(errorMessage)
     }),
@@ -381,6 +458,26 @@ function processSQLFile(
       funcName: fnName,
     })),
     Task.map(Option.fromEither)
+  )
+}
+
+function processSQLDirectory(
+  dirPath: string,
+  modules: Option.Option<TsModule>[],
+  options: Options
+): Task.Task<TsModuleDir> {
+  const successfulModules = pipe(
+    modules,
+    Array.filterMap(identity)
+  )
+  return pipe(
+    maybeWriteIndexModule(
+      options.index,
+      dirPath,
+      successfulModules,
+      options.prettify
+    ),
+    Task.map(modules => ({ dirPath, modules }))
   )
 }
 

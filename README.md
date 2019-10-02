@@ -179,6 +179,12 @@ nullability. Default: `false`.
 Watch files and run the conversion when something changes. Default:
 `false`.
 
+`--check`, `-c`
+
+Check whether all output files are up-to-date without actually
+updating them. If they are, exit with status 0, otherwise exit with
+status 1. Useful for CI or pre-commit hooks.
+
 `--prettify`, `-p`
 
 Apply `prettier` to output TypeScript files. `prettier` must be
