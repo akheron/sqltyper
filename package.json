@@ -14,6 +14,7 @@
   },
   "scripts": {
     "sql": "ts-node src/cli.ts --prettify --pg-module ../pg src/sql/",
+    "sql:check": "yarn run sql --check",
     "sql:watch": "yarn run sql --watch",
     "build": "tsc",
     "test": "jest"

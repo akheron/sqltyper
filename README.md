@@ -1,5 +1,7 @@
 # sqltyper - Type your SQL queries!
 
+[![CircleCI](https://circleci.com/gh/akheron/sqltyper.svg?style=shield)](https://circleci.com/gh/akheron/sqltyper)
+
 SQL is a typed language. sqltyper takes raw PostgreSQL queries and
 generates TypeScript functions that run those queries AND are typed
 correctly, based on the database schema.

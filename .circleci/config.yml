@@ -1,0 +1,35 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/node:12
+        environment:
+          PGHOST: 127.0.0.1
+          PGUSER: sqltyper
+          PGDATABASE: sqltyper
+
+      - image: circleci/postgres:11
+        environment:
+          POSTGRES_USER: sqltyper
+          POSTGRES_DB: sqltyper
+
+    steps:
+      - checkout
+
+      # Restore bundle cache
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "yarn.lock" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run: yarn install
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "yarn.lock" }}
+
+      - run: yarn build
+      - run: yarn sql:check
+      - run: yarn test
