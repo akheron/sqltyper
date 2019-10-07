@@ -43,7 +43,10 @@ function handleNamedParams(
 
   let mangledSQL = sql
   for (const [name, index] of paramIndices) {
-    mangledSQL = mangledSQL.replace('${' + name + '}', '$' + index)
+    mangledSQL = mangledSQL.replace(
+      new RegExp('\\$\\{' + name + '\\}', 'g'),
+      '$' + index
+    )
   }
 
   // Iterating a Map is guaranteed to yield in the insertion order
