@@ -1,7 +1,6 @@
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  id serial PRIMARY KEY,
   name varchar(255) NOT NULL,
   age integer
 );
@@ -16,7 +15,6 @@ many
 
 --- expected column types -------------------------------------------------
 
-id: number
 name: string
 age: number | null
 
