@@ -1011,10 +1011,17 @@ function inferRowCount(
   astNode: ast.AST
 ): StatementDescription {
   const rowCount: StatementRowCount = ast.walk(astNode, {
-    select: ({ limit }) =>
-      limit && limit.count && isConstantExprOf('1', limit.count)
-        ? 'zeroOrOne' // LIMIT 1 => zero or one rows
-        : 'many',
+    select: ({ body, setOps, limit }) => {
+      if (setOps.length === 0 && body.from === null) {
+        // No UNION/INTERSECT/EXCEPT, no FROM clause => one row
+        return 'one'
+      }
+      if (limit && limit.count && isConstantExprOf('1', limit.count)) {
+        // LIMIT 1 => zero or one row
+        return 'zeroOrOne'
+      }
+      return 'many'
+    },
 
     insert: ({ values, returning }) =>
       ast.Values.walk(values, {
