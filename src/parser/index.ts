@@ -46,6 +46,7 @@ import {
   _,
   anyOperator,
   anyOperatorExcept,
+  expectIdentifier,
   identifier,
   operator,
   reservedWord,
@@ -156,7 +157,14 @@ const stringConstant = seq($2, symbolKeepWS("'"), strInner, symbol("'"))
 
 const constantExpr: Parser<Expression> = seq(
   (val, _ws) => Expression.createConstant(val),
-  oneOf(match('[0-9]+'), stringConstant),
+  oneOf(
+    expectIdentifier('TRUE'),
+    expectIdentifier('FALSE'),
+    expectIdentifier('NULL'),
+    match('[0-9]+(\\.[0-9]+)?([eE]-?[0-9]+)?'),
+    match('\\.[0-9]+'),
+    stringConstant
+  ),
   _
 )
 
