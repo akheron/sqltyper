@@ -283,9 +283,17 @@ export namespace Expression {
   export function equals(a: Expression, b: Expression): boolean {
     switch (a.kind) {
       case 'ColumnRef':
+        // `tbl.col` and `col` in an expression context must point to
+        // the same column. Otherwise the expression would be invalid
+        // because of an unambiguous column reference.
+        if (b.kind === 'TableColumnRef') return a.column === b.column
         if (a.kind !== b.kind) return false
         return a.column === b.column
       case 'TableColumnRef':
+        // `tbl.col` and `col` in an expression context must point to
+        // the same column. Otherwise the expression would be invalid
+        // because of an unambiguous column reference.
+        if (b.kind === 'ColumnRef') return a.column === b.column
         if (a.kind !== b.kind) return false
         return a.table === b.table && a.column === b.column
       case 'Constant':
