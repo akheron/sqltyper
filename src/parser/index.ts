@@ -85,6 +85,30 @@ const arraySubQueryExpr: Parser<Expression> = seq(
   parenthesized(lazy(() => select))
 )
 
+const caseBranch: Parser<Expression.CaseBranch> = seq(
+  (_when, condition, _then, result) => ({ condition, result }),
+  reservedWord('WHEN'),
+  lazy(() => expression),
+  reservedWord('THEN'),
+  lazy(() => expression)
+)
+
+const caseElse: Parser<Expression> = seq(
+  $2,
+  reservedWord('ELSE'),
+  lazy(() => expression)
+)
+
+const caseExpr: Parser<Expression> = seq(
+  (_case, branch1, branches, else_, _end) =>
+    Expression.createCase([branch1, ...branches], else_),
+  reservedWord('CASE'),
+  caseBranch,
+  many(caseBranch),
+  optional(caseElse),
+  reservedWord('END')
+)
+
 const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
     // func(*} means no arguments
@@ -158,6 +182,7 @@ const primaryExpr: Parser<Expression> = seq(
     typeCast != null ? Expression.createTypeCast(expr, typeCast) : expr,
   oneOf(
     arraySubQueryExpr,
+    caseExpr,
     attempt(specialFunctionCall(lazy(() => primaryExpr))),
     columnRefOrFunctionCallExpr,
     constantExpr,

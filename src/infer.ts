@@ -687,6 +687,51 @@ function inferExpressionNullability(
           })
         ),
 
+      case: ({ branches, else_ }) => {
+        if (else_ === null) {
+          // No ELSE branch => Rows that match none of the branches
+          // will be NULL
+          return anyTE(true)
+        }
+        return pipe(
+          TaskEither.right(
+            (branchNullabilities: FieldNullability[]) => (
+              elseNullability: FieldNullability
+            ) =>
+              branchNullabilities.reduce(
+                (a, b) => FieldNullability.disjunction(a)(b),
+                elseNullability
+              )
+          ),
+          TaskEither.ap(
+            pipe(
+              branches.map(({ condition, result }) => {
+                const nonNullExprsByCond = getNonNullSubExpressionsFromRowCond(
+                  condition
+                )
+                return inferExpressionNullability(
+                  client,
+                  outsideCTEs,
+                  sourceColumns,
+                  [...nonNullExprsByCond, ...nonNullExprs],
+                  result
+                )
+              }),
+              sequenceATE
+            )
+          ),
+          TaskEither.ap(
+            inferExpressionNullability(
+              client,
+              outsideCTEs,
+              sourceColumns,
+              nonNullExprs,
+              else_
+            )
+          )
+        )
+      },
+
       // A type cast evaluates to NULL if the expression to be casted is
       // NULL.
       typeCast: ({ lhs }) =>
