@@ -743,8 +743,8 @@ function inferExpressionNullability(
           lhs
         ),
 
-      // A constant is never NULL
-      constant: () => anyTE(false),
+      // NULL is the only nullable constant
+      constant: ({ valueText }) => anyTE(valueText === 'NULL'),
 
       // A parameter can be NULL
       parameter: () => anyTE(true),

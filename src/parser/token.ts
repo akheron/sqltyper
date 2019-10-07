@@ -78,7 +78,7 @@ export const identifier = seq(
 
 export function expectIdentifier<T extends string>(ident: T): Parser<T> {
   return seq(
-    $1,
+    _ => ident,
     attempt(
       map(
         (match, toError) =>
