@@ -14,6 +14,7 @@ export type Expression =
   | Expression.InOp
   | Expression.FunctionCall
   | Expression.ArraySubQuery
+  | Expression.Case
   | Expression.TypeCast
 
 export namespace Expression {
@@ -145,6 +146,24 @@ export namespace Expression {
     return { kind: 'ArraySubQuery', subquery }
   }
 
+  export type CaseBranch = {
+    condition: Expression
+    result: Expression
+  }
+
+  export type Case = {
+    kind: 'Case'
+    branches: CaseBranch[]
+    else_: Expression | null
+  }
+
+  export function createCase(
+    branches: CaseBranch[],
+    else_: Expression | null
+  ): Case {
+    return { kind: 'Case', branches, else_ }
+  }
+
   export type TypeCast = {
     kind: 'TypeCast'
     lhs: Expression
@@ -173,6 +192,7 @@ export namespace Expression {
       inOp?: (value: InOp) => T
       functionCall?: (value: FunctionCall) => T
       arraySubQuery?: (value: ArraySubQuery) => T
+      case?: (value: Case) => T
       typeCast?: (value: TypeCast) => T
     }
   ): T {
@@ -205,6 +225,8 @@ export namespace Expression {
         return handlers.arraySubQuery == null
           ? elseVal
           : handlers.arraySubQuery(expr)
+      case 'Case':
+        return handlers.case == null ? elseVal : handlers.case(expr)
       case 'TypeCast':
         return handlers.typeCast == null ? elseVal : handlers.typeCast(expr)
     }
@@ -224,6 +246,7 @@ export namespace Expression {
       inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
       arraySubQuery: (value: ArraySubQuery) => T
+      case: (value: Case) => T
       typeCast: (value: TypeCast) => T
     }
   ): T {
@@ -250,6 +273,8 @@ export namespace Expression {
         return handlers.functionCall(expr)
       case 'ArraySubQuery':
         return handlers.arraySubQuery(expr)
+      case 'Case':
+        return handlers.case(expr)
       case 'TypeCast':
         return handlers.typeCast(expr)
     }
@@ -302,7 +327,16 @@ export namespace Expression {
       case 'ArraySubQuery':
         if (a.kind !== b.kind) return false
         return false // TODO
-
+      case 'Case':
+        if (a.kind !== b.kind) return false
+        return (
+          R.zip(a.branches, b.branches).every(
+            ([ab, bb]) =>
+              equals(ab.condition, bb.condition) && equals(ab.result, bb.result)
+          ) &&
+          ((a.else_ !== null && b.else_ !== null && equals(a.else_, b.else_)) ||
+            (a.else_ === null && b.else_ === null))
+        )
       case 'TypeCast':
         if (a.kind !== b.kind) return false
         return equals(a.lhs, b.lhs) && a.targetType == b.targetType
