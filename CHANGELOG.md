@@ -1,6 +1,14 @@
 # Changelog
 ===========
 
+## 0.2.2
+
+- **Enhancements**
+  - More condensed console output (#14)
+  - Don't write files if they're up to date (#13)
+  - Add a comment noting that `.ts` files are generated (#12)
+  - Infer parameter nullability correctly (#10)
+
 ## 0.2.1
 
 - **Enhancements**
