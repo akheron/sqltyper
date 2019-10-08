@@ -434,17 +434,10 @@ function processSQLFile(
       })
     ),
     TaskEither.chain(tsCode => async () => {
-      if (checkOnly) {
-        let oldTsCode: string | null
-        try {
-          oldTsCode = await fs.readFile(tsPath, 'utf-8')
-        } catch (_err) {
-          oldTsCode = null
-        }
-        if (oldTsCode != tsCode) {
+      if (await isFileOutOfDate(tsPath, tsCode)) {
+        if (checkOnly) {
           return Either.left(`=> out of date`)
         }
-      } else {
         await fs.writeFile(tsPath, tsCode).then(Either.right)
       }
       return Either.right(undefined)
@@ -507,11 +500,25 @@ function maybeWriteIndexModule(
           prettierFileName: prettify ? tsPath : null,
         })
       ),
-      Task.chain(tsCode => () => fs.writeFile(tsPath, tsCode)),
+      Task.chain(tsCode => async () => {
+        if (await isFileOutOfDate(tsPath, tsCode)) {
+          await fs.writeFile(tsPath, tsCode)
+        }
+      }),
       Task.map(() => tsModules)
     )
   }
   return Task.of(tsModules)
+}
+
+async function isFileOutOfDate(filePath: string, newContents: string) {
+  let oldContents: string | null
+  try {
+    oldContents = await fs.readFile(filePath, 'utf-8')
+  } catch (_err) {
+    oldContents = null
+  }
+  return oldContents !== newContents
 }
 
 function funcName(filePath: string) {
