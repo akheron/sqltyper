@@ -34,6 +34,7 @@ export function sqlToStatementDescription(
 
 export function generateTSCode(
   clients: Clients,
+  sourceFileName: string,
   stmt: StatementDescription,
   funcName: string,
   options?: {
@@ -49,7 +50,13 @@ export function generateTSCode(
     TaskEither.right(stmt),
     TaskEither.chain(stmt =>
       TaskEither.rightTask(
-        generateTypeScript(clients.types, pgModule, funcName, stmt)
+        generateTypeScript(
+          clients.types,
+          sourceFileName,
+          pgModule,
+          funcName,
+          stmt
+        )
       )
     ),
     TaskEither.chain(tsCode =>

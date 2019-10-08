@@ -4,7 +4,8 @@
     "target": "es6",
     "module": "commonjs",
     "strict": true,
-    "allowJs": true
+    "allowJs": true,
+    "resolveJsonModule": true
   },
   "include": [
     "src"

@@ -428,7 +428,7 @@ function processSQLFile(
       return stmt
     }),
     TaskEither.chain(source =>
-      generateTSCode(clients, source, fnName, {
+      generateTSCode(clients, path.basename(filePath), source, fnName, {
         prettierFileName: options.prettify ? tsPath : undefined,
         pgModule: options.pgModule,
       })
