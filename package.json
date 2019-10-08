@@ -10,7 +10,7 @@
     "dist"
   ],
   "bin": {
-    "sqltyper": "dist/cli.js"
+    "sqltyper": "dist/src/cli.js"
   },
   "scripts": {
     "sql": "ts-node src/cli.ts --prettify --pg-module ../pg src/sql/",
