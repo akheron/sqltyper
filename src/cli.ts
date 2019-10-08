@@ -193,6 +193,7 @@ async function watchDirectories(
     options
   )()
 
+  console.log('Watching for file changes...')
   const eventBuffer: WatchEvent[] = []
   let handlingEvents = false
   const eventHandler = makeWatchEventHandler(clients, options)
@@ -273,7 +274,7 @@ function makeWatchEventHandler(
             pipe(
               tsModuleOption,
               Option.map(tsModule => replaceOrAddTsModule(tsModule, tsModules)),
-              Option.getOrElse(() => tsModules)
+              Option.getOrElse(() => removeTsModule(sqlFileName, tsModules))
             )
           )
         )
@@ -347,11 +348,22 @@ function processDirectories(
   dirPaths: string[],
   options: Options
 ): Task.Task<TsModuleDir[]> {
-  return mapDirectories(
-    dirPaths,
-    fileExtensions,
-    filePath => processSQLFile(clients, filePath, false, options),
-    (dirPath, tsModules) => processSQLDirectory(dirPath, tsModules, options)
+  return pipe(
+    async () => {
+      console.log('Starting compilation...')
+    },
+    Task.chain(() =>
+      mapDirectories(
+        dirPaths,
+        fileExtensions,
+        filePath => processSQLFile(clients, filePath, false, options),
+        (dirPath, tsModules) => processSQLDirectory(dirPath, tsModules, options)
+      )
+    ),
+    Task.map(result => {
+      console.log('done.')
+      return result
+    })
   )
 }
 
@@ -408,15 +420,7 @@ function processSQLFile(
   const tsPath = getOutputPath(filePath)
   const fnName = funcName(filePath)
   return pipe(
-    async () => {
-      console.log('---------------------------------------------------------')
-      if (checkOnly) {
-        console.log(`Checking ${filePath}`)
-      } else {
-        console.log(`${filePath} => ${tsPath}`)
-      }
-    },
-    Task.chain(() => () => fs.readFile(filePath)),
+    () => fs.readFile(filePath),
     Task.map(sql => sql.toString()),
     Task.chain(sql => sqlToStatementDescription(clients, sql)),
     TaskEither.map(stmt => {
@@ -436,14 +440,22 @@ function processSQLFile(
     TaskEither.chain(tsCode => async () => {
       if (await isFileOutOfDate(tsPath, tsCode)) {
         if (checkOnly) {
-          return Either.left(`=> out of date`)
+          return Either.left('out of date')
         }
+        console.log(`Writing ${tsPath}`)
         await fs.writeFile(tsPath, tsCode).then(Either.right)
       }
       return Either.right(undefined)
     }),
-    TaskEither.mapLeft(errorMessage => {
-      console.error(errorMessage)
+    TaskEither.orElse(errorMessage => async (): Promise<
+      Either.Either<undefined, undefined>
+    > => {
+      console.error(`${filePath}: ${errorMessage}`)
+      if (!checkOnly) {
+        console.log(`Removing ${tsPath}`)
+        await tryCatch(() => fs.unlink(tsPath))
+      }
+      return Either.left(undefined)
     }),
     TaskEither.map(() => ({
       sqlFileName: path.basename(filePath),
@@ -502,6 +514,7 @@ function maybeWriteIndexModule(
       ),
       Task.chain(tsCode => async () => {
         if (await isFileOutOfDate(tsPath, tsCode)) {
+          console.log(`Writing ${tsPath}`)
           await fs.writeFile(tsPath, tsCode)
         }
       }),
@@ -521,6 +534,14 @@ async function isFileOutOfDate(filePath: string, newContents: string) {
   return oldContents !== newContents
 }
 
+async function tryCatch<T>(f: () => Promise<T>): Promise<T | null> {
+  try {
+    return await f()
+  } catch (_err) {
+    return null
+  }
+}
+
 function funcName(filePath: string) {
   const parsed = path.parse(filePath)
   return camelCase(parsed.name)
@@ -533,8 +554,7 @@ async function removeOutputFile(filePath: string): Promise<void> {
   } catch (_err) {
     return
   }
-  console.log('---------------------------------------------------------')
-  console.log(`Removed ${tsPath}`)
+  console.log(`Removing ${tsPath}`)
 }
 
 function findSQLFilePaths(
