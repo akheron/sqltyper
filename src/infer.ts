@@ -9,7 +9,7 @@ import { flow, identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
-import { sequenceATE, traverseATE, traverseAE } from './fp-utils'
+import { sequenceATE, sequenceAW, traverseATE, traverseAE } from './fp-utils'
 import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
@@ -720,7 +720,7 @@ function inferExpressionNullability(
             ),
             TaskEither.map(argNullability =>
               pipe(
-                Warn.sequenceA(argNullability),
+                sequenceAW(argNullability),
                 Warn.map(an =>
                   FieldNullability.any(
                     an.some(nullability => nullability.nullable)
