@@ -14,7 +14,7 @@ import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
 import { StatementDescription, StatementRowCount, ValueType } from './types'
-import * as Warn from './warnings'
+import * as Warn from './Warn'
 
 type FieldNullability = FieldNullability.Any | FieldNullability.Array
 
