@@ -1,6 +1,11 @@
 # Changelog
 ===========
 
+## 0.2.3
+
+- **Enhancements**
+  - Emit warnings about unknown SQL functions and operators (#18)
+
 ## 0.2.2
 
 - **Enhancements**
