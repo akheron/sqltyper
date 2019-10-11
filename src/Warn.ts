@@ -40,7 +40,7 @@ export const warn_: Functor1<URI> &
     payload: fab.payload(fa.payload),
     warnings: fab.warnings.concat(fa.warnings),
   }),
-  of: ok,
+  of: of,
   reduce: (fa, b, f) => f(b, fa.payload),
   reduceRight: (fa, b, f) => f(fa.payload, b),
   foldMap: _M => (fa, f) => f(fa.payload),
@@ -55,31 +55,46 @@ export const warn_: Functor1<URI> &
     F.map(ta.payload, a => ({ payload: a, warnings: ta.warnings })),
 }
 
-export function ok<A>(payload: A): Warn<A> {
+export function of<A>(payload: A): Warn<A> {
   return { payload, warnings: [] }
 }
 
-export function warn(summary: string, description: string) {
+export function warning<A>(
+  payload: A,
+  summary: string,
+  description: string = ''
+) {
+  return {
+    payload,
+    warnings: [{ summary, description }],
+  }
+}
+
+export function addWarning(summary: string, description: string) {
   return <A>(warn: Warn<A>): Warn<A> => {
     return {
-      ...warn,
+      payload: warn.payload,
       warnings: [...warn.warnings, { summary, description }],
     }
   }
 }
 
-export function run<A>(warn: Warn<A>): [A, Warning[]] {
-  return [warn.payload, warn.warnings]
+export function make<A>(payload: A, warnings: Warning[]) {
+  return { payload, warnings }
 }
 
-export function get<A>(warn: Warn<A>): A {
-  return warn.payload
+export function split<A>(warn: Warn<A>): [A, Warning[]] {
+  return [warn.payload, warn.warnings]
 }
 
 export function map<A, B>(f: (payload: A) => B) {
   return (a: Warn<A>): Warn<B> => {
     return { ...a, payload: f(a.payload) }
   }
+}
+
+export function ap<A>(fa: Warn<A>) {
+  return <B>(fab: Warn<(a: A) => B>): Warn<B> => warn_.ap(fab, fa)
 }
 
 export function format(
@@ -91,7 +106,11 @@ export function format(
     .map(
       warning =>
         `
-WARNING: ${warning.summary}${verbose ? '\n\n' + warning.description : ''}`
+WARNING: ${warning.summary}${
+          verbose && warning.description != ''
+            ? '\n\n' + warning.description
+            : ''
+        }`
     )
     .join('\n')
 

@@ -6,20 +6,24 @@ import * as Warn from '../src/Warn'
 
 describe('Warn', () => {
   it('ok', () => {
-    expect(Warn.ok('foo')).toEqual({ payload: 'foo', warnings: [] })
+    expect(Warn.of('foo')).toEqual({ payload: 'foo', warnings: [] })
   })
 
-  it('warn', () => {
-    const ok = Warn.ok('foo')
-    const warn1 = Warn.warn('summary1', 'desc1')(ok)
-    const warn2 = Warn.warn('summary2', 'desc2')(warn1)
-
-    expect(warn1).toEqual({
+  it('warningWarning', () => {
+    const warn = Warn.warning('foo', 'summary1', 'desc1')
+    expect(warn).toEqual({
       payload: 'foo',
       warnings: [{ summary: 'summary1', description: 'desc1' }],
     })
+  })
 
-    expect(warn2).toEqual({
+  it('addWarning', () => {
+    const warn = pipe(
+      Warn.of('foo'),
+      Warn.addWarning('summary1', 'desc1'),
+      Warn.addWarning('summary2', 'desc2')
+    )
+    expect(warn).toEqual({
       payload: 'foo',
       warnings: [
         { summary: 'summary1', description: 'desc1' },
@@ -30,9 +34,9 @@ describe('Warn', () => {
 
   describe('typeclass instances', () => {
     const warn = pipe(
-      Warn.ok('foo'),
-      Warn.warn('summary1', 'desc1'),
-      Warn.warn('summary2', 'desc2')
+      Warn.of('foo'),
+      Warn.addWarning('summary1', 'desc1'),
+      Warn.addWarning('summary2', 'desc2')
     )
     const originalWarnings = warn.warnings
 
@@ -45,8 +49,8 @@ describe('Warn', () => {
 
     it('ap', () => {
       const fw = pipe(
-        Warn.ok((x: string) => x + 'bar'),
-        Warn.warn('summary0', 'desc0')
+        Warn.of((x: string) => x + 'bar'),
+        Warn.addWarning('summary0', 'desc0')
       )
       expect(Warn.warn_.ap(fw, warn)).toEqual({
         payload: 'foobar',
@@ -81,9 +85,9 @@ describe('Warn', () => {
 
     it('traverse', () => {
       const warnOpt = pipe(
-        Warn.ok(Option.some('foo')),
-        Warn.warn('summary1', 'desc1'),
-        Warn.warn('summary2', 'desc2')
+        Warn.of(Option.some('foo')),
+        Warn.addWarning('summary1', 'desc1'),
+        Warn.addWarning('summary2', 'desc2')
       )
       const originalWarnings = warnOpt.warnings
 
@@ -94,9 +98,9 @@ describe('Warn', () => {
 
     it('sequence', () => {
       const warnOpt = pipe(
-        Warn.ok(Option.some('foo')),
-        Warn.warn('summary1', 'desc1'),
-        Warn.warn('summary2', 'desc2')
+        Warn.of(Option.some('foo')),
+        Warn.addWarning('summary1', 'desc1'),
+        Warn.addWarning('summary2', 'desc2')
       )
       const originalWarnings = warnOpt.warnings
 

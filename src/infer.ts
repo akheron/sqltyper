@@ -9,12 +9,19 @@ import { flow, identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
-import { sequenceATE, sequenceAW, traverseATE, traverseAE } from './fp-utils'
+import {
+  sequenceATEW,
+  sequenceAW,
+  traverseATE,
+  traverseAE,
+  traverseATEW,
+} from './fp-utils'
 import { functionNullSafety, operatorNullSafety } from './const-utils'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
 import { StatementDescription, StatementRowCount, ValueType } from './types'
 import * as Warn from './Warn'
+import * as TaskEitherW from './TaskEitherW'
 
 type FieldNullability = FieldNullability.Any | FieldNullability.Array
 
@@ -104,7 +111,8 @@ export function inferStatementNullability(
     TaskEither.chain(astNode =>
       pipe(
         getParamNullability(client, astNode),
-        TaskEither.chain(paramNullability =>
+        TaskEitherW.fromTaskEither,
+        TaskEitherW.chain(paramNullability =>
           pipe(
             inferColumnNullability(
               client,
@@ -112,21 +120,21 @@ export function inferStatementNullability(
               paramNullability,
               astNode
             ),
-            TaskEither.map(stmt =>
+            TaskEitherW.map(stmt =>
               applyParamNullability(stmt, paramNullability)
             )
           )
         ),
-        TaskEither.map(stmt => inferRowCount(stmt, astNode)),
-        TaskEither.map(stmt => Warn.ok(stmt))
+        TaskEitherW.map(stmt => inferRowCount(stmt, astNode))
       )
     ),
     TaskEither.getOrElse(parseErrorStr =>
       Task.of(
-        Warn.warn(
+        Warn.warning(
+          statement,
           'The internal SQL parser failed to parse the SQL statement.',
           `Parse error: ${parseErrorStr}`
-        )(Warn.ok(statement))
+        )
       )
     )
   )
@@ -137,11 +145,11 @@ export function inferColumnNullability(
   statement: StatementDescription,
   paramNullability: ParamNullability[],
   tree: ast.AST
-): TaskEither.TaskEither<string, StatementDescription> {
+): TaskEitherW.TaskEitherW<string, StatementDescription> {
   return pipe(
     getOutputColumns(client, [], paramNullability, tree),
-    TaskEither.chain(outputColumns =>
-      TaskEither.fromEither(applyColumnNullability(statement, outputColumns))
+    TaskEitherW.chain(outputColumns =>
+      TaskEitherW.fromEither(applyColumnNullability(statement, outputColumns))
     )
   )
 }
@@ -151,7 +159,7 @@ function getOutputColumns(
   outsideCTEs: VirtualTable[],
   paramNullability: ParamNullability[],
   tree: ast.AST
-): TaskEither.TaskEither<string, VirtualField[]> {
+): TaskEitherW.TaskEitherW<string, VirtualField[]> {
   return ast.walk(tree, {
     select: ({ ctes, body, setOps }) =>
       pipe(
@@ -159,7 +167,7 @@ function getOutputColumns(
           outsideCTEs,
           getVirtualTablesForWithQueries(client, paramNullability, ctes)
         ),
-        TaskEither.chain(combinedCTEs =>
+        TaskEitherW.chain(combinedCTEs =>
           inferSetOpsOutput(
             client,
             combinedCTEs,
@@ -172,7 +180,7 @@ function getOutputColumns(
     insert: ({ table, as, returning }) =>
       pipe(
         getSourceColumnsForTable(client, outsideCTEs, table, as),
-        TaskEither.chain(sourceColumns =>
+        TaskEitherW.chain(sourceColumns =>
           inferSelectListOutput(
             client,
             outsideCTEs,
@@ -189,7 +197,7 @@ function getOutputColumns(
           outsideCTEs,
           getVirtualTablesForWithQueries(client, paramNullability, ctes)
         ),
-        TaskEither.chain(combinedCTEs =>
+        TaskEitherW.chain(combinedCTEs =>
           combineSourceColumns(
             getSourceColumnsForTableExpr(
               client,
@@ -200,7 +208,7 @@ function getOutputColumns(
             getSourceColumnsForTable(client, combinedCTEs, table, as)
           )
         ),
-        TaskEither.chain(sourceColumns =>
+        TaskEitherW.chain(sourceColumns =>
           inferSelectListOutput(
             client,
             outsideCTEs,
@@ -214,7 +222,7 @@ function getOutputColumns(
     delete: ({ table, as, where, returning }) =>
       pipe(
         getSourceColumnsForTable(client, outsideCTEs, table, as),
-        TaskEither.chain(sourceColumns =>
+        TaskEitherW.chain(sourceColumns =>
           inferSelectListOutput(
             client,
             outsideCTEs,
@@ -280,7 +288,7 @@ function inferSetOpsOutput(
   paramNullability: ParamNullability[],
   first: ast.SelectBody,
   setOps: ast.SelectOp[]
-): TaskEither.TaskEither<string, VirtualField[]> {
+): TaskEitherW.TaskEitherW<string, VirtualField[]> {
   // fp-ts's foldM is not stack safe so a manual loop is needed
   return async () => {
     let curr = await inferSelectBodyOutput(
@@ -307,7 +315,7 @@ function inferSetOpsOutput(
       }
       const columns = next.right
 
-      if (result.length != columns.length) {
+      if (result.payload.length != columns.payload.length) {
         return Either.left(`Inequal number of columns in ${setOp.op}`)
       }
 
@@ -315,14 +323,20 @@ function inferSetOpsOutput(
       // its output is not indluded
       if (setOp.op !== 'EXCEPT') {
         result = pipe(
-          Array.zip(result, columns),
-          Array.map(([a, b]) => ({
-            // Column names are determined by the first SELECT
-            name: a.name,
-            nullability: FieldNullability.disjunction(a.nullability)(
-              b.nullability
-            ),
-          }))
+          Warn.of((aa: VirtualField[]) => (bb: VirtualField[]) =>
+            pipe(
+              Array.zip(aa, bb),
+              Array.map(([a, b]) => ({
+                // Column names are determined by the first SELECT
+                name: a.name,
+                nullability: FieldNullability.disjunction(a.nullability)(
+                  b.nullability
+                ),
+              }))
+            )
+          ),
+          Warn.ap(result),
+          Warn.ap(columns)
         )
       }
     }
@@ -335,7 +349,7 @@ function inferSelectBodyOutput(
   outsideCTEs: VirtualTable[],
   paramNullability: ParamNullability[],
   body: ast.SelectBody
-): TaskEither.TaskEither<string, VirtualField[]> {
+): TaskEitherW.TaskEitherW<string, VirtualField[]> {
   return pipe(
     getSourceColumnsForTableExpr(
       client,
@@ -343,7 +357,7 @@ function inferSelectBodyOutput(
       paramNullability,
       body.from
     ),
-    TaskEither.chain(sourceColumns =>
+    TaskEitherW.chain(sourceColumns =>
       inferSelectListOutput(
         client,
         outsideCTEs,
@@ -363,17 +377,17 @@ function inferSelectListOutput(
   paramNullability: ParamNullability[],
   conditions: Array<ast.Expression | null>,
   selectList: ast.SelectListItem[]
-): TaskEither.TaskEither<string, VirtualField[]> {
+): TaskEitherW.TaskEitherW<string, VirtualField[]> {
   return pipe(
-    TaskEither.right(
+    TaskEitherW.right(
       pipe(
         conditions.map(cond => getNonNullSubExpressionsFromRowCond(cond)),
         Array.flatten
       )
     ),
-    TaskEither.chain(nonNullExpressions =>
+    TaskEitherW.chain(nonNullExpressions =>
       pipe(
-        traverseATE(selectList, item =>
+        traverseATEW(selectList, item =>
           inferSelectListItemOutput(
             client,
             outsideCTEs,
@@ -383,7 +397,7 @@ function inferSelectListOutput(
             item
           )
         ),
-        TaskEither.map(R.flatten)
+        TaskEitherW.map(R.flatten)
       )
     )
   )
@@ -396,62 +410,58 @@ function inferSelectListItemOutput(
   paramNullability: ParamNullability[],
   nonNullExpressions: ast.Expression[],
   selectListItem: ast.SelectListItem
-): TaskEither.TaskEither<string, VirtualField[]> {
-  return ast.SelectListItem.walk<TaskEither.TaskEither<string, VirtualField[]>>(
-    selectListItem,
-    {
-      allFields: () =>
-        TaskEither.fromEither(
-          pipe(
-            // hidden columns aren't selected by SELECT *
-            findNonHiddenSourceColumns(sourceColumns),
-            Either.map(columns =>
-              applyExpressionNonNullability(nonNullExpressions, columns)
-            ),
-            Either.map(columns =>
-              columns.map(column => ({
-                name: column.columnName,
-                nullability: column.nullability,
-              }))
-            )
-          )
-        ),
-
-      allTableFields: ({ tableName }) =>
-        TaskEither.fromEither(
-          pipe(
-            findNonHiddenSourceTableColumns(tableName, sourceColumns),
-            Either.map(columns =>
-              applyExpressionNonNullability(nonNullExpressions, columns)
-            ),
-            Either.map(columns =>
-              columns.map(column => ({
-                name: column.columnName,
-                nullability: column.nullability,
-              }))
-            )
-          )
-        ),
-
-      selectListExpression: ({ expression, as }) =>
+): TaskEitherW.TaskEitherW<string, VirtualField[]> {
+  return ast.SelectListItem.walk<
+    TaskEitherW.TaskEitherW<string, VirtualField[]>
+  >(selectListItem, {
+    allFields: () =>
+      TaskEitherW.fromEither(
         pipe(
-          inferExpressionNullability(
-            client,
-            outsideCTEs,
-            sourceColumns,
-            paramNullability,
-            nonNullExpressions,
-            expression
+          // hidden columns aren't selected by SELECT *
+          findNonHiddenSourceColumns(sourceColumns),
+          Either.map(columns =>
+            applyExpressionNonNullability(nonNullExpressions, columns)
           ),
-          TaskEither.map(exprNullability => [
-            virtualField(
-              as || inferExpressionName(expression),
-              Warn.get(exprNullability)
-            ),
-          ])
+          Either.map(columns =>
+            columns.map(column => ({
+              name: column.columnName,
+              nullability: column.nullability,
+            }))
+          )
+        )
+      ),
+
+    allTableFields: ({ tableName }) =>
+      TaskEitherW.fromEither(
+        pipe(
+          findNonHiddenSourceTableColumns(tableName, sourceColumns),
+          Either.map(columns =>
+            applyExpressionNonNullability(nonNullExpressions, columns)
+          ),
+          Either.map(columns =>
+            columns.map(column => ({
+              name: column.columnName,
+              nullability: column.nullability,
+            }))
+          )
+        )
+      ),
+
+    selectListExpression: ({ expression, as }) =>
+      pipe(
+        inferExpressionNullability(
+          client,
+          outsideCTEs,
+          sourceColumns,
+          paramNullability,
+          nonNullExpressions,
+          expression
         ),
-    }
-  )
+        TaskEitherW.map(exprNullability => [
+          virtualField(as || inferExpressionName(expression), exprNullability),
+        ])
+      ),
+  })
 }
 
 type NonNullableColumn = { tableName: string | null; columnName: string }
@@ -509,16 +519,16 @@ function inferExpressionNullability(
   paramNullability: ParamNullability[],
   nonNullExprs: ast.Expression[],
   expression: ast.Expression
-): TaskEither.TaskEither<string, Warn.Warn<FieldNullability>> {
+): TaskEitherW.TaskEitherW<string, FieldNullability> {
   const anyTE = flow(
     FieldNullability.any,
-    Warn.ok,
+    Warn.of,
     TaskEither.right
   )
 
   const arrayTE = flow(
     FieldNullability.array,
-    Warn.ok,
+    Warn.of,
     TaskEither.right
   )
 
@@ -529,25 +539,23 @@ function inferExpressionNullability(
     // `WHERE EXPR IS NOT NULL` clause
     return anyTE(false)
   }
-  return ast.Expression.walk<
-    TaskEither.TaskEither<string, Warn.Warn<FieldNullability>>
-  >(expression, {
+  return ast.Expression.walk(expression, {
     // A column reference may evaluate to NULL if the column doesn't
     // have a NOT NULL constraint
     tableColumnRef: ({ table, column }) =>
       pipe(
-        TaskEither.fromEither(
+        TaskEitherW.fromEither(
           findSourceTableColumn(table, column, sourceColumns)
         ),
-        TaskEither.map(column => Warn.ok(column.nullability))
+        TaskEitherW.map(column => column.nullability)
       ),
 
     // A column reference may evaluate to NULL if the column doesn't
     // have a NOT NULL constraint
     columnRef: ({ column }) =>
       pipe(
-        TaskEither.fromEither(findSourceColumn(column, sourceColumns)),
-        TaskEither.map(column => Warn.ok(column.nullability))
+        TaskEitherW.fromEither(findSourceColumn(column, sourceColumns)),
+        TaskEitherW.map(column => column.nullability)
       ),
 
     // A unary operator has two options:
@@ -573,7 +581,9 @@ function inferExpressionNullability(
         case 'neverNull':
           return anyTE(false)
         case null:
-          return anyTE(true)
+          return TaskEither.right(
+            Warn.warning(FieldNullability.any(true), `Unknown operator '${op}'`)
+          )
       }
     },
 
@@ -593,8 +603,8 @@ function inferExpressionNullability(
       switch (nullSafety) {
         case 'safe':
           return pipe(
-            TaskEither.right(FieldNullability.disjunction),
-            TaskEither.ap(
+            TaskEitherW.right(FieldNullability.disjunction),
+            TaskEitherW.ap(
               pipe(
                 inferExpressionNullability(
                   client,
@@ -603,11 +613,10 @@ function inferExpressionNullability(
                   paramNullability,
                   nonNullExprs,
                   lhs
-                ),
-                TaskEither.map(Warn.get)
+                )
               )
             ),
-            TaskEither.ap(
+            TaskEitherW.ap(
               pipe(
                 inferExpressionNullability(
                   client,
@@ -616,18 +625,18 @@ function inferExpressionNullability(
                   paramNullability,
                   nonNullExprs,
                   rhs
-                ),
-                TaskEither.map(Warn.get)
+                )
               )
-            ),
-            TaskEither.map(Warn.ok)
+            )
           )
         case 'unsafe':
           return anyTE(true)
         case 'neverNull':
           return anyTE(false)
         case null:
-          return anyTE(true)
+          return TaskEither.right(
+            Warn.warning(FieldNullability.any(true), `Unknown operator '${op}'`)
+          )
       }
     },
 
@@ -635,7 +644,7 @@ function inferExpressionNullability(
       switch (operatorNullSafety(op)) {
         case 'safe':
           return pipe(
-            TaskEither.right(
+            TaskEitherW.right(
               (a: FieldNullability) => (b: FieldNullability) => (
                 c: FieldNullability
               ) =>
@@ -643,53 +652,45 @@ function inferExpressionNullability(
                   FieldNullability.disjunction(a)(b)
                 )(c)
             ),
-            TaskEither.ap(
-              pipe(
-                inferExpressionNullability(
-                  client,
-                  outsideCTEs,
-                  sourceColumns,
-                  paramNullability,
-                  nonNullExprs,
-                  lhs
-                ),
-                TaskEither.map(Warn.get)
+            TaskEitherW.ap(
+              inferExpressionNullability(
+                client,
+                outsideCTEs,
+                sourceColumns,
+                paramNullability,
+                nonNullExprs,
+                lhs
               )
             ),
-            TaskEither.ap(
-              pipe(
-                inferExpressionNullability(
-                  client,
-                  outsideCTEs,
-                  sourceColumns,
-                  paramNullability,
-                  nonNullExprs,
-                  rhs1
-                ),
-                TaskEither.map(Warn.get)
+            TaskEitherW.ap(
+              inferExpressionNullability(
+                client,
+                outsideCTEs,
+                sourceColumns,
+                paramNullability,
+                nonNullExprs,
+                rhs1
               )
             ),
-            TaskEither.ap(
-              pipe(
-                inferExpressionNullability(
-                  client,
-                  outsideCTEs,
-                  sourceColumns,
-                  paramNullability,
-                  nonNullExprs,
-                  rhs2
-                ),
-                TaskEither.map(Warn.get)
+            TaskEitherW.ap(
+              inferExpressionNullability(
+                client,
+                outsideCTEs,
+                sourceColumns,
+                paramNullability,
+                nonNullExprs,
+                rhs2
               )
-            ),
-            TaskEither.map(Warn.ok)
+            )
           )
         case 'unsafe':
           return anyTE(true)
         case 'neverNull':
           return anyTE(false)
         case null:
-          return anyTE(true)
+          return TaskEither.right(
+            Warn.warning(FieldNullability.any(true), `Unknown operator '${op}'`)
+          )
       }
     },
 
@@ -734,7 +735,12 @@ function inferExpressionNullability(
         case 'neverNull':
           return anyTE(false)
         case null:
-          return anyTE(true)
+          return TaskEither.right(
+            Warn.warning(
+              FieldNullability.any(true),
+              `Unknown function '${funcName}'`
+            )
+          )
       }
     },
 
@@ -754,7 +760,7 @@ function inferExpressionNullability(
     arraySubQuery: ({ subquery }) =>
       pipe(
         getOutputColumns(client, outsideCTEs, paramNullability, subquery),
-        TaskEither.chain(columns => {
+        TaskEitherW.chain(columns => {
           if (columns.length != 1)
             return TaskEither.left('subquery must return only one column')
           return arrayTE(
@@ -773,7 +779,7 @@ function inferExpressionNullability(
         return anyTE(true)
       }
       return pipe(
-        TaskEither.right(
+        TaskEitherW.right(
           (branchNullabilities: FieldNullability[]) => (
             elseNullability: FieldNullability
           ) =>
@@ -782,41 +788,34 @@ function inferExpressionNullability(
               elseNullability
             )
         ),
-        TaskEither.ap(
+        TaskEitherW.ap(
           pipe(
             branches.map(({ condition, result }) => {
               const nonNullExprsByCond = getNonNullSubExpressionsFromRowCond(
                 condition
               )
-              return pipe(
-                inferExpressionNullability(
-                  client,
-                  outsideCTEs,
-                  sourceColumns,
-                  paramNullability,
-                  [...nonNullExprsByCond, ...nonNullExprs],
-                  result
-                ),
-                TaskEither.map(Warn.get)
+              return inferExpressionNullability(
+                client,
+                outsideCTEs,
+                sourceColumns,
+                paramNullability,
+                [...nonNullExprsByCond, ...nonNullExprs],
+                result
               )
             }),
-            sequenceATE
+            sequenceATEW
           )
         ),
-        TaskEither.ap(
-          pipe(
-            inferExpressionNullability(
-              client,
-              outsideCTEs,
-              sourceColumns,
-              paramNullability,
-              nonNullExprs,
-              else_
-            ),
-            TaskEither.map(Warn.get)
+        TaskEitherW.ap(
+          inferExpressionNullability(
+            client,
+            outsideCTEs,
+            sourceColumns,
+            paramNullability,
+            nonNullExprs,
+            else_
           )
-        ),
-        TaskEither.map(Warn.ok)
+        )
       )
     },
 
@@ -1130,9 +1129,11 @@ function getVirtualTablesForWithQueries(
   client: SchemaClient,
   paramNullability: ParamNullability[],
   withQueries: ast.WithQuery[]
-): TaskEither.TaskEither<string, VirtualTable[]> {
+): TaskEitherW.TaskEitherW<string, VirtualTable[]> {
   return async () => {
     const virtualTables: VirtualTable[] = []
+    let warnings: Warn.Warning[] = []
+
     for (const withQuery of withQueries) {
       // "Virtual tables" from previous WITH queries are available
       const virtualTable = pipe(
@@ -1142,24 +1143,31 @@ function getVirtualTablesForWithQueries(
           paramNullability,
           withQuery.query
         )(),
-        Either.map(columns => ({ name: withQuery.as, columns }))
+        Either.map(columnsWithWarnings =>
+          pipe(
+            columnsWithWarnings,
+            Warn.map(columns => ({ name: withQuery.as, columns }))
+          )
+        )
       )
       if (Either.isLeft(virtualTable)) {
         return virtualTable
       }
-      virtualTables.push(virtualTable.right)
+      virtualTables.push(virtualTable.right.payload)
+      warnings = warnings.concat(virtualTable.right.warnings)
     }
-    return Either.right(virtualTables)
+
+    return Either.right(Warn.make(virtualTables, warnings))
   }
 }
 
 function combineVirtualTables(
   outsideCTEs: VirtualTable[],
-  ctes: TaskEither.TaskEither<string, VirtualTable[]>
-): TaskEither.TaskEither<string, VirtualTable[]> {
+  ctes: TaskEitherW.TaskEitherW<string, VirtualTable[]>
+): TaskEitherW.TaskEitherW<string, VirtualTable[]> {
   return pipe(
     ctes,
-    TaskEither.map(virtualTables => [...outsideCTEs, ...virtualTables])
+    TaskEitherW.map(virtualTables => [...outsideCTEs, ...virtualTables])
   )
 }
 
@@ -1168,12 +1176,12 @@ function getSourceColumnsForTable(
   ctes: VirtualTable[],
   table: ast.TableRef,
   as: string | null
-): TaskEither.TaskEither<string, SourceColumn[]> {
+): TaskEitherW.TaskEitherW<string, SourceColumn[]> {
   if (table.schema == null) {
     // Try to find a matching CTE
     const result = ctes.find(virtualTable => virtualTable.name === table.table)
     if (result)
-      return TaskEither.right(
+      return TaskEitherW.right(
         result.columns.map(col => ({
           tableAlias: as || table.table,
           columnName: col.name,
@@ -1193,7 +1201,8 @@ function getSourceColumnsForTable(
         nullability: FieldNullability.any(col.nullable),
         hidden: col.hidden,
       }))
-    )
+    ),
+    TaskEitherW.fromTaskEither
   )
 }
 
@@ -1203,9 +1212,9 @@ function getSourceColumnsForTableExpr(
   paramNullability: ParamNullability[],
   tableExpr: ast.TableExpression | null,
   setNullable: boolean = false
-): TaskEither.TaskEither<string, SourceColumn[]> {
+): TaskEitherW.TaskEitherW<string, SourceColumn[]> {
   if (!tableExpr) {
-    return TaskEither.right([])
+    return TaskEitherW.right([])
   }
 
   return pipe(
@@ -1251,7 +1260,7 @@ function getSourceColumnsForTableExpr(
           )
         ),
     }),
-    TaskEither.map(sourceColumns =>
+    TaskEitherW.map(sourceColumns =>
       setNullable ? setSourceColumnsAsNullable(sourceColumns) : sourceColumns
     )
   )
@@ -1263,10 +1272,10 @@ function getSourceColumnsForSubQuery(
   paramNullability: ParamNullability[],
   subquery: ast.AST,
   as: string
-): TaskEither.TaskEither<string, SourceColumn[]> {
+): TaskEitherW.TaskEitherW<string, SourceColumn[]> {
   return pipe(
     getOutputColumns(client, outsideCTEs, paramNullability, subquery),
-    TaskEither.map(columns =>
+    TaskEitherW.map(columns =>
       columns.map(column => ({
         tableAlias: as,
         columnName: column.name,
@@ -1287,12 +1296,12 @@ function setSourceColumnsAsNullable(
 }
 
 function combineSourceColumns(
-  ...sourceColumns: Array<TaskEither.TaskEither<string, SourceColumn[]>>
-): TaskEither.TaskEither<string, SourceColumn[]> {
+  ...sourceColumns: Array<TaskEitherW.TaskEitherW<string, SourceColumn[]>>
+): TaskEitherW.TaskEitherW<string, SourceColumn[]> {
   return pipe(
     sourceColumns,
-    sequenceATE,
-    TaskEither.map(R.flatten)
+    sequenceATEW,
+    TaskEitherW.map(R.flatten)
   )
 }
 
