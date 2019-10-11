@@ -14,11 +14,12 @@ import { inferStatementNullability } from './infer'
 import { preprocessSQL } from './preprocess'
 import { runPrettier } from './prettify'
 import { StatementDescription } from './types'
+import * as Warn from './warnings'
 
 export function sqlToStatementDescription(
   clients: Clients,
   sql: string
-): TaskEither.TaskEither<string, StatementDescription> {
+): TaskEither.TaskEither<string, Warn.Warn<StatementDescription>> {
   return pipe(
     Task.of(sql),
     Task.map(preprocessSQL),

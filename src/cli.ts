@@ -25,7 +25,7 @@ import {
   TsModuleDir,
 } from './index'
 import { traverseATs } from './fp-utils'
-import { hasWarnings, formatWarnings } from './warnings'
+import * as Warn from './warnings'
 
 type Options = {
   verbose: boolean
@@ -423,10 +423,11 @@ function processSQLFile(
     () => fs.readFile(filePath),
     Task.map(sql => sql.toString()),
     Task.chain(sql => sqlToStatementDescription(clients, sql)),
-    TaskEither.map(stmt => {
-      if (hasWarnings(stmt)) {
+    TaskEither.map(stmtWithWarnings => {
+      const [stmt, warnings] = Warn.run(stmtWithWarnings)
+      if (warnings.length > 0) {
         console.warn(
-          formatWarnings(stmt, options.verbose, options.terminalColumns || 78)
+          Warn.format(warnings, options.verbose, options.terminalColumns || 78)
         )
       }
       return stmt
