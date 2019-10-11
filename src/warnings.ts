@@ -1,4 +1,20 @@
+import { Applicative, Applicative1 } from 'fp-ts/lib/Applicative'
+import { Apply1 } from 'fp-ts/lib/Apply'
+import { Foldable1 } from 'fp-ts/lib/Foldable'
+import { Functor1 } from 'fp-ts/lib/Functor'
+import { HKT } from 'fp-ts/lib/HKT'
+import { Traversable1 } from 'fp-ts/lib/Traversable'
+
 import wrapAnsi = require('wrap-ansi')
+
+export const URI = 'Warn'
+export type URI = typeof URI
+
+declare module 'fp-ts/lib/HKT' {
+  interface URItoKind<A> {
+    Warn: Warn<A>
+  }
+}
 
 export type Warn<A> = {
   payload: A
@@ -8,6 +24,35 @@ export type Warn<A> = {
 export type Warning = {
   summary: string
   description: string
+}
+
+export const warn_: Functor1<URI> &
+  Apply1<URI> &
+  Applicative1<URI> &
+  Foldable1<URI> &
+  Traversable1<URI> = {
+  URI,
+  map: (ma, f) => ({
+    payload: f(ma.payload),
+    warnings: ma.warnings,
+  }),
+  ap: (fab, fa) => ({
+    payload: fab.payload(fa.payload),
+    warnings: fab.warnings.concat(fa.warnings),
+  }),
+  of: ok,
+  reduce: (fa, b, f) => f(b, fa.payload),
+  reduceRight: (fa, b, f) => f(fa.payload, b),
+  foldMap: _M => (fa, f) => f(fa.payload),
+  traverse: <F>(F: Applicative<F>) => <A, B>(
+    ta: Warn<A>,
+    f: (a: A) => HKT<F, B>
+  ): HKT<F, Warn<B>> =>
+    F.map(f(ta.payload), b => ({ payload: b, warnings: ta.warnings })),
+  sequence: <F>(F: Applicative<F>) => <A>(
+    ta: Warn<HKT<F, A>>
+  ): HKT<F, Warn<A>> =>
+    F.map(ta.payload, a => ({ payload: a, warnings: ta.warnings })),
 }
 
 export function ok<A>(payload: A): Warn<A> {
@@ -35,16 +80,6 @@ export function map<A, B>(f: (payload: A) => B) {
   return (a: Warn<A>): Warn<B> => {
     return { ...a, payload: f(a.payload) }
   }
-}
-
-export function sequenceA<A>(warns: Warn<A>[]): Warn<A[]> {
-  const payload: A[] = []
-  let warnings: Warning[] = []
-  for (const warn of warns) {
-    payload.push(warn.payload)
-    warnings = warnings.concat(warn.warnings)
-  }
-  return { payload, warnings }
 }
 
 export function format(
