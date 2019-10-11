@@ -68,7 +68,7 @@ describe('Integration tests', () => {
           return await pipe(
             sqlToStatementDescription(clients, testFile.query),
             TaskEither.chain(stmtWithWarnings => {
-              const [stmt, warnings] = Warn.run(stmtWithWarnings)
+              const [stmt, warnings] = Warn.split(stmtWithWarnings)
               if (warnings.length > 0) {
                 return TaskEither.left(
                   Warn.format(warnings, true, process.stdout.columns || 78)

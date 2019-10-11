@@ -424,7 +424,7 @@ function processSQLFile(
     Task.map(sql => sql.toString()),
     Task.chain(sql => sqlToStatementDescription(clients, sql)),
     TaskEither.map(stmtWithWarnings => {
-      const [stmt, warnings] = Warn.run(stmtWithWarnings)
+      const [stmt, warnings] = Warn.split(stmtWithWarnings)
       if (warnings.length > 0) {
         console.warn(
           Warn.format(warnings, options.verbose, options.terminalColumns || 78)
