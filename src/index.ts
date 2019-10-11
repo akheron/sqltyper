@@ -14,7 +14,7 @@ import { inferStatementNullability } from './infer'
 import { preprocessSQL } from './preprocess'
 import { runPrettier } from './prettify'
 import { StatementDescription } from './types'
-import * as Warn from './warnings'
+import * as Warn from './Warn'
 
 export function sqlToStatementDescription(
   clients: Clients,

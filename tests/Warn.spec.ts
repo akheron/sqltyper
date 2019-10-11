@@ -2,7 +2,7 @@ import * as Monoid from 'fp-ts/lib/Monoid'
 import * as Option from 'fp-ts/lib/Option'
 import { identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
-import * as Warn from '../src/warnings'
+import * as Warn from '../src/Warn'
 
 describe('Warn', () => {
   it('ok', () => {

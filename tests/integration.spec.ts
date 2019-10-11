@@ -13,7 +13,7 @@ import * as C from '../src/clients'
 import { StatementRowCount, StatementDescription } from '../src/types'
 import { traverseATs, traverseAE } from '../src/fp-utils'
 import { pgErrorToString } from '../src/describe'
-import * as Warn from '../src/warnings'
+import * as Warn from '../src/Warn'
 
 // Dynamically create a test case from each integration/*.sql file
 

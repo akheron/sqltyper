@@ -25,7 +25,7 @@ import {
   TsModuleDir,
 } from './index'
 import { traverseATs } from './fp-utils'
-import * as Warn from './warnings'
+import * as Warn from './Warn'
 
 type Options = {
   verbose: boolean
