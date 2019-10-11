@@ -44,10 +44,16 @@ describe('Warn', () => {
     })
 
     it('ap', () => {
-      const fw = Warn.ok((x: string) => x + 'bar')
+      const fw = pipe(
+        Warn.ok((x: string) => x + 'bar'),
+        Warn.warn('summary0', 'desc0')
+      )
       expect(Warn.warn_.ap(fw, warn)).toEqual({
         payload: 'foobar',
-        warnings: originalWarnings,
+        warnings: [
+          { summary: 'summary0', description: 'desc0' },
+          ...originalWarnings,
+        ],
       })
     })
 
