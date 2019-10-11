@@ -22,11 +22,11 @@ export function isOperatorCommutative(name: string): boolean {
   )
 }
 
-export function operatorNullSafety(name: string): NullSafety {
+export function operatorNullSafety(name: string): NullSafety | null {
   return pipe(
     findOperator(name),
     Option.map(op => op.nullSafety),
-    Option.getOrElse<NullSafety>(() => 'unsafe')
+    Option.toNullable
   )
 }
 
@@ -35,10 +35,10 @@ export function findFunction(name: string): Option.Option<Function> {
   return Option.fromNullable(functions.find(f => f.name === downCaseName))
 }
 
-export function functionNullSafety(name: string): NullSafety {
+export function functionNullSafety(name: string): NullSafety | null {
   return pipe(
     findFunction(name),
     Option.map(func => func.nullSafety),
-    Option.getOrElse<NullSafety>(() => 'unsafe')
+    Option.toNullable
   )
 }

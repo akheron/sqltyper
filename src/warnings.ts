@@ -1,28 +1,58 @@
-import { StatementDescription } from './types'
 import wrapAnsi = require('wrap-ansi')
 
-export function warn(
-  summary: string,
-  description: string,
-  stmt: StatementDescription
-): StatementDescription {
-  // TODO: Lenses would be nice
-  return {
-    ...stmt,
-    warnings: [...stmt.warnings, { summary, description }],
+export type Warn<A> = {
+  payload: A
+  warnings: Warning[]
+}
+
+export type Warning = {
+  summary: string
+  description: string
+}
+
+export function ok<A>(payload: A): Warn<A> {
+  return { payload, warnings: [] }
+}
+
+export function warn(summary: string, description: string) {
+  return <A>(warn: Warn<A>): Warn<A> => {
+    return {
+      ...warn,
+      warnings: [...warn.warnings, { summary, description }],
+    }
   }
 }
 
-export function hasWarnings(stmt: StatementDescription): boolean {
-  return stmt.warnings.length > 0
+export function run<A>(warn: Warn<A>): [A, Warning[]] {
+  return [warn.payload, warn.warnings]
 }
 
-export function formatWarnings(
-  stmt: StatementDescription,
+export function get<A>(warn: Warn<A>): A {
+  return warn.payload
+}
+
+export function map<A, B>(f: (payload: A) => B) {
+  return (a: Warn<A>): Warn<B> => {
+    return { ...a, payload: f(a.payload) }
+  }
+}
+
+export function sequenceA<A>(warns: Warn<A>[]): Warn<A[]> {
+  const payload: A[] = []
+  let warnings: Warning[] = []
+  for (const warn of warns) {
+    payload.push(warn.payload)
+    warnings = warnings.concat(warn.warnings)
+  }
+  return { payload, warnings }
+}
+
+export function format(
+  warnings: Warning[],
   verbose: boolean,
   columns: number
 ): string {
-  let result = stmt.warnings
+  let result = warnings
     .map(
       warning =>
         `
