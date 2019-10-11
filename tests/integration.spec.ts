@@ -3,9 +3,12 @@ import * as path from 'path'
 
 import * as pg from '../src/pg'
 
+import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
+import * as Ord from 'fp-ts/lib/Ord'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
+import { identity } from 'fp-ts/lib/function'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import { sqlToStatementDescription } from '../src/index'
@@ -68,16 +71,19 @@ describe('Integration tests', () => {
           return await pipe(
             sqlToStatementDescription(clients, testFile.query),
             TaskEither.chain(stmtWithWarnings => {
-              const [stmt, warnings] = Warn.split(stmtWithWarnings)
-              if (warnings.length > 0) {
+              const warnings = stmtWithWarnings.warnings
+              if (testFile.warnings.length === 0 && warnings.length > 0) {
+                // No warnings expected => Treat warnings as errors
                 return TaskEither.left(
                   Warn.format(warnings, true, process.stdout.columns || 78)
                 )
               }
-              return TaskEither.right(stmt)
+              return TaskEither.right(stmtWithWarnings)
             }),
-            TaskEither.chain(stmt =>
-              TaskEither.rightTask(checkExpectations(clients, testFile, stmt))
+            TaskEither.chain(stmtWithWarnings =>
+              TaskEither.rightTask(
+                checkExpectations(clients, testFile, stmtWithWarnings)
+              )
             )
           )()
         })
@@ -92,10 +98,14 @@ describe('Integration tests', () => {
 function checkExpectations(
   clients: C.Clients,
   testFile: TestFile,
-  statementDescription: StatementDescription
+  statementDescriptionWithWarnings: Warn.Warn<StatementDescription>
 ): Task.Task<void> {
   // Throws on errors
   return async () => {
+    const [statementDescription, warnings] = Warn.split(
+      statementDescriptionWithWarnings
+    )
+
     // Expected row count
     expect(testFile.outputRowCount).toEqual(statementDescription.rowCount)
 
@@ -115,6 +125,19 @@ function checkExpectations(
       ),
       Task.map(paramTypes => expect(paramTypes).toEqual(testFile.paramTypes))
     )()
+
+    // Expected warnings (only check the summary)
+    expect(
+      pipe(
+        testFile.warnings,
+        Array.sort(Ord.ordString)
+      )
+    ).toEqual(
+      pipe(
+        warnings.map(w => w.summary),
+        Array.sort(Ord.ordString)
+      )
+    )
   }
 }
 
@@ -128,11 +151,12 @@ function isSkippedTestFileName(fileName: string): boolean {
 
 type TestFile = {
   filePath: string
-  setup: string[]
+  setup: string
   query: string
   outputRowCount: StatementRowCount
   columnTypes: Field[]
   paramTypes: Field[]
+  warnings: string[]
 }
 
 type Field = {
@@ -145,25 +169,23 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
     encoding: 'utf-8',
   })
 
-  const testFile = (setup: string[]) => (query: string) => (
+  const testFile = (setup: string) => (query: string) => (
     outputRowCount: StatementRowCount
-  ) => (columnTypes: Field[]) => (paramTypes: Field[]): TestFile => ({
+  ) => (columnTypes: Field[]) => (paramTypes: Field[]) => (
+    warnings: string[]
+  ): TestFile => ({
     filePath,
     setup,
     query,
     outputRowCount,
     columnTypes,
     paramTypes,
+    warnings,
   })
 
   return pipe(
     Either.right(testFile),
-    Either.ap(
-      pipe(
-        extractSection('setup', content),
-        Either.map(splitSQLStatements)
-      )
-    ),
+    Either.ap(extractSection('setup', content)),
     Either.ap(extractSection('query', content)),
     Either.ap(
       pipe(
@@ -182,18 +204,24 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
         extractSection('expected param types', content),
         Either.chain(splitFields)
       )
+    ),
+    Either.ap(
+      pipe(
+        extractSection('expected warnings', content),
+        Either.map(s => s.split('\n')),
+        Either.map(lines => lines.filter(identity)),
+        Either.orElse(() => Either.right([] as string[]))
+      )
     )
   )
 }
 
-async function testSetup(pgClient: pg.Client, setupStatements: string[]) {
-  return traverseATs(setupStatements, stmt => async () => {
-    try {
-      return await pgClient.query(stmt)
-    } catch (err) {
-      throw new Error(pgErrorToString(err, stmt))
-    }
-  })()
+async function testSetup(pgClient: pg.Client, setupStatement: string) {
+  try {
+    return await pgClient.query(setupStatement)
+  } catch (err) {
+    throw new Error(pgErrorToString(err, setupStatement))
+  }
 }
 
 function extractSection(
@@ -226,13 +254,6 @@ function splitOnce(separator: string, text: string): string[] {
   const parts = text.split(separator)
   if (parts.length > 2) return [parts[0], parts.slice(1).join(': ')]
   return parts
-}
-
-function splitSQLStatements(sql: string): string[] {
-  return sql
-    .split(';')
-    .map(x => x.trim())
-    .filter(x => !!x)
 }
 
 function statementRowCountFromString(
