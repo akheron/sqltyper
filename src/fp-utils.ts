@@ -4,16 +4,16 @@ import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 
-import * as TaskEitherW from './TaskEitherW'
+import * as InferM from './InferM'
 import * as Warn from './Warn'
 
 export const traverseATs = Array.array.traverse(Task.taskSeq)
 export const traverseAE = Array.array.traverse(Either.either)
 export const traverseATE = Array.array.traverse(TaskEither.taskEither)
-export function traverseATEW<A, E, B>(
+export function traverseAIM<A, B>(
   ta: A[],
-  f: (a: A) => TaskEitherW.TaskEitherW<E, B>
-): TaskEitherW.TaskEitherW<E, B[]> {
+  f: (a: A) => InferM.InferM<B>
+): InferM.InferM<B[]> {
   return pipe(
     traverseATE(ta, f),
     TaskEither.map(sequenceAW)
@@ -22,9 +22,7 @@ export function traverseATEW<A, E, B>(
 
 export const sequenceATE = Array.array.sequence(TaskEither.taskEither)
 export const sequenceAW = Array.array.sequence(Warn.warn_)
-export function sequenceATEW<A, E>(
-  ta: TaskEitherW.TaskEitherW<E, A>[]
-): TaskEitherW.TaskEitherW<E, A[]> {
+export function sequenceAIM<A>(ta: InferM.InferM<A>[]): InferM.InferM<A[]> {
   return pipe(
     sequenceATE(ta),
     TaskEither.map(sequenceAW)
