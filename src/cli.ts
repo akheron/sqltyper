@@ -420,8 +420,7 @@ function processSQLFile(
   const tsPath = getOutputPath(filePath)
   const fnName = funcName(filePath)
   return pipe(
-    () => fs.readFile(filePath),
-    Task.map(sql => sql.toString()),
+    () => fs.readFile(filePath, 'utf-8'),
     Task.chain(sql => sqlToStatementDescription(clients, sql)),
     TaskEither.map(stmtWithWarnings => {
       const [stmt, warnings] = Warn.split(stmtWithWarnings)
