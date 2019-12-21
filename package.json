@@ -2,7 +2,7 @@
   "name": "sqltyper",
   "version": "0.2.2",
   "description": "Typed SQL queries in PostgreSQL",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "repository": "https://github.com/akheron/sqltyper",
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
