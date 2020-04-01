@@ -6,12 +6,14 @@ jobs:
         environment:
           PGHOST: 127.0.0.1
           PGUSER: sqltyper
+          PGPASSWORD: sqltyper
           PGDATABASE: sqltyper
 
       - image: circleci/postgres:11
         environment:
           POSTGRES_USER: sqltyper
           POSTGRES_DB: sqltyper
+          POSTGRES_PASSWORD: sqltyper
 
     steps:
       - checkout
