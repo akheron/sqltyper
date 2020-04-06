@@ -250,7 +250,7 @@ It also uses the parsing result to find out the possible number of
 results. For example, `UPDATE`, `DELETE` and `INSERT` queries without
 a `RETURNING` clause will return the number of affected rows instead
 of any columns. Furthermore, a `SELECT` query with `LIMIT 1` will
-return `{ ... } | null` instead of `Array<{ ... }>`.
+resolve to `ResultRow | null` instead of `ResultRow[]`.
 
 Then, it outputs a TypeScript function that is correctly typed, and
 when run, executes your query and converts input and output data
