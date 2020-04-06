@@ -44,17 +44,20 @@ Converts to `find-persons.ts`:
 ```typescript
 import { ClientBase } from 'pg'
 
-export function findPersons(
-  client: ClientBase,
-  params: {
-    namePattern: string
-    minimumAge: number
-  },
-): Promise<Array<{
+interface ResultRow {
   name_capitalized: string
   age: number
   shoe_size: number | null
-}>> { ... }
+}
+
+interface Params {
+  namePattern: string
+  minimumAge: number
+}
+
+export function findPersons(client: ClientBase, params: Params): Promise<ResultRow[]> {
+  ...
+}
 ```
 
 sqltyper analyses the query without actually executing it, so it's
