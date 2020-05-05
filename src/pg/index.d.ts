@@ -73,3 +73,10 @@ export class ClientBase {
 }
 
 export class Client extends ClientBase {}
+
+export class Pool {
+  query<R extends QueryResultRow = any, I extends any[] = any[]>(
+    queryTextOrConfig: string | QueryConfig<I>,
+    values?: I
+  ): Promise<QueryResult<R>>
+}
