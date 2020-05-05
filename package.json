@@ -32,8 +32,8 @@
     "@types/ramda": "^0.27.3",
     "@types/wrap-ansi": "^3.0.0",
     "@types/yargs": "^15.0.4",
-    "jest": "^25.2.4",
-    "jest-cli": "^25.2.4",
+    "jest": "^26.0.1",
+    "jest-cli": "^26.0.1",
     "prettier": "^2.0.2",
     "ts-jest": "^25.3.0",
     "ts-node": "^8.8.1",
@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "buffer-writer": "^2.0.0",
-    "camelcase": "^5.3.1",
+    "camelcase": "^6.0.0",
     "fp-ts": "^2.5.3",
     "node-watch": "^0.6.3",
     "packet-reader": "^1.0.0",
@@ -52,7 +52,7 @@
     "ramda": "^0.27.0",
     "typed-parser": "^0.1.4",
     "typescript": "^3.8.3",
-    "wrap-ansi": "^6.0.0",
+    "wrap-ansi": "^7.0.0",
     "yargs": "^15.3.1"
   }
 }
