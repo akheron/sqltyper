@@ -1,6 +1,6 @@
 {
   "name": "sqltyper",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "description": "Typed SQL queries in PostgreSQL",
   "main": "dist/src/index.js",
   "repository": "https://github.com/akheron/sqltyper",
@@ -25,6 +25,8 @@
     "lint": "eslint '**/*.ts' && prettier --check \"**/*.{json,md}\"",
     "lint:fix": "eslint --fix '**/*.ts' && prettier --write '**/*.{json,md}'",
     "build": "tsc",
+    "clean": "rm -rf dist/",
+    "prepublishOnly": "yarn clean && yarn build",
     "test": "jest"
   },
   "devDependencies": {
