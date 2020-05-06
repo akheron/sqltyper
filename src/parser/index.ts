@@ -114,7 +114,10 @@ const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
     // func(*} means no arguments
     seq(_ => [], symbol('*')),
-    sepBy(symbol(','), lazy(() => expression))
+    sepBy(
+      symbol(','),
+      lazy(() => expression)
+    )
   )
 )
 
@@ -150,7 +153,14 @@ const strEscape = seq(
 const strInner: Parser<string> = seq(
   (s, tail) => s + tail,
   stringBefore("[\\']"),
-  oneOf(seq((e, t) => e + t, strEscape, lazy(() => strInner)), constant(''))
+  oneOf(
+    seq(
+      (e, t) => e + t,
+      strEscape,
+      lazy(() => strInner)
+    ),
+    constant('')
+  )
 )
 
 const stringConstant = seq($2, symbolKeepWS("'"), strInner, symbol("'"))
@@ -182,7 +192,10 @@ const parenthesizedExpr: Parser<Expression> = parenthesized(
 const typeName: Parser<string> = seq(
   (id, arraySuffix) => id + arraySuffix,
   identifier,
-  oneOf<'[]' | ''>(seq(_ => '[]', symbol('['), symbol(']')), seq(_ => '', _))
+  oneOf<'[]' | ''>(
+    seq(_ => '[]', symbol('['), symbol(']')),
+    seq(_ => '', _)
+  )
 )
 
 const primaryExpr: Parser<Expression> = seq(
@@ -236,7 +249,14 @@ const subscriptExpr = seq(
   (next, subs) =>
     subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next),
   primaryExpr,
-  many(seq($2, symbol('['), lazy(() => expression), symbol(']')))
+  many(
+    seq(
+      $2,
+      symbol('['),
+      lazy(() => expression),
+      symbol(']')
+    )
+  )
 )
 const unaryPlusMinus = makeUnaryOp(oneOfOperators('+', '-'), subscriptExpr)
 const expExpr = makeBinaryOp(operator('^'), unaryPlusMinus)
@@ -506,7 +526,14 @@ function tableExprReducer(
 const tableExpression: Parser<TableExpression> = seq(
   (lhs, rest) => (rest.length === 0 ? lhs : rest.reduce(tableExprReducer, lhs)),
   oneOf(
-    attempt(seq($2, symbol('('), lazy(() => tableExpression), symbol(')'))),
+    attempt(
+      seq(
+        $2,
+        symbol('('),
+        lazy(() => tableExpression),
+        symbol(')')
+      )
+    ),
     attempt(
       seq(
         (stmt, as) => TableExpression.createSubQuery(stmt, as),

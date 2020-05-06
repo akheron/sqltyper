@@ -127,12 +127,7 @@ function checkExpectations(
     )()
 
     // Expected warnings (only check the summary)
-    expect(
-      pipe(
-        testFile.warnings,
-        Array.sort(Ord.ordString)
-      )
-    ).toEqual(
+    expect(pipe(testFile.warnings, Array.sort(Ord.ordString))).toEqual(
       pipe(
         warnings.map(w => w.summary),
         Array.sort(Ord.ordString)

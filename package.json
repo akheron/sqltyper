@@ -22,6 +22,8 @@
     "sql": "ts-node src/cli.ts --prettify --pg-module ../pg src/sql/",
     "sql:check": "yarn run sql --check",
     "sql:watch": "yarn run sql --watch",
+    "lint": "prettier --check \"**/*.{ts,json,md}\"",
+    "lint:fix": "prettier --write \"**/*.{ts,json,md}\"",
     "build": "tsc",
     "test": "jest"
   },

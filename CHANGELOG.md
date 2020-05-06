@@ -1,5 +1,4 @@
 # Changelog
-===========
 
 ## 0.2.3
 
@@ -17,6 +16,7 @@
 ## 0.2.1
 
 - **Enhancements**
+
   - Infer the row count of a "calculator" SELECT statement as one
   - Support boolean, null and float constants
   - Support the CASE expression

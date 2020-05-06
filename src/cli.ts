@@ -471,10 +471,7 @@ function processSQLDirectory(
   modules: Option.Option<TsModule>[],
   options: Options
 ): Task.Task<TsModuleDir> {
-  const successfulModules = pipe(
-    modules,
-    Array.filterMap(identity)
-  )
+  const successfulModules = pipe(modules, Array.filterMap(identity))
   return pipe(
     maybeWriteIndexModule(
       options.index,

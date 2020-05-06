@@ -468,17 +468,9 @@ function inferExpressionNullability(
   nonNullExprs: ast.Expression[],
   expression: ast.Expression
 ): InferM.InferM<FieldNullability> {
-  const anyTE = flow(
-    FieldNullability.any,
-    Warn.of,
-    TaskEither.right
-  )
+  const anyTE = flow(FieldNullability.any, Warn.of, TaskEither.right)
 
-  const arrayTE = flow(
-    FieldNullability.array,
-    Warn.of,
-    TaskEither.right
-  )
+  const arrayTE = flow(FieldNullability.array, Warn.of, TaskEither.right)
 
   if (
     nonNullExprs.some(nonNull => ast.Expression.equals(expression, nonNull))
@@ -928,10 +920,7 @@ function findParamNullabilityFromUpdates(
       )
     ),
     TaskEither.map(paramNullabilities =>
-      pipe(
-        paramNullabilities,
-        Array.filterMap(identity)
-      )
+      pipe(paramNullabilities, Array.filterMap(identity))
     )
   )
 }
@@ -1262,7 +1251,10 @@ function findNonHiddenSourceColumns(
 ): Either.Either<string, SourceColumn[]> {
   return pipe(
     sourceColumns.filter(col => !col.hidden),
-    Either.fromPredicate(result => result.length > 0, () => `No columns`)
+    Either.fromPredicate(
+      result => result.length > 0,
+      () => `No columns`
+    )
   )
 }
 

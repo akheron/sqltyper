@@ -48,7 +48,11 @@ export const quotedInner: Parser<string> = seq(
   (s, tail) => s + tail,
   stringBefore('[\\"]'),
   oneOf(
-    seq((e, t) => e + t, quotedEscape, lazy(() => quotedInner)),
+    seq(
+      (e, t) => e + t,
+      quotedEscape,
+      lazy(() => quotedInner)
+    ),
     constant('')
   )
 )

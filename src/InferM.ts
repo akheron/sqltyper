@@ -58,12 +58,7 @@ export function ap<A>(fa: InferM<A>) {
       TaskEither.right((p: B) => (w1: Warn.Warning[]) => (w2: Warn.Warning[]) =>
         Warn.make(p, w1.concat(w2))
       ),
-      TaskEither.ap(
-        pipe(
-          payload(fab),
-          TaskEither.ap(payload(fa))
-        )
-      ),
+      TaskEither.ap(pipe(payload(fab), TaskEither.ap(payload(fa)))),
       TaskEither.ap(warnings(fa)),
       TaskEither.ap(warnings(fab))
     )

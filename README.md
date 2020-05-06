@@ -63,7 +63,6 @@ export function findPersons(client: ClientBase, params: Params): Promise<ResultR
 sqltyper analyses the query without actually executing it, so it's
 perfectly safe to use it with any query.
 
-
 ## Installation
 
 ```
@@ -83,9 +82,7 @@ application runtime. However, the generated TypeScript code uses
 [node-postgres] to execute the queries, so `pg` is a required runtime
 dependency.
 
-
 [node-postgres]: https://node-postgres.com/
-
 
 ## Tutorial
 
@@ -104,7 +101,7 @@ src/
 Run sqltyper on the `sqls` directory:
 
 ```
-yarn sqltyper --database postgres://user:pass@host/dbname src/sqls 
+yarn sqltyper --database postgres://user:pass@host/dbname src/sqls
 
 # or npx sqltyper, or ./node_modules/.bin/sqltyper, ...
 ```
@@ -115,6 +112,7 @@ the SQL queries, and outputs the corresponding TypeScript functions in
 the same directory.
 
 You should now have the following files:
+
 ```
 src/
 |-- app.ts
@@ -156,7 +154,6 @@ They will return one of the following, wrapped in a `Promise`:
 
 - A number which denotes the number of affected rows (e.g. `INSERT`,
   `UPDATE` or `DELETE` without a `RETURNING` clause).
-
 
 ## CLI
 
@@ -221,7 +218,6 @@ Where to import node-postgres from. Default: `pg`.
 [libpq environment variables]: https://www.postgresql.org/docs/current/libpq-envars.html
 [prettier]: https://prettier.io/
 
-
 ## How does it work?
 
 sqltyper connects to your database to look up the schema: which
@@ -255,7 +251,6 @@ resolve to `ResultRow | null` instead of `ResultRow[]`.
 Then, it outputs a TypeScript function that is correctly typed, and
 when run, executes your query and converts input and output data
 to/from PostgreSQL.
-
 
 ## Prior art
 
