@@ -59,11 +59,7 @@ export function of<A>(payload: A): Warn<A> {
   return { payload, warnings: [] }
 }
 
-export function warning<A>(
-  payload: A,
-  summary: string,
-  description: string = ''
-) {
+export function warning<A>(payload: A, summary: string, description = '') {
   return {
     payload,
     warnings: [{ summary, description }],

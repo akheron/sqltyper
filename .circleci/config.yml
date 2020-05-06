@@ -33,5 +33,6 @@ jobs:
           key: v1-dependencies-{{ checksum "yarn.lock" }}
 
       - run: yarn build
+      - run: yarn lint
       - run: yarn sql:check
       - run: yarn test

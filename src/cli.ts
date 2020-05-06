@@ -221,6 +221,7 @@ async function watchDirectories(
     )
   )
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   return new Promise(() => {})
 }
 
@@ -230,6 +231,7 @@ async function handleWatchEvents(
   eventHandler: WatchEventHandler
 ): Promise<TsModuleDir[]> {
   while (events.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const { type, dirPath, fileName } = events.shift()!
 
     const moduleDir = moduleDirs.find(dir => dir.dirPath === dirPath)

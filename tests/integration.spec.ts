@@ -224,9 +224,10 @@ function extractSection(
   text: string
 ): Either.Either<string, string> {
   const match = text.match(sectionRegex(sectionName))
-  if (!match) return Either.left(`Could not find section "${sectionName}"`)
+  if (!match || !match.groups)
+    return Either.left(`Could not find section "${sectionName}"`)
 
-  return Either.right(match.groups!.content.trim())
+  return Either.right(match.groups.content.trim())
 }
 
 function sectionRegex(sectionName: string): RegExp {
@@ -239,7 +240,7 @@ function sectionRegex(sectionName: string): RegExp {
 function splitFields(text: string): Either.Either<string, Field[]> {
   if (!text) return Either.right([])
   return traverseAE(text.split('\n'), line => {
-    let parts = splitOnce(': ', line.trimRight())
+    const parts = splitOnce(': ', line.trimRight())
     if (parts.length !== 2) return Either.left(`Invalid line: "${line}"`)
     return Either.right({ name: parts[0], type: parts[1] })
   })

@@ -7,7 +7,9 @@ import { NamedValue, ValueType, Oid, TsType } from './types'
 import { Client } from './pg'
 import { schemaClient } from './schema'
 
-type UnPromise<T extends Promise<any>> = T extends Promise<infer U> ? U : never
+type UnPromise<T extends Promise<unknown>> = T extends Promise<infer U>
+  ? U
+  : never
 export type TypeClient = UnPromise<ReturnType<typeof typeClient>>
 
 export async function typeClient(pgClient: Client) {
@@ -15,7 +17,7 @@ export async function typeClient(pgClient: Client) {
   let enums: Map<Oid, string> | null = null
 
   function valueTsType(oid: Oid): string {
-    return nodePgBuiltinTypes.get(oid) || enums!.get(oid) || defaultType
+    return nodePgBuiltinTypes.get(oid) || enums?.get(oid) || defaultType
   }
 
   function arrayTsType(oid: Oid, elemNullable: boolean): Option.Option<string> {
@@ -24,7 +26,7 @@ export async function typeClient(pgClient: Client) {
       return Option.none
     }
 
-    const elemOid = arrayTypes!.get(oid)
+    const elemOid = arrayTypes?.get(oid)
     if (!elemOid) {
       // This type is not an array according to
       // makeArrayTypesMap. Should not happen.

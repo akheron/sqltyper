@@ -22,7 +22,7 @@ export function describeStatement(
 function describeResult(
   sql: string,
   paramNames: string[],
-  queryResult: QueryResult<any>
+  queryResult: QueryResult
 ): StatementDescription {
   return {
     columns: queryResult.fields.map(field => ({

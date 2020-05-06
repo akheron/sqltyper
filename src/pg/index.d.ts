@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import stream = require('stream')
 import { ConnectionOptions } from 'tls'
 

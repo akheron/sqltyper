@@ -236,7 +236,7 @@ function inferSetOpsOutput(
 ): InferM.InferM<VirtualField[]> {
   // fp-ts's foldM is not stack safe so a manual loop is needed
   return async () => {
-    let curr = await inferSelectBodyOutput(
+    const curr = await inferSelectBodyOutput(
       client,
       outsideCTEs,
       paramNullability,
@@ -785,7 +785,7 @@ function inferExpressionNullability(
 
 function getNonNullSubExpressionsFromRowCond(
   expression: ast.Expression | null,
-  logicalNegation: boolean = false
+  logicalNegation = false
 ): ast.Expression[] {
   if (expression == null) {
     return []
@@ -1158,7 +1158,7 @@ function getSourceColumnsForTableExpr(
   ctes: VirtualTable[],
   paramNullability: ParamNullability[],
   tableExpr: ast.TableExpression | null,
-  setNullable: boolean = false
+  setNullable = false
 ): InferM.InferM<SourceColumn[]> {
   if (!tableExpr) {
     return InferM.right([])
