@@ -699,6 +699,39 @@ const expressionValues: Parser<Values> = seq(
 
 const values: Parser<Values> = oneOf(defaultValues, expressionValues)
 
+const onConstraint = seq(
+  $null,
+  reservedWord('ON'),
+  reservedWord('CONSTRAINT'),
+  identifier
+)
+
+const conflictTarget: Parser<null> = oneOf(
+  seq($null, identifierList),
+  onConstraint
+)
+
+const conflictAction: Parser<UpdateAssignment[] | null> = seq(
+  $2,
+  reservedWord('DO'),
+  oneOf(
+    seq($null, reservedWord('NOTHING')),
+    seq(
+      $2,
+      reservedWord('UPDATE'),
+      lazy(() => updateAssignments)
+    )
+  )
+)
+
+const onConflict: Parser<UpdateAssignment[] | null> = seq(
+  (_on, _conflict, _target, action) => action,
+  reservedWord('ON'),
+  reservedWord('CONFLICT'),
+  optional(conflictTarget),
+  conflictAction
+)
+
 const returning: Parser<SelectListItem[]> = seq(
   $2,
   reservedWord('RETURNING'),
@@ -713,13 +746,14 @@ const insertInto: Parser<TableRef> = seq(
 )
 
 const insert: Parser<Insert> = seq(
-  (withQueries, table, as, columns, values, returning) =>
+  (withQueries, table, as, columns, values, onConflict, returning) =>
     Insert.create(
       withQueries || [],
       table,
       as,
       columns || [],
       values,
+      onConflict || [],
       returning || []
     ),
   optional(withQueries),
@@ -727,6 +761,7 @@ const insert: Parser<Insert> = seq(
   optional(reqAs),
   optional(identifierList),
   values,
+  optional(onConflict),
   optional(returning)
 )
 

@@ -647,6 +647,7 @@ export type Insert = {
   as: string | null
   columns: string[]
   values: Values
+  onConflict: UpdateAssignment[]
   returning: SelectListItem[]
 }
 
@@ -657,6 +658,7 @@ export namespace Insert {
     as: string | null,
     columns: string[],
     values: Values,
+    onConflict: UpdateAssignment[],
     returning: SelectListItem[]
   ): Insert {
     return {
@@ -666,6 +668,7 @@ export namespace Insert {
       as,
       columns,
       values,
+      onConflict,
       returning,
     }
   }

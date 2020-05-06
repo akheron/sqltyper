@@ -22,3 +22,8 @@ export const sequenceAW = Array.array.sequence(Warn.warn_)
 export function sequenceAIM<A>(ta: InferM.InferM<A>[]): InferM.InferM<A[]> {
   return pipe(sequenceATE(ta), TaskEither.map(sequenceAW))
 }
+
+export const concat2 = <A>() => (arr1: A[]) => (arr2: A[]): A[] => [
+  ...arr1,
+  ...arr2,
+]

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- **Enhancements**
+  - Add support for `INSERT ... ON CONFLICT ...`
+
 ## 0.2.3
 
 - **Enhancements**

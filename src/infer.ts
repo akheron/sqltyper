@@ -10,6 +10,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 
 import * as ast from './ast'
 import {
+  concat2,
   sequenceAIM,
   sequenceAW,
   traverseAE,
@@ -882,14 +883,25 @@ function getParamNullability(
 ): TaskEither.TaskEither<string, ParamNullability[]> {
   return ast.walk(tree, {
     select: () => TaskEither.right([]),
-    insert: ({ table, columns, values }) =>
-      pipe(
+    insert: ({ table, columns, values, onConflict }) => {
+      const valuesParamNullability = pipe(
         TaskEither.right(combineParamNullability),
         TaskEither.ap(
           TaskEither.right(findParamsFromValues(values, columns.length))
         ),
         TaskEither.ap(findInsertColumns(client, table, columns))
-      ),
+      )
+      const onConflictParamNullability = findParamNullabilityFromUpdates(
+        client,
+        table,
+        onConflict
+      )
+      return pipe(
+        TaskEither.right(concat2<ParamNullability>()),
+        TaskEither.ap(valuesParamNullability),
+        TaskEither.ap(onConflictParamNullability)
+      )
+    },
     update: ({ table, updates }) =>
       findParamNullabilityFromUpdates(client, table, updates),
     delete: () => TaskEither.right([]),
