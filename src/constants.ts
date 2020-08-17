@@ -22,6 +22,7 @@ export const sqlReservedWords: string[] = [
   'EXCEPT',
   'EXISTS',
   'FALSE',
+  'FILTER',
   'FIRST',
   'FROM',
   'FULL',
@@ -51,6 +52,8 @@ export const sqlReservedWords: string[] = [
   'OR',
   'ORDER',
   'OUTER',
+  'OVER',
+  'PARTITION',
   'RETURNING',
   'RIGHT',
   'SELECT',
@@ -64,6 +67,7 @@ export const sqlReservedWords: string[] = [
   'UPDATE',
   'USING',
   'VALUES',
+  'WINDOW',
   'WHEN',
   'WHERE',
   'WITH',
@@ -256,6 +260,7 @@ export const functions: Function[] = [
   func('translate', 'safe'),
 
   // Not yet categorized
+  func('avg', 'safe'),
   func('bool', 'safe'),
   func('now', 'neverNull'),
   func('count', 'neverNull'),
