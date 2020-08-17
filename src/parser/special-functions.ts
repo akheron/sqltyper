@@ -7,7 +7,7 @@ import { optional, parenthesized } from './utils'
 // imports
 export function specialFunctionCall(
   primaryExpr: Parser<Expression>
-): Expression.FunctionCall {
+): Parser<Expression> {
   function specialFunctionParser(
     funcName: string,
     argsParser: Parser<Expression[]>
