@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+
+- **Enhancements**
+  - Add support for window function syntax (#27)
+
 ## 0.2.5
 
 - **Enhancements**
