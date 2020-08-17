@@ -39,6 +39,8 @@ import {
   Values,
   Update,
   WithQuery,
+  WindowDefinition,
+  NamedWindowDefinition,
 } from '../ast'
 
 import { optional } from './utils'
@@ -112,7 +114,7 @@ const caseExpr: Parser<Expression> = seq(
 
 const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
-    // func(*} means no arguments
+    // func(*) means no arguments
     seq(_ => [], symbol('*')),
     sepBy(
       symbol(','),
@@ -121,17 +123,65 @@ const functionArguments: Parser<Expression[]> = parenthesized(
   )
 )
 
-const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
-  (ident, rest) =>
-    rest == null
-      ? Expression.createColumnRef(ident)
-      : typeof rest === 'string'
-      ? Expression.createTableColumnRef(ident, rest)
-      : Expression.createFunctionCall(ident, rest),
+const windowDefinition: Parser<WindowDefinition> = oneOf<WindowDefinition>(
   identifier,
-  oneOf<string | Expression[] | null>(
+  seq(
+    (partition, order) => ({
+      partitionBy: partition,
+      orderBy: order,
+    }),
+    optional(
+      seq(
+        $3,
+        reservedWord('PARTITION'),
+        reservedWord('BY'),
+        lazy(() => expression)
+      )
+    ),
+    optional(lazy(() => orderBy))
+  )
+)
+
+const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
+  (ident, rest) => {
+    if (rest === null) {
+      return Expression.createColumnRef(ident)
+    } else if (typeof rest === 'string') {
+      return Expression.createTableColumnRef(ident, rest)
+    } else {
+      const [argList, filter, window] = rest
+      return Expression.createFunctionCall(ident, argList, filter, window)
+    }
+  },
+  identifier,
+  oneOf<
+    string | [Expression[], Expression | null, WindowDefinition | null] | null
+  >(
     seq($2, symbol('.'), identifier),
-    functionArguments,
+    seq(
+      (argList, filter, window) => [argList, filter, window],
+      functionArguments,
+      optional(
+        seq(
+          $2,
+          reservedWord('FILTER'),
+          parenthesized(
+            seq(
+              $2,
+              reservedWord('WHERE'),
+              lazy(() => expression)
+            )
+          )
+        )
+      ),
+      optional(
+        seq(
+          $2,
+          reservedWord('OVER'),
+          oneOf(identifier, parenthesized(windowDefinition))
+        )
+      )
+    ),
     _
   )
 )
@@ -575,6 +625,22 @@ const groupBy: Parser<Expression[]> = seq(
 
 const having: Parser<Expression> = seq($2, reservedWord('HAVING'), expression)
 
+// WINDOW
+
+const window: Parser<NamedWindowDefinition[]> = seq(
+  $2,
+  reservedWord('WINDOW'),
+  sepBy1(
+    symbol(','),
+    seq(
+      (name, _as, window) => NamedWindowDefinition.create(name, window),
+      identifier,
+      reservedWord('AS'),
+      parenthesized(windowDefinition)
+    )
+  )
+)
+
 // ORDER BY
 
 const orderByOrder: Parser<OrderBy.Order> = oneOf<OrderBy.Order>(
@@ -641,14 +707,15 @@ const selectListItem = oneOf(
 const selectList: Parser<SelectListItem[]> = sepBy1(symbol(','), selectListItem)
 
 const selectBody: Parser<SelectBody> = seq(
-  (_sel, list, from, where, groupBy, having) =>
-    SelectBody.create(list, from, where, groupBy || [], having),
+  (_sel, list, from, where, groupBy, having, window) =>
+    SelectBody.create(list, from, where, groupBy || [], having, window || []),
   reservedWord('SELECT'),
   selectList,
   optional(from),
   optional(where),
   optional(groupBy),
-  optional(having)
+  optional(having),
+  optional(window)
 )
 
 const selectSetOps: Parser<SelectOp[]> = many(

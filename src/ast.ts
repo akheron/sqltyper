@@ -128,13 +128,23 @@ export namespace Expression {
     kind: 'FunctionCall'
     funcName: string
     argList: Expression[]
+    filter: Expression | null
+    window: WindowDefinition | null
   }
 
   export function createFunctionCall(
     funcName: string,
-    argList: Expression[]
+    argList: Expression[],
+    filter: Expression | null,
+    window: WindowDefinition | null
   ): FunctionCall {
-    return { kind: 'FunctionCall', funcName, argList }
+    return {
+      kind: 'FunctionCall',
+      funcName,
+      argList,
+      filter,
+      window,
+    }
   }
 
   export type ArraySubQuery = {
@@ -352,6 +362,28 @@ export namespace Expression {
   }
 }
 
+// Window functios
+export type WindowDefinition =
+  | string // window name
+  | {
+      partitionBy: Expression | null
+      orderBy: OrderBy[] | null
+    }
+
+export type NamedWindowDefinition = {
+  name: string
+  window: WindowDefinition
+}
+
+export namespace NamedWindowDefinition {
+  export function create(
+    name: string,
+    window: WindowDefinition
+  ): NamedWindowDefinition {
+    return { name, window }
+  }
+}
+
 export type SelectListItem =
   | SelectListItem.SelectListExpression // SELECT expr [ AS name ]
   | SelectListItem.AllTableFields // SELECT tbl.*
@@ -546,6 +578,7 @@ export type SelectBody = {
   where: Expression | null
   groupBy: Expression[]
   having: Expression | null
+  window: NamedWindowDefinition[]
 }
 
 export namespace SelectBody {
@@ -554,9 +587,10 @@ export namespace SelectBody {
     from: TableExpression | null,
     where: Expression | null,
     groupBy: Expression[],
-    having: Expression | null
+    having: Expression | null,
+    window: NamedWindowDefinition[]
   ): SelectBody {
-    return { selectList, from, where, groupBy, having }
+    return { selectList, from, where, groupBy, having, window }
   }
 }
 
