@@ -7,12 +7,12 @@ import { NamedValue, ValueType, Oid, TsType } from './types'
 import { Client } from './pg'
 import { schemaClient } from './schema'
 
-type UnPromise<T extends Promise<unknown>> = T extends Promise<infer U>
-  ? U
-  : never
-export type TypeClient = UnPromise<ReturnType<typeof typeClient>>
+export interface TypeClient {
+  tsType(valueType: ValueType, nullable: boolean): Task.Task<TsType>
+  columnType(column: NamedValue): Task.Task<{ name: string; type: TsType }>
+}
 
-export async function typeClient(pgClient: Client) {
+export async function typeClient(pgClient: Client): Promise<TypeClient> {
   let arrayTypes: Map<Oid, Oid> | null = null
   let enums: Map<Oid, string> | null = null
 

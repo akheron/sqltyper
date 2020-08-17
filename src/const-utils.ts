@@ -3,7 +3,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 
 import {
   Operator,
-  Function,
+  SqlFunction,
   NullSafety,
   operators,
   functions,
@@ -30,7 +30,7 @@ export function operatorNullSafety(name: string): NullSafety | null {
   )
 }
 
-export function findFunction(name: string): Option.Option<Function> {
+export function findFunction(name: string): Option.Option<SqlFunction> {
   const downCaseName = name.toLowerCase()
   return Option.fromNullable(functions.find(f => f.name === downCaseName))
 }

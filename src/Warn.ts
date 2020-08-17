@@ -59,7 +59,11 @@ export function of<A>(payload: A): Warn<A> {
   return { payload, warnings: [] }
 }
 
-export function warning<A>(payload: A, summary: string, description = '') {
+export function warning<A>(
+  payload: A,
+  summary: string,
+  description = ''
+): Warn<A> {
   return {
     payload,
     warnings: [{ summary, description }],
@@ -75,7 +79,7 @@ export function addWarning(summary: string, description: string) {
   }
 }
 
-export function make<A>(payload: A, warnings: Warning[]) {
+export function make<A>(payload: A, warnings: Warning[]): Warn<A> {
   return { payload, warnings }
 }
 

@@ -5,7 +5,9 @@ import { optional, parenthesized } from './utils'
 
 // We need to take the expression parser as an argument to avoid cyclic
 // imports
-export function specialFunctionCall(primaryExpr: Parser<Expression>) {
+export function specialFunctionCall(
+  primaryExpr: Parser<Expression>
+): Expression.FunctionCall {
   function specialFunctionParser(
     funcName: string,
     argsParser: Parser<Expression[]>

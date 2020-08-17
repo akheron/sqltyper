@@ -163,12 +163,12 @@ export const operators: Operator[] = [
 
 // SQL functions
 
-export type Function = {
+export type SqlFunction = {
   name: string
   nullSafety: NullSafety
 }
 
-export const functions: Function[] = [
+export const functions: SqlFunction[] = [
   //   name (lower case!), nullSafety
 
   // 9.2. Comparison Functions and Operators
@@ -278,6 +278,6 @@ function op(
   return { op: op.toUpperCase(), commutative, nullSafety }
 }
 
-function func(name: string, nullSafety: NullSafety): Function {
+function func(name: string, nullSafety: NullSafety): SqlFunction {
   return { name: name.toLowerCase(), nullSafety }
 }

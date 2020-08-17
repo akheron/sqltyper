@@ -34,7 +34,9 @@ export namespace FieldNullability {
     }
   }
 
-  export const disjunction = (a: FieldNullability) => (b: FieldNullability) =>
+  export const disjunction = (a: FieldNullability) => (
+    b: FieldNullability
+  ): FieldNullability =>
     walk(a, {
       any: aAny =>
         walk(b, {

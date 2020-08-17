@@ -28,12 +28,12 @@ export const _: Parser<null> = seq(
   many(seq($null, expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')))
 )
 
-export function symbol(s: string) {
+export function symbol(s: string): Parser<null> {
   return seq($null, expectString(s, 'symbol'), _)
 }
 
 // Like symbol but doesn't skip whitespace
-export function symbolKeepWS(s: string) {
+export function symbolKeepWS(s: string): Parser<null> {
   return expectString(s, 'symbol')
 }
 
@@ -125,7 +125,7 @@ export const sepReserveds = (words: string): Parser<string> =>
 
 export const anyOperator = seq($1, match('[-+*/<>=~!@#%^&|`?]{1,63}'), _)
 
-export const operator = (op: string) =>
+export const operator = (op: string): Parser<string> =>
   attempt(
     map(
       (match, toError) =>
@@ -134,7 +134,7 @@ export const operator = (op: string) =>
     )
   )
 
-export const anyOperatorExcept = (exclude: string[]) =>
+export const anyOperatorExcept = (exclude: string[]): Parser<string> =>
   attempt(
     map(
       (match, toError) =>

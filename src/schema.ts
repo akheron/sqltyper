@@ -27,9 +27,16 @@ export type ArrayType = {
   elemType: Oid
 }
 
-export type SchemaClient = ReturnType<typeof schemaClient>
+export interface SchemaClient {
+  getTable(
+    schemaName: string | null,
+    tableName: string
+  ): TaskEither.TaskEither<string, Table>
+  getEnums(): Promise<Enum[]>
+  getArrayTypes(): Promise<ArrayType[]>
+}
 
-export function schemaClient(pgClient: Client) {
+export function schemaClient(pgClient: Client): SchemaClient {
   function getTable(
     schemaName: string | null,
     tableName: string
