@@ -1,0 +1,15 @@
+{
+  "name": "sqltyper-cli-tests",
+  "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@types/pg": "^7.14.4",
+    "pg": "^8.3.2",
+    "postgres": "^2.0.0-beta.0",
+    "typescript": "^3.9.7"
+  }
+}

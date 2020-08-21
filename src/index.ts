@@ -8,6 +8,7 @@ import {
   validateStatement,
   TsModule,
   generateIndexModule,
+  CodegenTarget,
 } from './codegen'
 import { describeStatement } from './describe'
 import { inferStatementNullability } from './infer'
@@ -24,7 +25,7 @@ export function sqlToStatementDescription(
     Task.of(sql),
     Task.map(preprocessSQL),
     TaskEither.chain(processed =>
-      describeStatement(clients.pg, processed.sql, processed.paramNames)
+      describeStatement(clients.postgres, processed.sql, processed.paramNames)
     ),
     TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
     TaskEither.chain(stmt =>
@@ -40,12 +41,14 @@ export function generateTSCode(
   funcName: string,
   options?: {
     prettierFileName?: string | undefined
-    pgModule?: string | undefined
+    target?: CodegenTarget | undefined
+    module?: string | undefined
     verbose?: boolean | undefined
     terminalColumns?: number | undefined
   }
 ): TaskEither.TaskEither<string, string> {
-  const { prettierFileName = null, pgModule = 'pg' } = options || {}
+  const { prettierFileName = null, target = 'pg', module = 'pg' } =
+    options || {}
 
   return pipe(
     TaskEither.right(stmt),
@@ -54,7 +57,8 @@ export function generateTSCode(
         generateTypeScript(
           clients.types,
           sourceFileName,
-          pgModule,
+          target,
+          module,
           funcName,
           stmt
         )

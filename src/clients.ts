@@ -1,11 +1,11 @@
 import * as Either from 'fp-ts/lib/Either'
 
-import * as pg from './pg'
+import * as postgres from './postgres'
 import { SchemaClient, schemaClient } from './schema'
 import { TypeClient, typeClient } from './tstype'
 
 export type Clients = {
-  pg: pg.Client
+  postgres: postgres.Sql<{}>
   schema: SchemaClient
   types: TypeClient
 }
@@ -13,28 +13,28 @@ export type Clients = {
 export async function connect(
   connectionString?: string | undefined
 ): Promise<Either.Either<string, Clients>> {
-  const pgClient = new pg.Client(
-    connectionString == null ? undefined : { connectionString }
-  )
-  try {
-    await pgClient.connect()
-  } catch (err) {
-    return Either.left(`Error connecting to database: ${err.message}`)
-  }
+  const postgresClient = connectionString
+    ? postgres(connectionString)
+    : postgres()
 
-  const schema = schemaClient(pgClient)
-  const types = await typeClient(pgClient)
+  return Either.right(await clients(postgresClient))
+}
 
-  return Either.right({ pg: pgClient, schema, types })
+export async function clients(
+  postgresClient: postgres.Sql<{}>
+): Promise<Clients> {
+  const schema = schemaClient(postgresClient)
+  const types = await typeClient(postgresClient)
+  return { postgres: postgresClient, schema, types }
 }
 
 export async function disconnect(clients: Clients): Promise<void> {
-  await clients.pg.end()
+  await clients.postgres.end({ timeout: 5 })
 }
 
 export async function clearCache(clients: Clients): Promise<Clients> {
   // The type client caches stuff about user-defined SQL types.
   // Recreate it to clear the cache.
-  const types = await typeClient(clients.pg)
+  const types = await typeClient(clients.postgres)
   return { ...clients, types }
 }

@@ -2,33 +2,36 @@ import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { pipe } from 'fp-ts/lib/pipeable'
 import * as R from 'ramda'
 
-import { Client, QueryResult } from './pg'
 import { StatementDescription, ValueType } from './types'
+import { Sql, DescribeResult, PostgresError } from './postgres'
 
 export function describeStatement(
-  pgClient: Client,
+  postgresClient: Sql<{}>,
   sql: string,
   paramNames: string[]
 ): TaskEither.TaskEither<string, StatementDescription> {
   return pipe(
     TaskEither.tryCatch(
-      () => pgClient.query({ text: sql, describe: true }),
-      error => pgErrorToString(error as PGError, sql)
+      () => postgresClient.describe(sql),
+      error =>
+        error instanceof postgresClient.PostgresError
+          ? errorToString(error, sql)
+          : (error as globalThis.Error).message || ''
     ),
-    TaskEither.map(queryResult => describeResult(sql, paramNames, queryResult))
+    TaskEither.map(result => describeResult(sql, paramNames, result))
   )
 }
 
 function describeResult(
   sql: string,
   paramNames: string[],
-  queryResult: QueryResult
+  result: DescribeResult
 ): StatementDescription {
   return {
-    columns: queryResult.fields.map(field => ({
+    columns: result.columns.map(field => ({
       name: field.name,
       nullable: true, // columns are nullable by default
-      type: ValueType.any(field.dataTypeID),
+      type: ValueType.any(field.type),
     })),
     rowCount: 'many',
     params: R.zipWith(
@@ -38,33 +41,13 @@ function describeResult(
         type: ValueType.any(type),
       }),
       paramNames,
-      queryResult.params
+      result.params
     ),
     sql,
   }
 }
 
-type PGError = {
-  message: string | undefined
-  severity: string | undefined
-  code: string | undefined
-  detail: string | undefined
-  hint: string | undefined
-  position: string | undefined
-  internalPosition: string | undefined
-  internalQuery: string | undefined
-  where: string | undefined
-  schema: string | undefined
-  table: string | undefined
-  column: string | undefined
-  dataType: string | undefined
-  constraint: string | undefined
-  file: string | undefined
-  line: string | undefined
-  routine: string | undefined
-}
-
-export function pgErrorToString(error: PGError, sql: string): string {
+export function errorToString(error: PostgresError, sql: string): string {
   const sourceLines = sql.split('\n')
   const errorPos =
     error.position && findPositionInFile(Number(error.position), sourceLines)
@@ -106,7 +89,7 @@ function findPositionInFile(
 }
 
 function formatError(
-  error: PGError,
+  error: PostgresError,
   errorPos: PositionInFile,
   sourceLines: string[]
 ) {

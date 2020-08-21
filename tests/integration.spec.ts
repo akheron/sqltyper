@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 
-import * as pg from '../src/pg'
+import * as postgres from '../src/postgres'
 
 import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
@@ -15,7 +15,7 @@ import { sqlToStatementDescription } from '../src/index'
 import * as C from '../src/clients'
 import { StatementRowCount, StatementDescription } from '../src/types'
 import { traverseATs, traverseAE } from '../src/fp-utils'
-import { pgErrorToString } from '../src/describe'
+import { errorToString } from '../src/describe'
 import * as Warn from '../src/Warn'
 
 // Dynamically create a test case from each integration/*.sql file
@@ -23,22 +23,14 @@ import * as Warn from '../src/Warn'
 const testDir = path.join(__dirname, 'integration')
 
 describe('Integration tests', () => {
-  let clients: C.Clients
-  beforeAll(async () => {
-    clients = ((await pipe(
-      () => C.connect(),
-      TaskEither.mapLeft(err => {
-        throw new Error(err)
-      })
-    )()) as Either.Right<C.Clients>).right
+  let sql: postgres.Sql<{}>
+
+  beforeAll(() => {
+    sql = postgres()
   })
 
-  afterAll(async () => {
-    await C.disconnect(clients)
-  })
-
-  beforeEach(async () => {
-    clients = await C.clearCache(clients)
+  afterAll(() => {
+    sql.end({ timeout: 5 })
   })
 
   fs.readdirSync(testDir, { withFileTypes: true }).forEach(dirent => {
@@ -63,9 +55,11 @@ describe('Integration tests', () => {
     return pipe(
       TaskEither.fromEither(parseTestFile(filePath)),
       TaskEither.chain(testFile => () =>
-        alwaysRollback<Either.Either<string, void>>(clients.pg, async () => {
+        alwaysRollback(sql, async tx => {
+          const clients = await C.clients(tx)
+
           // Setup
-          await testSetup(clients.pg, testFile.setup)
+          await testSetup(tx, testFile.setup)
 
           // Check expectations
           return await pipe(
@@ -211,11 +205,11 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
   )
 }
 
-async function testSetup(pgClient: pg.Client, setupStatement: string) {
+async function testSetup(sql: postgres.Sql<{}>, setupStatement: string) {
   try {
-    return await pgClient.query(setupStatement)
+    return await sql.unsafe(setupStatement)
   } catch (err) {
-    throw new Error(pgErrorToString(err, setupStatement))
+    throw new Error(errorToString(err, setupStatement))
   }
 }
 
@@ -266,14 +260,21 @@ function statementRowCountFromString(
   return Either.left(`"${a}" is not a valid statement row count`)
 }
 
+const ROLLBACK_MARKER = '__intended_rollback__'
+
 async function alwaysRollback<T>(
-  pgClient: pg.Client,
-  wrapped: (pgClient: pg.Client) => Promise<T>
+  sql: postgres.Sql<{}>,
+  wrapped: (sql: postgres.Sql<{}>) => Promise<T>
 ): Promise<T> {
-  await pgClient.query('BEGIN')
+  let result: T | undefined = undefined
   try {
-    return await wrapped(pgClient)
-  } finally {
-    await pgClient.query('ROLLBACK')
+    await sql.begin(async (tx: postgres.Sql<{}>) => {
+      result = await wrapped(tx)
+      throw new Error(ROLLBACK_MARKER)
+    })
+  } catch (err) {
+    if (err.message !== ROLLBACK_MARKER) throw err
   }
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  return result!
 }

@@ -8,6 +8,13 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
   ],
   rules: {
+    '@typescript-eslint/ban-types': [
+      'error',
+      {
+        types: { '{}': false },
+        extendDefaults: true,
+      }
+    ],
     '@typescript-eslint/explicit-function-return-type': 'off',
     '@typescript-eslint/member-delimiter-style': [
       'error',
