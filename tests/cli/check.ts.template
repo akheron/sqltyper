@@ -1,0 +1,20 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/ban-types */
+import { Pool } from 'pg'
+import { Sql } from 'postgres'
+import * as sql from './sqls'
+
+type Connection = __CONNECTION_TYPE__
+
+interface ExpectedRow {
+  name: string
+  age: number | null
+}
+
+declare const name: string
+declare const age: number | null
+
+export async function check(connection: Connection): Promise<void> {
+  const _a: ExpectedRow[] = await sql.select(connection)
+  const _b: ExpectedRow | null = await sql.selectLimit1(connection)
+  const _c: number = await sql.insert(connection, { name, age })
+}

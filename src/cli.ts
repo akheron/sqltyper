@@ -17,6 +17,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import * as yargs from 'yargs'
 
 import { Clients, connect, disconnect } from './clients'
+import { CodegenTarget, codegenTargets } from './codegen'
 import {
   sqlToStatementDescription,
   generateTSCode,
@@ -31,7 +32,8 @@ type Options = {
   verbose: boolean
   index: boolean
   prettify: boolean
-  pgModule: string
+  target: CodegenTarget
+  module: string
   terminalColumns: number | undefined
 }
 
@@ -51,7 +53,8 @@ async function main(): Promise<number> {
     verbose: args.verbose,
     index: args.index,
     prettify: args.prettify,
-    pgModule: args['pg-module'],
+    target: args.target,
+    module: args.module ?? args['pg-module'] ?? args.target,
     terminalColumns: process.stdout.columns,
   }
 
@@ -68,7 +71,7 @@ async function main(): Promise<number> {
   const clients = await connect(args.database)
   if (Either.isLeft(clients)) {
     console.error(clients.left)
-    throw process.exit(1)
+    return 1
   }
 
   let status = 0
@@ -87,7 +90,13 @@ Some files are out of date!`)
       status = 1
     }
   } else {
-    await processDirectories(clients.right, fileExtensions, dirPaths, options)()
+    const moduleDirs = await processDirectories(
+      clients.right,
+      fileExtensions,
+      dirPaths,
+      options
+    )()
+    if (moduleDirs.some(moduleDir => moduleDir.hasErrors)) status = 1
   }
 
   await disconnect(clients.right)
@@ -130,6 +139,18 @@ function parseArgs() {
       type: 'boolean',
       default: false,
     })
+    .option('target', {
+      alias: 't',
+      description:
+        'Postgres client library to use in generated TypeScript code',
+      choices: codegenTargets,
+      default: codegenTargets[0],
+    })
+    .option('module', {
+      alias: 'm',
+      description: 'Where to import node-postgres or postgres.js from.',
+      type: 'string',
+    })
     .option('check', {
       alias: 'c',
       description:
@@ -146,9 +167,9 @@ function parseArgs() {
       default: false,
     })
     .option('pg-module', {
-      description: 'Where to import node-postgres from.',
+      description:
+        'Where to import node-postgres from. (deprecated, use --module instead)',
       type: 'string',
-      default: 'pg',
     })
     .epilogue(
       `\
@@ -246,7 +267,11 @@ async function handleWatchEvents(
     moduleDirs = pipe(
       modifyWhere(
         moduleDir => moduleDir.dirPath === dirPath,
-        moduleDir => ({ dirPath: moduleDir.dirPath, modules: newModules }),
+        moduleDir => ({
+          dirPath: moduleDir.dirPath,
+          modules: newModules,
+          hasErrors: moduleDir.hasErrors,
+        }),
         moduleDirs
       ),
       Option.getOrElse(() => moduleDirs)
@@ -362,9 +387,13 @@ function processDirectories(
         (dirPath, tsModules) => processSQLDirectory(dirPath, tsModules, options)
       )
     ),
-    Task.map(result => {
-      console.log('done.')
-      return result
+    Task.map(moduleDirs => {
+      if (moduleDirs.some(moduleDir => moduleDir.hasErrors)) {
+        console.log('Compilation failed.')
+      } else {
+        console.log('done.')
+      }
+      return moduleDirs
     })
   )
 }
@@ -436,7 +465,8 @@ function processSQLFile(
     TaskEither.chain(source =>
       generateTSCode(clients, path.basename(filePath), source, fnName, {
         prettierFileName: options.prettify ? tsPath : undefined,
-        pgModule: options.pgModule,
+        target: options.target,
+        module: options.module,
       })
     ),
     TaskEither.chain(tsCode => async () => {
@@ -474,6 +504,7 @@ function processSQLDirectory(
   options: Options
 ): Task.Task<TsModuleDir> {
   const successfulModules = pipe(modules, Array.filterMap(identity))
+  const hasErrors = modules.some(Option.isNone)
   return pipe(
     maybeWriteIndexModule(
       options.index,
@@ -481,7 +512,7 @@ function processSQLDirectory(
       successfulModules,
       options.prettify
     ),
-    Task.map(modules => ({ dirPath, modules }))
+    Task.map(modules => ({ hasErrors, dirPath, modules }))
   )
 }
 

@@ -4,7 +4,7 @@ import * as Task from 'fp-ts/lib/Task'
 import { pipe } from 'fp-ts/lib/pipeable'
 
 import { NamedValue, ValueType, Oid, TsType } from './types'
-import { Client } from './pg'
+import * as postgres from './postgres'
 import { schemaClient } from './schema'
 
 export interface TypeClient {
@@ -12,7 +12,9 @@ export interface TypeClient {
   columnType(column: NamedValue): Task.Task<{ name: string; type: TsType }>
 }
 
-export async function typeClient(pgClient: Client): Promise<TypeClient> {
+export async function typeClient(
+  postgresClient: postgres.Sql<{}>
+): Promise<TypeClient> {
   let arrayTypes: Map<Oid, Oid> | null = null
   let enums: Map<Oid, string> | null = null
 
@@ -39,8 +41,9 @@ export async function typeClient(pgClient: Client): Promise<TypeClient> {
 
   function tsType(valueType: ValueType, nullable: boolean): Task.Task<TsType> {
     return async () => {
-      if (arrayTypes == null) arrayTypes = await makeArrayTypesMap(pgClient)
-      if (enums == null) enums = await makeEnumMap(pgClient)
+      if (arrayTypes == null)
+        arrayTypes = await makeArrayTypesMap(postgresClient)
+      if (enums == null) enums = await makeEnumMap(postgresClient)
 
       const result = ValueType.walk(valueType, {
         array: ({ oid, elemNullable }) =>
@@ -141,13 +144,17 @@ export const nodePgBuiltinArrayTypes = new Map<Oid, TsType>([
 
 export const defaultType: TsType = 'string'
 
-async function makeArrayTypesMap(pgClient: Client): Promise<Map<Oid, Oid>> {
-  const arrayTypes = await schemaClient(pgClient).getArrayTypes()
+async function makeArrayTypesMap(
+  postgresClient: postgres.Sql<{}>
+): Promise<Map<Oid, Oid>> {
+  const arrayTypes = await schemaClient(postgresClient).getArrayTypes()
   return new Map(arrayTypes.map(({ oid, elemType }) => [oid, elemType]))
 }
 
-async function makeEnumMap(pgClient: Client): Promise<Map<Oid, TsType>> {
-  const enums = await schemaClient(pgClient).getEnums()
+async function makeEnumMap(
+  postgresClient: postgres.Sql<{}>
+): Promise<Map<Oid, TsType>> {
+  const enums = await schemaClient(postgresClient).getEnums()
   return new Map(
     enums.map(enumType => [
       enumType.oid,

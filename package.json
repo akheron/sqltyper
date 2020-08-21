@@ -6,25 +6,18 @@
   "repository": "https://github.com/akheron/sqltyper",
   "author": "Petri Lehtinen <petri@digip.org>",
   "license": "MIT",
-  "keywords": [
-    "database",
-    "postgres",
-    "postgresql",
-    "typescript"
-  ],
-  "files": [
-    "dist"
-  ],
+  "keywords": ["database", "postgres", "postgresql", "typescript"],
+  "files": ["dist"],
   "bin": {
     "sqltyper": "dist/src/cli.js"
   },
   "scripts": {
-    "sql": "ts-node src/cli.ts --prettify --pg-module ../pg src/sql/",
+    "sql": "ts-node src/cli.ts --target postgres --module '../postgres' --prettify src/sql/",
     "sql:check": "yarn run sql --check",
     "sql:watch": "yarn run sql --watch",
     "lint": "eslint '**/*.ts' && prettier --check \"**/*.{json,md}\"",
     "lint:fix": "eslint --fix '**/*.ts' && prettier --write '**/*.{json,md}'",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.dist.json",
     "clean": "rm -rf dist/",
     "prepublishOnly": "yarn clean && yarn build",
     "test": "jest"
@@ -51,10 +44,6 @@
     "fp-ts": "^2.5.3",
     "node-watch": "^0.6.3",
     "packet-reader": "^1.0.0",
-    "pg-connection-string": "^2.2.0",
-    "pg-pool": "^3.0.0",
-    "pg-types": "^3.0.0",
-    "pgpass": "^1.0.2",
     "ramda": "^0.27.0",
     "typed-parser": "^0.1.4",
     "typescript": "^3.8.3",

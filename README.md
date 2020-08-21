@@ -66,23 +66,20 @@ perfectly safe to use it with any query.
 ## Installation
 
 ```
-npm install --save pg
 npm install --save-dev sqltyper
 ```
 
-Or:
+The generated TypeScript code uses [node-postgres] or [postgres.js] to execute
+the queries, so either `pg` or `postgres` is a required runtime dependency:
 
 ```
-yarn add pg
-yarn add --dev sqltyper
+npm install --save pg
+# or
+npm install --save postgres@beta
 ```
 
-sqltyper generates TypeScript code, so it isn't needed on
-application runtime. However, the generated TypeScript code uses
-[node-postgres] to execute the queries, so `pg` is a required runtime
-dependency.
-
-[node-postgres]: https://node-postgres.com/
+At the time of writing, you need to install the `@beta` verson of postgres.js to
+get TypeScript support.
 
 ## Tutorial
 
@@ -101,9 +98,9 @@ src/
 Run sqltyper on the `sqls` directory:
 
 ```
-yarn sqltyper --database postgres://user:pass@host/dbname src/sqls
+npx sqltyper --database postgres://user:pass@host/dbname src/sqls
 
-# or npx sqltyper, or ./node_modules/.bin/sqltyper, ...
+# or yarn sqltyper, or ./node_modules/.bin/sqltyper, ...
 ```
 
 sqltyper connects to the PostgreSQL database you give in the
@@ -194,7 +191,21 @@ nullability. Default: `false`.
 Watch files and run the conversion when something changes. Default:
 `false`.
 
-`--check`, `-c`
+`--target`, `-t`
+
+Whether to generate code for `pg` ([node-postgres]) or `postgres`
+([postgres.js]). Default: `pg`.
+
+`--module`, `-m`
+
+Where to import node-postgres or postgres.js from. Default: `pg` for
+node-postgres, `postgres` for postgres.js.
+
+`--pg-module` (deprecated)
+
+Alias of `--module`.
+
+`--check`,`-c`
 
 Check whether all output files are up-to-date without actually
 updating them. If they are, exit with status 0, otherwise exit with
@@ -209,10 +220,6 @@ installed and configured for your project. Default: `false`.
 
 Whether to generate and `index.ts` file that re-exports all the
 generated functions. Default: `true`.
-
-`--pg-module`
-
-Where to import node-postgres from. Default: `pg`.
 
 [connecting logic]: https://node-postgres.com/features/connecting
 [libpq environment variables]: https://www.postgresql.org/docs/current/libpq-envars.html
@@ -259,4 +266,6 @@ does more or less the same as sqltyper, but for Scala, and is designed
 to be used with MySQL. It uses JDBC, and is implemented as a Scala
 macro rather than an offline code generation tool.
 
+[node-postgres]: https://node-postgres.com/
+[postgres.js]: https://github.com/porsager/postgres
 [sqlτyped]: https://github.com/jonifreeman/sqltyped

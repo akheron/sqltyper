@@ -1,6 +1,6 @@
 import * as Either from 'fp-ts/lib/Either'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import { Client } from './pg'
+import * as postgres from './postgres'
 import { Oid } from './types'
 import * as sql from './sql'
 
@@ -36,13 +36,13 @@ export interface SchemaClient {
   getArrayTypes(): Promise<ArrayType[]>
 }
 
-export function schemaClient(pgClient: Client): SchemaClient {
+export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
   function getTable(
     schemaName: string | null,
     tableName: string
   ): TaskEither.TaskEither<string, Table> {
     return async () => {
-      const result = await sql.tableColumns(pgClient, {
+      const result = await sql.tableColumns(postgresClient, {
         schemaName: schemaName || 'public',
         tableName,
       })
@@ -64,7 +64,7 @@ export function schemaClient(pgClient: Client): SchemaClient {
   }
 
   async function getEnums(): Promise<Enum[]> {
-    return (await sql.enums(pgClient)).map(row => ({
+    return (await sql.enums(postgresClient)).map(row => ({
       oid: row.oid,
       name: row.typname,
       labels: row.labels,
@@ -72,7 +72,7 @@ export function schemaClient(pgClient: Client): SchemaClient {
   }
 
   async function getArrayTypes(): Promise<ArrayType[]> {
-    return (await sql.arrayTypes(pgClient)).map(row => ({
+    return (await sql.arrayTypes(postgresClient)).map(row => ({
       oid: row.oid,
       elemType: row.typelem,
     }))
