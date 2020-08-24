@@ -384,6 +384,8 @@ export namespace NamedWindowDefinition {
   }
 }
 
+export type Distinct = 'ALL' | 'DISTINCT' | Expression[]
+
 export type SelectListItem =
   | SelectListItem.SelectListExpression // SELECT expr [ AS name ]
   | SelectListItem.AllTableFields // SELECT tbl.*
@@ -496,26 +498,37 @@ export namespace TableExpression {
     left: TableExpression
     joinType: JoinType
     right: TableExpression
-    condition: Expression | null // null means NATURAL JOIN
+    condition: JoinCondition
   }
 
   export function createQualifiedJoin(
     left: TableExpression,
     joinType: JoinType,
     right: TableExpression,
-    condition: Expression | null
+    condition: JoinCondition
   ): QualifiedJoin {
     return { kind: 'QualifiedJoin', left, joinType, right, condition }
   }
 
-  export type NaturalJoin = {
-    kind: 'NaturalJoin'
-    left: TableExpression
-    joinType: JoinType
-    right: TableExpression
+  export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL'
+
+  export type JoinCondition =
+    | {
+        kind: 'JoinOn'
+        expression: Expression
+      }
+    | { kind: 'JoinUsing'; columnNames: string[] }
+    | { kind: 'JoinNatural' }
+
+  export function createJoinOn(expression: Expression): JoinCondition {
+    return { kind: 'JoinOn', expression }
   }
 
-  export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL'
+  export function createJoinUsing(columnNames: string[]): JoinCondition {
+    return { kind: 'JoinUsing', columnNames }
+  }
+
+  export const joinNatural: JoinCondition = { kind: 'JoinNatural' }
 
   export function walk<T>(
     tableExpr: TableExpression,
@@ -573,6 +586,7 @@ export namespace Limit {
 }
 
 export type SelectBody = {
+  distinct: Distinct
   selectList: SelectListItem[]
   from: TableExpression | null
   where: Expression | null
@@ -583,6 +597,7 @@ export type SelectBody = {
 
 export namespace SelectBody {
   export function create(
+    distinct: Distinct,
     selectList: SelectListItem[],
     from: TableExpression | null,
     where: Expression | null,
@@ -590,7 +605,7 @@ export namespace SelectBody {
     having: Expression | null,
     window: NamedWindowDefinition[]
   ): SelectBody {
-    return { selectList, from, where, groupBy, having, window }
+    return { distinct, selectList, from, where, groupBy, having, window }
   }
 }
 

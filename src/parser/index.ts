@@ -24,6 +24,7 @@ import {
 import {
   AST,
   Delete,
+  Distinct,
   Expression,
   Insert,
   Limit,
@@ -489,7 +490,7 @@ type JoinSpec = {
     | {
         kind: 'Qualified'
         type: TableExpression.JoinType
-        condition: Expression
+        condition: TableExpression.JoinCondition
       }
     | { kind: 'Natural'; type: TableExpression.JoinType }
   tableExpr: TableExpression
@@ -521,14 +522,24 @@ const qualifiedJoinType: Parser<TableExpression.JoinType> = seq(
 )
 
 const qualifiedJoin: Parser<JoinSpec> = seq(
-  (type, tableExpr, _on, condition) => ({
+  (type, tableExpr, condition) => ({
     join: { kind: 'Qualified', type, condition },
     tableExpr,
   }),
   qualifiedJoinType,
   lazy(() => tableExpression),
-  reservedWord('ON'),
-  expression
+  oneOf(
+    seq(
+      (_on, expr) => TableExpression.createJoinOn(expr),
+      reservedWord('ON'),
+      expression
+    ),
+    seq(
+      (_using, columns) => TableExpression.createJoinUsing(columns),
+      reservedWord('USING'),
+      identifierList
+    )
+  )
 )
 
 const naturalJoinType: Parser<TableExpression.JoinType> = seq(
@@ -568,7 +579,7 @@ function tableExprReducer(
         acc,
         joinSpec.join.type,
         joinSpec.tableExpr,
-        null // null conditiong means NATURAL JOIN
+        TableExpression.joinNatural
       )
   }
 }
@@ -680,6 +691,21 @@ const limit: Parser<Limit> = seq(
 
 // SELECT
 
+const distinct: Parser<Distinct> = oneOf<Distinct>(
+  reservedWord('ALL'),
+  seq(
+    (_distinct, on) => (on ? on : 'DISTINCT'),
+    reservedWord('DISTINCT'),
+    optional(
+      seq(
+        $2,
+        reservedWord('ON'),
+        parenthesized(sepBy1(symbol(','), expression))
+      )
+    )
+  )
+)
+
 const allFields: Parser<SelectListItem> = seq(
   _ => SelectListItem.createAllFields(),
   symbol('*')
@@ -707,9 +733,18 @@ const selectListItem = oneOf(
 const selectList: Parser<SelectListItem[]> = sepBy1(symbol(','), selectListItem)
 
 const selectBody: Parser<SelectBody> = seq(
-  (_sel, list, from, where, groupBy, having, window) =>
-    SelectBody.create(list, from, where, groupBy || [], having, window || []),
+  (_sel, distinct, list, from, where, groupBy, having, window) =>
+    SelectBody.create(
+      distinct || 'ALL',
+      list,
+      from,
+      where,
+      groupBy || [],
+      having,
+      window || []
+    ),
   reservedWord('SELECT'),
+  optional(distinct),
   selectList,
   optional(from),
   optional(where),
