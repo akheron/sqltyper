@@ -235,7 +235,7 @@ types there are, which tables there are, what columns and constraints
 the tables have, etc. The only queries it executes look up this
 information from various `pg_catalog.*` tables.
 
-First, it substitutes any `${paramName}` and `:paramName` strings with 
+First, it substitutes any `${paramName}` and `:paramName` strings with
 `$1`, `$2`, etc.
 
 Then, it creates a prepared statement from the query, and then asks
