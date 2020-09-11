@@ -925,11 +925,10 @@ const delete_: Parser<Delete> = seq(
 
 // parse
 
-const statementParser: Parser<AST> = oneOf<Statement>(
-  select,
-  insert,
-  update,
-  delete_
+const statementParser: Parser<AST> = seq(
+  $1,
+  oneOf<Statement>(select, insert, update, delete_),
+  optional(symbol(';'))
 )
 
 const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)

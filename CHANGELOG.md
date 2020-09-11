@@ -7,6 +7,7 @@
 - Add support for window function syntax (#27)
 - Add support for SELECT DISTINCT syntax
 - Add support for JOIN USING syntax (#32)
+- Allow semicolon in the end of queries (#36)
 
 **Bug fixes**
 
