@@ -2,8 +2,15 @@
 
 ## 0.2.6
 
-- **Enhancements**
-  - Add support for window function syntax (#27)
+**Enhancements**
+
+- Add support for window function syntax (#27)
+- Add support for SELECT DISTINCT syntax
+- Add support for JOIN USING syntax (#32)
+
+**Bug fixes**
+
+- Use postgres.js internally (adds support for Node 14.x)
 
 ## 0.2.5
 
