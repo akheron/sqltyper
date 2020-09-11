@@ -16,6 +16,7 @@ import {
   skip,
   stringBefore,
   stringBeforeEndOr,
+  stringUntil,
 } from 'typed-parser'
 import { sqlReservedWords } from '../constants'
 
@@ -25,7 +26,12 @@ import { sqlReservedWords } from '../constants'
 export const _: Parser<null> = seq(
   $null,
   skip('\\s*'),
-  many(seq($null, expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')))
+  many(
+    oneOf(
+      seq($null, expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')),
+      seq($null, expectString('/*'), stringUntil('\\*/'), skip('\\s*'))
+    )
+  )
 )
 
 export function symbol(s: string): Parser<null> {

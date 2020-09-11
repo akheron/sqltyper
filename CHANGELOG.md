@@ -8,6 +8,7 @@
 - Add support for SELECT DISTINCT syntax
 - Add support for JOIN USING syntax (#32)
 - Allow semicolon in the end of queries (#36)
+- Add support for /\* \*/ comments (#38)
 
 **Bug fixes**
 
