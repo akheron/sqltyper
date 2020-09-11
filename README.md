@@ -95,6 +95,9 @@ src/
     `-- other-query.sql
 ```
 
+In the SQL files, input parameters can be specified with either `${paramName}`
+or `:paramName` syntax.
+
 Run sqltyper on the `sqls` directory:
 
 ```
@@ -232,7 +235,8 @@ types there are, which tables there are, what columns and constraints
 the tables have, etc. The only queries it executes look up this
 information from various `pg_catalog.*` tables.
 
-First, it substitutes any `${paramName}` strings with `$1`, `$2`, etc.
+First, it substitutes any `${paramName}` and `:paramName` strings with 
+`$1`, `$2`, etc.
 
 Then, it creates a prepared statement from the query, and then asks
 PostgreSQL to describe the prepared statement. PostgreSQL will reply

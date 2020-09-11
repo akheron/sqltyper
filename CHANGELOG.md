@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.6
+## 1.0.0
 
 **Enhancements**
 
@@ -9,6 +9,7 @@
 - Add support for JOIN USING syntax (#32)
 - Allow semicolon in the end of queries (#36)
 - Add support for /\* \*/ comments (#38)
+- Add support for :param placeholder style (#42)
 
 **Bug fixes**
 
