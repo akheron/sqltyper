@@ -862,7 +862,10 @@ const insert: Parser<Insert> = seq(
   insertInto,
   optional(reqAs),
   optional(identifierList),
-  values,
+  oneOf<Values | Select>(
+    values,
+    lazy(() => select)
+  ),
   optional(onConflict),
   optional(returning)
 )

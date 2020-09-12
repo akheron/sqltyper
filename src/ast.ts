@@ -695,7 +695,7 @@ export type Insert = {
   table: TableRef
   as: string | null
   columns: string[]
-  values: Values
+  valuesOrSelect: Values | Select
   onConflict: UpdateAssignment[]
   returning: SelectListItem[]
 }
@@ -706,7 +706,7 @@ export namespace Insert {
     table: TableRef,
     as: string | null,
     columns: string[],
-    values: Values,
+    valuesOrSelect: Values | Select,
     onConflict: UpdateAssignment[],
     returning: SelectListItem[]
   ): Insert {
@@ -716,7 +716,7 @@ export namespace Insert {
       table,
       as,
       columns,
-      values,
+      valuesOrSelect,
       onConflict,
       returning,
     }

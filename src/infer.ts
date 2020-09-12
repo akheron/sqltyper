@@ -57,8 +57,7 @@ export function inferStatementNullability(
     TaskEither.fromEither(parse(statement.sql)),
     TaskEither.chain(astNode =>
       pipe(
-        getParamNullability(client, astNode),
-        InferM.fromTaskEither,
+        InferM.fromTaskEither(getParamNullability(client, astNode)),
         InferM.chain(paramNullability =>
           pipe(
             inferColumnNullability(
@@ -883,11 +882,14 @@ function getParamNullability(
 ): TaskEither.TaskEither<string, ParamNullability[]> {
   return ast.walk(tree, {
     select: () => TaskEither.right([]),
-    insert: ({ table, columns, values, onConflict }) => {
+    insert: ({ table, columns, valuesOrSelect, onConflict }) => {
+      if (valuesOrSelect.kind === 'Select') {
+        return TaskEither.right([])
+      }
       const valuesParamNullability = pipe(
         TaskEither.right(combineParamNullability),
         TaskEither.ap(
-          TaskEither.right(findParamsFromValues(values, columns.length))
+          TaskEither.right(findParamsFromValues(valuesOrSelect, columns.length))
         ),
         TaskEither.ap(findInsertColumns(client, table, columns))
       )
@@ -1042,19 +1044,21 @@ function inferRowCount(
       return 'many'
     },
 
-    insert: ({ values, returning }) =>
-      ast.Values.walk(values, {
-        // INSERT INTO xxx DEFAULT VALUES always creates a single row
-        defaultValues: () => 'one',
-        exprValues: exprValues =>
-          returning.length
-            ? // Check the length of the VALUES expression list
-              exprValues.valuesList.length === 1
-              ? 'one'
-              : 'many'
-            : // No RETURNING, no output
-              'zero',
-      }),
+    insert: ({ valuesOrSelect, returning }) =>
+      valuesOrSelect.kind === 'Select'
+        ? 'many'
+        : ast.Values.walk(valuesOrSelect, {
+            // INSERT INTO xxx DEFAULT VALUES always creates a single row
+            defaultValues: () => 'one',
+            exprValues: exprValues =>
+              returning.length
+                ? // Check the length of the VALUES expression list
+                  exprValues.valuesList.length === 1
+                  ? 'one'
+                  : 'many'
+                : // No RETURNING, no output
+                  'zero',
+          }),
 
     update: ({ returning }) =>
       returning.length

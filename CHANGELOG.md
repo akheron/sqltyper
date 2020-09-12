@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+**Enhancements**
+
+- Add support for INSERT INTO ... SELECT syntax (#39)
+
 ## 1.0.0
 
 **Enhancements**
