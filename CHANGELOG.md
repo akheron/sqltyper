@@ -6,6 +6,10 @@
 
 - Add support for INSERT INTO ... SELECT syntax (#39)
 
+**Dependencies**
+
+- Works with TypeScript >=3.8
+
 ## 1.0.0
 
 **Enhancements**
