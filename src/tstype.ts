@@ -71,7 +71,7 @@ export async function typeClient(
   ): Task.Task<{ name: string; type: TsType }> {
     return pipe(
       tsType(column.type, column.nullable),
-      Task.map(type => ({
+      Task.map((type) => ({
         name: column.name,
         type,
       }))
@@ -156,7 +156,7 @@ async function makeEnumMap(
 ): Promise<Map<Oid, TsType>> {
   const enums = await schemaClient(postgresClient).getEnums()
   return new Map(
-    enums.map(enumType => [
+    enums.map((enumType) => [
       enumType.oid,
       tsUnion(enumType.labels.map(tsStringLiteral)),
     ])

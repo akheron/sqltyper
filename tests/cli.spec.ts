@@ -21,11 +21,11 @@ const db = process.env.PGDATABASE || 'postgres'
 
 function removeGeneratedFiles() {
   // eslint-disable-next-line @typescript-eslint/no-extra-semi
-  ;[sqlsDir, invalidSqlsDir].forEach(dir =>
+  ;[sqlsDir, invalidSqlsDir].forEach((dir) =>
     fs
       .readdirSync(dir)
-      .filter(fileName => path.extname(fileName) === '.ts')
-      .forEach(fileName => fs.unlinkSync(path.join(dir, fileName)))
+      .filter((fileName) => path.extname(fileName) === '.ts')
+      .forEach((fileName) => fs.unlinkSync(path.join(dir, fileName)))
   )
   if (fs.existsSync(checkTs)) fs.unlinkSync(checkTs)
 }

@@ -33,7 +33,7 @@ describe('Integration tests', () => {
     sql.end({ timeout: 5 })
   })
 
-  fs.readdirSync(testDir, { withFileTypes: true }).forEach(dirent => {
+  fs.readdirSync(testDir, { withFileTypes: true }).forEach((dirent) => {
     const fileName = dirent.name
     const filePath = path.join(testDir, fileName)
     if (!dirent.isFile() || !isTestFileName(fileName)) {
@@ -54,8 +54,8 @@ describe('Integration tests', () => {
   ): () => Promise<Either.Either<string, void>> {
     return pipe(
       TaskEither.fromEither(parseTestFile(filePath)),
-      TaskEither.chain(testFile => () =>
-        alwaysRollback(sql, async tx => {
+      TaskEither.chain((testFile) => () =>
+        alwaysRollback(sql, async (tx) => {
           const clients = await C.clients(tx)
 
           // Setup
@@ -64,7 +64,7 @@ describe('Integration tests', () => {
           // Check expectations
           return await pipe(
             sqlToStatementDescription(clients, testFile.query),
-            TaskEither.chain(stmtWithWarnings => {
+            TaskEither.chain((stmtWithWarnings) => {
               const warnings = stmtWithWarnings.warnings
               if (testFile.warnings.length === 0 && warnings.length > 0) {
                 // No warnings expected => Treat warnings as errors
@@ -74,7 +74,7 @@ describe('Integration tests', () => {
               }
               return TaskEither.right(stmtWithWarnings)
             }),
-            TaskEither.chain(stmtWithWarnings =>
+            TaskEither.chain((stmtWithWarnings) =>
               TaskEither.rightTask(
                 checkExpectations(clients, testFile, stmtWithWarnings)
               )
@@ -82,7 +82,7 @@ describe('Integration tests', () => {
           )()
         })
       ),
-      TaskEither.mapLeft(errorMessage => {
+      TaskEither.mapLeft((errorMessage) => {
         throw new Error(`Failed to run ${fileName}: ${errorMessage}`)
       })
     )
@@ -106,24 +106,26 @@ function checkExpectations(
     // Expected column types
     await pipe(
       traverseATs(statementDescription.columns, clients.types.columnType),
-      Task.map(columnTypes => expect(columnTypes).toEqual(testFile.columnTypes))
+      Task.map((columnTypes) =>
+        expect(columnTypes).toEqual(testFile.columnTypes)
+      )
     )()
 
     // Expected param types
     await pipe(
-      traverseATs(statementDescription.params, param =>
+      traverseATs(statementDescription.params, (param) =>
         pipe(
           clients.types.tsType(param.type, param.nullable),
-          Task.map(tsType => ({ name: param.name, type: tsType }))
+          Task.map((tsType) => ({ name: param.name, type: tsType }))
         )
       ),
-      Task.map(paramTypes => expect(paramTypes).toEqual(testFile.paramTypes))
+      Task.map((paramTypes) => expect(paramTypes).toEqual(testFile.paramTypes))
     )()
 
     // Expected warnings (only check the summary)
     expect(pipe(testFile.warnings, Array.sort(Ord.ordString))).toEqual(
       pipe(
-        warnings.map(w => w.summary),
+        warnings.map((w) => w.summary),
         Array.sort(Ord.ordString)
       )
     )
@@ -197,8 +199,8 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
     Either.ap(
       pipe(
         extractSection('expected warnings', content),
-        Either.map(s => s.split('\n')),
-        Either.map(lines => lines.filter(identity)),
+        Either.map((s) => s.split('\n')),
+        Either.map((lines) => lines.filter(identity)),
         Either.orElse(() => Either.right([] as string[]))
       )
     )
@@ -233,7 +235,7 @@ function sectionRegex(sectionName: string): RegExp {
 
 function splitFields(text: string): Either.Either<string, Field[]> {
   if (!text) return Either.right([])
-  return traverseAE(text.split('\n'), line => {
+  return traverseAE(text.split('\n'), (line) => {
     const parts = splitOnce(': ', line.trimRight())
     if (parts.length !== 2) return Either.left(`Invalid line: "${line}"`)
     return Either.right({ name: parts[0], type: parts[1] })

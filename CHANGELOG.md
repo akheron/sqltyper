@@ -56,8 +56,7 @@
 
 **Bug fixes**
 
-- Treat qualified and unqualified column as equal if the column name
-  is the same
+- Treat qualified and unqualified column as equal if the column name is the same
 - Param is not replaced correctly if it's used more than once
 
 ## 0.2.0

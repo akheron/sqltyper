@@ -13,12 +13,12 @@ export function describeStatement(
   return pipe(
     TaskEither.tryCatch(
       () => postgresClient.describe(sql),
-      error =>
+      (error) =>
         error instanceof postgresClient.PostgresError
           ? errorToString(error, sql)
           : (error as globalThis.Error).message || ''
     ),
-    TaskEither.map(result => describeResult(sql, paramNames, result))
+    TaskEither.map((result) => describeResult(sql, paramNames, result))
   )
 }
 
@@ -28,7 +28,7 @@ function describeResult(
   result: DescribeResult
 ): StatementDescription {
   return {
-    columns: result.columns.map(field => ({
+    columns: result.columns.map((field) => ({
       name: field.name,
       nullable: true, // columns are nullable by default
       type: ValueType.any(field.type),

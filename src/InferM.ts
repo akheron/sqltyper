@@ -23,12 +23,12 @@ export const right: <A = never>(a: A) => InferM<A> = flow(
 
 export const payload: <A>(
   fa: InferM<A>
-) => TaskEither.TaskEither<string, A> = TaskEither.map(warn => warn.payload)
+) => TaskEither.TaskEither<string, A> = TaskEither.map((warn) => warn.payload)
 
 export const warnings: <A>(
   fa: InferM<A>
 ) => TaskEither.TaskEither<string, Warn.Warning[]> = TaskEither.map(
-  warn => warn.warnings
+  (warn) => warn.warnings
 )
 
 export const map: <A, B>(f: (a: A) => B) => (fa: InferM<A>) => InferM<B> = flow(
@@ -45,7 +45,7 @@ export function chain<A, B>(f: (a: A) => InferM<B>) {
       TaskEither.ap(
         pipe(
           ma,
-          TaskEither.chain(w => f(w.payload))
+          TaskEither.chain((w) => f(w.payload))
         )
       ),
       TaskEither.ap(warnings(ma))

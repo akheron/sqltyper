@@ -38,15 +38,15 @@ export namespace FieldNullability {
     b: FieldNullability
   ): FieldNullability =>
     walk(a, {
-      any: aAny =>
+      any: (aAny) =>
         walk(b, {
-          any: bAny => any(aAny.nullable || bAny.nullable),
-          array: bArray => any(aAny.nullable || bArray.nullable),
+          any: (bAny) => any(aAny.nullable || bAny.nullable),
+          array: (bArray) => any(aAny.nullable || bArray.nullable),
         }),
-      array: aArray =>
+      array: (aArray) =>
         walk(b, {
-          any: bAny => any(aArray.nullable || bAny.nullable),
-          array: bArray =>
+          any: (bAny) => any(aArray.nullable || bAny.nullable),
+          array: (bArray) =>
             array(
               aArray.nullable || bArray.nullable,
               aArray.elemNullable || bArray.elemNullable

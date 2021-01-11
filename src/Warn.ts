@@ -43,16 +43,16 @@ export const warn_: Functor1<URI> &
   of: of,
   reduce: (fa, b, f) => f(b, fa.payload),
   reduceRight: (fa, b, f) => f(fa.payload, b),
-  foldMap: _M => (fa, f) => f(fa.payload),
+  foldMap: (_M) => (fa, f) => f(fa.payload),
   traverse: <F>(F: Applicative<F>) => <A, B>(
     ta: Warn<A>,
     f: (a: A) => HKT<F, B>
   ): HKT<F, Warn<B>> =>
-    F.map(f(ta.payload), b => ({ payload: b, warnings: ta.warnings })),
+    F.map(f(ta.payload), (b) => ({ payload: b, warnings: ta.warnings })),
   sequence: <F>(F: Applicative<F>) => <A>(
     ta: Warn<HKT<F, A>>
   ): HKT<F, Warn<A>> =>
-    F.map(ta.payload, a => ({ payload: a, warnings: ta.warnings })),
+    F.map(ta.payload, (a) => ({ payload: a, warnings: ta.warnings })),
 }
 
 export function of<A>(payload: A): Warn<A> {
@@ -104,7 +104,7 @@ export function format(
 ): string {
   let result = warnings
     .map(
-      warning =>
+      (warning) =>
         `
 WARNING: ${warning.summary}${
           verbose && warning.description != ''

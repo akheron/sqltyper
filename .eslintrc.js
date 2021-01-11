@@ -13,9 +13,10 @@ module.exports = {
       {
         types: { '{}': false },
         extendDefaults: true,
-      }
+      },
     ],
     '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/member-delimiter-style': [
       'error',
       {
@@ -23,15 +24,16 @@ module.exports = {
         multiline: { delimiter: 'none' },
       },
     ],
-    '@typescript-eslint/no-use-before-define': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-namespace': 'off',
-    'no-inner-declarations': 'off',
     '@typescript-eslint/no-unused-vars': [
       'warn',
       {
         argsIgnorePattern: '^_',
       },
     ],
+    '@typescript-eslint/no-use-before-define': 'off',
+    'no-inner-declarations': 'off',
     'prettier/prettier': 'error',
   },
 }

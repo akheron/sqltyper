@@ -88,7 +88,7 @@ export const identifier = seq(
 
 export function expectIdentifier<T extends string>(ident: T): Parser<T> {
   return seq(
-    _ => ident,
+    (_) => ident,
     attempt(
       map(
         (match, toError) =>
@@ -123,8 +123,8 @@ export const reservedWord = <A extends string>(word: A): Parser<A> => {
 export const sepReserveds = (words: string): Parser<string> =>
   attempt(
     seq(
-      _ => words,
-      ...words.split(/\s+/).map(word => seq($null, reservedWord(word), _)),
+      (_) => words,
+      ...words.split(/\s+/).map((word) => seq($null, reservedWord(word), _)),
       _
     )
   )

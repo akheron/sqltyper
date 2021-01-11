@@ -96,7 +96,7 @@ Some files are out of date!`)
       dirPaths,
       options
     )()
-    if (moduleDirs.some(moduleDir => moduleDir.hasErrors)) status = 1
+    if (moduleDirs.some((moduleDir) => moduleDir.hasErrors)) status = 1
   }
 
   await disconnect(clients.right)
@@ -219,10 +219,10 @@ async function watchDirectories(
   let handlingEvents = false
   const eventHandler = makeWatchEventHandler(clients, options)
 
-  dirPaths.forEach(dirPath =>
+  dirPaths.forEach((dirPath) =>
     watch(
       dirPath,
-      { filter: fileName => hasOneOfExtensions(fileExtensions, fileName) },
+      { filter: (fileName) => hasOneOfExtensions(fileExtensions, fileName) },
       async (event: 'update' | 'remove', filePath: string) => {
         eventBuffer.push({
           type: event,
@@ -255,7 +255,7 @@ async function handleWatchEvents(
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const { type, dirPath, fileName } = events.shift()!
 
-    const moduleDir = moduleDirs.find(dir => dir.dirPath === dirPath)
+    const moduleDir = moduleDirs.find((dir) => dir.dirPath === dirPath)
     if (moduleDir == null) return moduleDirs
 
     const newModules = await eventHandler(
@@ -266,8 +266,8 @@ async function handleWatchEvents(
     )
     moduleDirs = pipe(
       modifyWhere(
-        moduleDir => moduleDir.dirPath === dirPath,
-        moduleDir => ({
+        (moduleDir) => moduleDir.dirPath === dirPath,
+        (moduleDir) => ({
           dirPath: moduleDir.dirPath,
           modules: newModules,
           hasErrors: moduleDir.hasErrors,
@@ -297,10 +297,12 @@ function makeWatchEventHandler(
       case 'update':
         result = pipe(
           processSQLFile(clients, sqlFilePath, false, options),
-          Task.map(tsModuleOption =>
+          Task.map((tsModuleOption) =>
             pipe(
               tsModuleOption,
-              Option.map(tsModule => replaceOrAddTsModule(tsModule, tsModules)),
+              Option.map((tsModule) =>
+                replaceOrAddTsModule(tsModule, tsModules)
+              ),
               Option.getOrElse(() => removeTsModule(sqlFileName, tsModules))
             )
           )
@@ -317,7 +319,7 @@ function makeWatchEventHandler(
 
     result = pipe(
       result,
-      Task.chain(newModules =>
+      Task.chain((newModules) =>
         maybeWriteIndexModule(
           options.index,
           dirPath,
@@ -337,7 +339,7 @@ function replaceOrAddTsModule(
 ): TsModule[] {
   return pipe(
     modifyWhere(
-      mod => mod.sqlFileName === tsModule.sqlFileName,
+      (mod) => mod.sqlFileName === tsModule.sqlFileName,
       () => tsModule,
       tsModules
     ),
@@ -353,7 +355,7 @@ function modifyWhere<A>(
   return pipe(
     where.findIndex(pred),
     Option.fromNullable,
-    Option.chain(index =>
+    Option.chain((index) =>
       pipe(
         where,
         Array.modifyAt(index, () => replacer(where[index]))
@@ -366,7 +368,7 @@ function removeTsModule(
   sqlFileName: string,
   tsModules: TsModule[]
 ): TsModule[] {
-  return tsModules.filter(mod => mod.sqlFileName != sqlFileName)
+  return tsModules.filter((mod) => mod.sqlFileName != sqlFileName)
 }
 
 function processDirectories(
@@ -383,12 +385,12 @@ function processDirectories(
       mapDirectories(
         dirPaths,
         fileExtensions,
-        filePath => processSQLFile(clients, filePath, false, options),
+        (filePath) => processSQLFile(clients, filePath, false, options),
         (dirPath, tsModules) => processSQLDirectory(dirPath, tsModules, options)
       )
     ),
-    Task.map(moduleDirs => {
-      if (moduleDirs.some(moduleDir => moduleDir.hasErrors)) {
+    Task.map((moduleDirs) => {
+      if (moduleDirs.some((moduleDir) => moduleDir.hasErrors)) {
         console.log('Compilation failed.')
       } else {
         console.log('done.')
@@ -407,7 +409,7 @@ function checkDirectories(
   return mapDirectories(
     dirPaths,
     fileExtensions,
-    filePath => processSQLFile(clients, filePath, true, options),
+    (filePath) => processSQLFile(clients, filePath, true, options),
     (_dirPath, tsModules) => checkDirectoryResult(tsModules)
   )
 }
@@ -424,7 +426,7 @@ function mapDirectories<T, U>(
   fileProcessor: (filePath: string) => Task.Task<T>,
   dirProcessor: (dirPath: string, fileResults: T[]) => Task.Task<U>
 ): Task.Task<U[]> {
-  return traverseATs(dirPaths, dirPath =>
+  return traverseATs(dirPaths, (dirPath) =>
     mapDirectory(dirPath, fileExtensions, fileProcessor, dirProcessor)
   )
 }
@@ -437,8 +439,8 @@ function mapDirectory<T, U>(
 ): Task.Task<U> {
   return pipe(
     findSQLFilePaths(dirPath, fileExtensions),
-    Task.chain(filePaths => traverseATs(filePaths, fileProcessor)),
-    Task.chain(results => dirProcessor(dirPath, results))
+    Task.chain((filePaths) => traverseATs(filePaths, fileProcessor)),
+    Task.chain((results) => dirProcessor(dirPath, results))
   )
 }
 
@@ -452,8 +454,8 @@ function processSQLFile(
   const fnName = funcName(filePath)
   return pipe(
     () => fs.readFile(filePath, 'utf-8'),
-    Task.chain(sql => sqlToStatementDescription(clients, sql)),
-    TaskEither.map(stmtWithWarnings => {
+    Task.chain((sql) => sqlToStatementDescription(clients, sql)),
+    TaskEither.map((stmtWithWarnings) => {
       const [stmt, warnings] = Warn.split(stmtWithWarnings)
       if (warnings.length > 0) {
         console.warn(
@@ -462,14 +464,14 @@ function processSQLFile(
       }
       return stmt
     }),
-    TaskEither.chain(source =>
+    TaskEither.chain((source) =>
       generateTSCode(clients, path.basename(filePath), source, fnName, {
         prettierFileName: options.prettify ? tsPath : undefined,
         target: options.target,
         module: options.module,
       })
     ),
-    TaskEither.chain(tsCode => async () => {
+    TaskEither.chain((tsCode) => async () => {
       if (await isFileOutOfDate(tsPath, tsCode)) {
         if (checkOnly) {
           return Either.left('out of date')
@@ -479,7 +481,7 @@ function processSQLFile(
       }
       return Either.right(undefined)
     }),
-    TaskEither.orElse(errorMessage => async (): Promise<
+    TaskEither.orElse((errorMessage) => async (): Promise<
       Either.Either<undefined, undefined>
     > => {
       console.error(`${filePath}: ${errorMessage}`)
@@ -512,7 +514,7 @@ function processSQLDirectory(
       successfulModules,
       options.prettify
     ),
-    Task.map(modules => ({ hasErrors, dirPath, modules }))
+    Task.map((modules) => ({ hasErrors, dirPath, modules }))
   )
 }
 
@@ -527,7 +529,7 @@ function maybeWriteIndexModule(
   if (write) {
     return pipe(
       Task.of(tsModules),
-      Task.map(modules =>
+      Task.map((modules) =>
         pipe(
           modules,
           Array.sort(
@@ -537,12 +539,12 @@ function maybeWriteIndexModule(
           )
         )
       ),
-      Task.chain(sortedModules =>
+      Task.chain((sortedModules) =>
         indexModuleTS(sortedModules, {
           prettierFileName: prettify ? tsPath : null,
         })
       ),
-      Task.chain(tsCode => async () => {
+      Task.chain((tsCode) => async () => {
         if (await isFileOutOfDate(tsPath, tsCode)) {
           console.log(`Writing ${tsPath}`)
           await fs.writeFile(tsPath, tsCode)
@@ -597,17 +599,17 @@ function findSQLFilePaths(
         encoding: 'utf-8',
         withFileTypes: true,
       }),
-    Task.chain(dirents =>
+    Task.chain((dirents) =>
       pipe(
-        traverseATs(dirents, dirent =>
+        traverseATs(dirents, (dirent) =>
           pipe(
             isSQLFile(fileExtensions, dirPath, dirent.name),
-            Task.map(is => (is ? Option.some(dirent) : Option.none))
+            Task.map((is) => (is ? Option.some(dirent) : Option.none))
           )
         ),
         Task.map(Array.filterMap(identity)),
-        Task.map(dirents =>
-          dirents.map(dirent => path.join(dirPath, dirent.name))
+        Task.map((dirents) =>
+          dirents.map((dirent) => path.join(dirPath, dirent.name))
         )
       )
     )
@@ -623,7 +625,7 @@ function getOutputPath(filePath: string): string {
 }
 
 function extensions(e: string): string[] {
-  return e.split(',').map(ext => `.${ext}`)
+  return e.split(',').map((ext) => `.${ext}`)
 }
 
 function isSQLFile(
@@ -647,8 +649,8 @@ function hasOneOfExtensions(exts: string[], fileName: string): boolean {
 }
 
 main()
-  .then(status => process.exit(status))
-  .catch(err => {
+  .then((status) => process.exit(status))
+  .catch((err) => {
     console.error(err)
     process.exit(99)
   })

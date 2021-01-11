@@ -33,7 +33,7 @@ function handleNamedParams(
   const paramIndices: Map<string, number> = new Map()
   let current = 1
 
-  params.forEach(param => {
+  params.forEach((param) => {
     //                              ${paramName}         :paramName
     const name = param[0] === '$' ? param.slice(2, -1) : param.slice(1)
     if (!paramIndices.has(name)) {

@@ -24,11 +24,11 @@ export function sqlToStatementDescription(
   return pipe(
     Task.of(sql),
     Task.map(preprocessSQL),
-    TaskEither.chain(processed =>
+    TaskEither.chain((processed) =>
       describeStatement(clients.postgres, processed.sql, processed.paramNames)
     ),
-    TaskEither.chain(stmt => Task.of(validateStatement(stmt))),
-    TaskEither.chain(stmt =>
+    TaskEither.chain((stmt) => Task.of(validateStatement(stmt))),
+    TaskEither.chain((stmt) =>
       TaskEither.rightTask(inferStatementNullability(clients.schema, stmt))
     )
   )
@@ -52,7 +52,7 @@ export function generateTSCode(
 
   return pipe(
     TaskEither.right(stmt),
-    TaskEither.chain(stmt =>
+    TaskEither.chain((stmt) =>
       TaskEither.rightTask(
         generateTypeScript(
           clients.types,
@@ -64,7 +64,7 @@ export function generateTSCode(
         )
       )
     ),
-    TaskEither.chain(tsCode =>
+    TaskEither.chain((tsCode) =>
       prettierFileName != null
         ? TaskEither.rightTask(() => runPrettier(prettierFileName, tsCode))
         : TaskEither.right(tsCode)
@@ -83,7 +83,7 @@ export function indexModuleTS(
   const { prettierFileName = null } = options || {}
   return pipe(
     Task.of(generateIndexModule(tsModules)),
-    Task.chain(tsCode =>
+    Task.chain((tsCode) =>
       prettierFileName != null
         ? () => runPrettier(prettierFileName, tsCode)
         : Task.of(tsCode)

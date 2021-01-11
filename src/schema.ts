@@ -53,7 +53,7 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
       }
       return Either.right({
         name: tableName,
-        columns: result.map(col => ({
+        columns: result.map((col) => ({
           hidden: col.attnum < 0,
           name: col.attname,
           nullable: !col.attnotnull,
@@ -64,7 +64,7 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
   }
 
   async function getEnums(): Promise<Enum[]> {
-    return (await sql.enums(postgresClient)).map(row => ({
+    return (await sql.enums(postgresClient)).map((row) => ({
       oid: row.oid,
       name: row.typname,
       labels: row.labels,
@@ -72,7 +72,7 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
   }
 
   async function getArrayTypes(): Promise<ArrayType[]> {
-    return (await sql.arrayTypes(postgresClient)).map(row => ({
+    return (await sql.arrayTypes(postgresClient)).map((row) => ({
       oid: row.oid,
       elemType: row.typelem,
     }))

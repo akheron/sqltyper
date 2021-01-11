@@ -116,7 +116,7 @@ const caseExpr: Parser<Expression> = seq(
 const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
     // func(*) means no arguments
-    seq(_ => [], symbol('*')),
+    seq((_) => [], symbol('*')),
     sepBy(
       symbol(','),
       lazy(() => expression)
@@ -244,8 +244,8 @@ const typeName: Parser<string> = seq(
   (id, arraySuffix) => id + arraySuffix,
   identifier,
   oneOf<'[]' | ''>(
-    seq(_ => '[]', symbol('['), symbol(']')),
-    seq(_ => '', _)
+    seq((_) => '[]', symbol('['), symbol(']')),
+    seq((_) => '', _)
   )
 )
 
@@ -337,7 +337,7 @@ namespace OtherExprRhs {
     attempt(
       oneOf<'IN' | 'NOT IN'>(
         reservedWord('IN'),
-        seq(_ => 'NOT IN', reservedWord('NOT'), reservedWord('IN'))
+        seq((_) => 'NOT IN', reservedWord('NOT'), reservedWord('IN'))
       )
     ),
     parenthesized(lazy(() => select))
@@ -367,7 +367,7 @@ namespace OtherExprRhs {
     op: '!'
   }
   const unarySuffix: Parser<UnarySuffix> = seq(
-    _ => ({ kind: 'UnarySuffix', op: '!' }),
+    (_) => ({ kind: 'UnarySuffix', op: '!' }),
     operator('!')
   )
 
@@ -707,7 +707,7 @@ const distinct: Parser<Distinct> = oneOf<Distinct>(
 )
 
 const allFields: Parser<SelectListItem> = seq(
-  _ => SelectListItem.createAllFields(),
+  (_) => SelectListItem.createAllFields(),
   symbol('*')
 )
 
@@ -939,6 +939,6 @@ const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)
 export function parse(source: string): Either<string, AST> {
   return tryCatch(
     () => run(topLevelParser, source),
-    e => (e as ParseError).explain()
+    (e) => (e as ParseError).explain()
   )
 }

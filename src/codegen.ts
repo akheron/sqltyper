@@ -143,7 +143,7 @@ export async function ${funcName}(
 }
 
 function hasOnlyPositionalParams(stmt: StatementDescription) {
-  return stmt.params.every(param => !!param.name.match(/\$\d+/))
+  return stmt.params.every((param) => !!param.name.match(/\$\d+/))
 }
 
 function funcReturnType(
@@ -152,7 +152,7 @@ function funcReturnType(
 ): Task.Task<string> {
   return pipe(
     traverseATs(stmt.columns, columnType(types)),
-    Task.map(columnTypes => {
+    Task.map((columnTypes) => {
       const rowType = '{ ' + columnTypes.join('; ') + ' }'
       switch (stmt.rowCount) {
         case 'zero':
@@ -221,7 +221,7 @@ function funcParams(
     positionalOnly
       ? positionalFuncParams(types, stmt)
       : namedFuncParams(types, stmt),
-    Task.map(params => `, ${params}`)
+    Task.map((params) => `, ${params}`)
   )
 }
 
@@ -230,13 +230,13 @@ function positionalFuncParams(
   stmt: StatementDescription
 ): Task.Task<string> {
   return pipe(
-    traverseATs(stmt.params, param =>
+    traverseATs(stmt.params, (param) =>
       pipe(
         types.tsType(param.type, param.nullable),
-        Task.map(tsType => `${param.name}: ${tsType}`)
+        Task.map((tsType) => `${param.name}: ${tsType}`)
       )
     ),
-    Task.map(params => params.join(', '))
+    Task.map((params) => params.join(', '))
   )
 }
 
@@ -246,7 +246,7 @@ function namedFuncParams(
 ): Task.Task<string> {
   return pipe(
     positionalFuncParams(types, stmt),
-    Task.map(params => `params: { ${params} }`)
+    Task.map((params) => `params: { ${params} }`)
   )
 }
 
@@ -260,7 +260,7 @@ function queryValues(
 
   const prefix = positionalOnly ? '' : 'params.'
   return (
-    ', [ ' + stmt.params.map(param => prefix + param.name).join(', ') + ' ]'
+    ', [ ' + stmt.params.map((param) => prefix + param.name).join(', ') + ' ]'
   )
 }
 

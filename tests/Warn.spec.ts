@@ -41,7 +41,7 @@ describe('Warn', () => {
     const originalWarnings = warn.warnings
 
     it('map', () => {
-      expect(Warn.warn_.map(warn, x => x + 'bar')).toEqual({
+      expect(Warn.warn_.map(warn, (x) => x + 'bar')).toEqual({
         payload: 'foobar',
         warnings: originalWarnings,
       })
