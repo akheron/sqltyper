@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Dependencies**
+
+- Requires TypeScript >=3.8, <4.0 for now
+
 ## 1.0.1
 
 **Enhancements**
