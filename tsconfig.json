@@ -4,6 +4,7 @@
     "module": "commonjs",
     "strict": true,
     "allowJs": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "lib": ["ES2017"]
   }
 }
