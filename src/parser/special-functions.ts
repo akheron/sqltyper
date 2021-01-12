@@ -1,4 +1,4 @@
-import { Parser, $2, attempt, seq, oneOf } from 'typed-parser'
+import { Parser, $2, attempt, seq, oneOf } from '../typed-parser'
 import { Expression } from '../ast'
 import { expectIdentifier, symbol } from './token'
 import { optional, parenthesized } from './utils'
