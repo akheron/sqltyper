@@ -17,7 +17,7 @@ import {
   stringBefore,
   stringBeforeEndOr,
   stringUntil,
-} from 'typed-parser'
+} from '../typed-parser'
 import { sqlReservedWords } from '../constants'
 
 // Token parsers

@@ -20,7 +20,7 @@ import {
   sepBy1,
   seq,
   stringBefore,
-} from 'typed-parser'
+} from '../typed-parser'
 import {
   AST,
   Delete,

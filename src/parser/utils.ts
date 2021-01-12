@@ -1,4 +1,4 @@
-import { $2, Parser, oneOf, seq, $null, constant } from 'typed-parser'
+import { $2, Parser, oneOf, seq, $null, constant } from '../typed-parser'
 import { symbol } from './token'
 
 export function optional<A>(parser: Parser<A>): Parser<A | null> {
