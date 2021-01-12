@@ -1,9 +1,5 @@
 import { Either, tryCatch } from 'fp-ts/lib/Either'
 import {
-  $1,
-  $2,
-  $3,
-  $null,
   ParseError,
   Parser,
   attempt,
@@ -19,6 +15,11 @@ import {
   sepBy,
   sepBy1,
   seq,
+  seq1,
+  seq2,
+  seq3,
+  seqConst,
+  seqNull,
   stringBefore,
 } from '../typed-parser'
 import {
@@ -61,62 +62,54 @@ import { specialFunctionCall } from './special-functions'
 
 // ( ... )
 export function parenthesized<T>(parser: Parser<T>): Parser<T> {
-  return seq($2, symbol('('), parser, symbol(')'))
+  return seq2(symbol('('), parser, symbol(')'))
 }
 
 // [ AS ] identifier
-const as: Parser<string> = seq(
-  (_as, id) => id,
-  optional(reservedWord('AS')),
-  identifier
-)
+const as: Parser<string> = seq2(optional(reservedWord('AS')), identifier)
 
 // AS identifier
-const reqAs: Parser<string> = seq($2, reservedWord('AS'), identifier)
+const reqAs: Parser<string> = seq2(reservedWord('AS'), identifier)
 
 // [ schema . ] table
 const tableRef: Parser<TableRef> = seq(
-  (id1, id2) => (id2 ? TableRef.create(id1, id2) : TableRef.create(null, id1)),
   identifier,
-  optional(seq($2, symbol('.'), identifier))
-)
+  optional(seq2(symbol('.'), identifier))
+)((id1, id2) => (id2 ? TableRef.create(id1, id2) : TableRef.create(null, id1)))
 
 // Expressions
 
 const arraySubQueryExpr: Parser<Expression> = seq(
-  (_arr, subquery) => Expression.createArraySubQuery(subquery),
   reservedWord('ARRAY'),
   parenthesized(lazy(() => select))
-)
+)((_arr, subquery) => Expression.createArraySubQuery(subquery))
 
 const caseBranch: Parser<Expression.CaseBranch> = seq(
-  (_when, condition, _then, result) => ({ condition, result }),
   reservedWord('WHEN'),
   lazy(() => expression),
   reservedWord('THEN'),
   lazy(() => expression)
-)
+)((_when, condition, _then, result) => ({ condition, result }))
 
-const caseElse: Parser<Expression> = seq(
-  $2,
+const caseElse: Parser<Expression> = seq2(
   reservedWord('ELSE'),
   lazy(() => expression)
 )
 
 const caseExpr: Parser<Expression> = seq(
-  (_case, branch1, branches, else_, _end) =>
-    Expression.createCase([branch1, ...branches], else_),
   reservedWord('CASE'),
   caseBranch,
   many(caseBranch),
   optional(caseElse),
   reservedWord('END')
+)((_case, branch1, branches, else_, _end) =>
+  Expression.createCase([branch1, ...branches], else_)
 )
 
 const functionArguments: Parser<Expression[]> = parenthesized(
   oneOf(
     // func(*) means no arguments
-    seq((_) => [], symbol('*')),
+    seqConst([], symbol('*')),
     sepBy(
       symbol(','),
       lazy(() => expression)
@@ -127,48 +120,33 @@ const functionArguments: Parser<Expression[]> = parenthesized(
 const windowDefinition: Parser<WindowDefinition> = oneOf<WindowDefinition>(
   identifier,
   seq(
-    (partition, order) => ({
-      partitionBy: partition,
-      orderBy: order,
-    }),
     optional(
-      seq(
-        $3,
+      seq3(
         reservedWord('PARTITION'),
         reservedWord('BY'),
         lazy(() => expression)
       )
     ),
     optional(lazy(() => orderBy))
-  )
+  )((partition, order) => ({
+    partitionBy: partition,
+    orderBy: order,
+  }))
 )
 
 const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
-  (ident, rest) => {
-    if (rest === null) {
-      return Expression.createColumnRef(ident)
-    } else if (typeof rest === 'string') {
-      return Expression.createTableColumnRef(ident, rest)
-    } else {
-      const [argList, filter, window] = rest
-      return Expression.createFunctionCall(ident, argList, filter, window)
-    }
-  },
   identifier,
   oneOf<
     string | [Expression[], Expression | null, WindowDefinition | null] | null
   >(
-    seq($2, symbol('.'), identifier),
+    seq2(symbol('.'), identifier),
     seq(
-      (argList, filter, window) => [argList, filter, window],
       functionArguments,
       optional(
-        seq(
-          $2,
+        seq2(
           reservedWord('FILTER'),
           parenthesized(
-            seq(
-              $2,
+            seq2(
               reservedWord('WHERE'),
               lazy(() => expression)
             )
@@ -176,19 +154,26 @@ const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
         )
       ),
       optional(
-        seq(
-          $2,
+        seq2(
           reservedWord('OVER'),
           oneOf(identifier, parenthesized(windowDefinition))
         )
       )
-    ),
+    )((argList, filter, window) => [argList, filter, window]),
     _
   )
-)
+)((ident, rest) => {
+  if (rest === null) {
+    return Expression.createColumnRef(ident)
+  } else if (typeof rest === 'string') {
+    return Expression.createTableColumnRef(ident, rest)
+  } else {
+    const [argList, filter, window] = rest
+    return Expression.createFunctionCall(ident, argList, filter, window)
+  }
+})
 
-const strEscape = seq(
-  $2,
+const strEscape = seq2(
   symbolKeepWS('\\'),
   oneOf(
     keyword("'", "'"),
@@ -202,22 +187,19 @@ const strEscape = seq(
   )
 )
 const strInner: Parser<string> = seq(
-  (s, tail) => s + tail,
   stringBefore("[\\']"),
   oneOf(
     seq(
-      (e, t) => e + t,
       strEscape,
       lazy(() => strInner)
-    ),
+    )((e, t) => e + t),
     constant('')
   )
-)
+)((s, tail) => s + tail)
 
-const stringConstant = seq($2, symbolKeepWS("'"), strInner, symbol("'"))
+const stringConstant = seq2(symbolKeepWS("'"), strInner, symbol("'"))
 
 const constantExpr: Parser<Expression> = seq(
-  (val, _ws) => Expression.createConstant(val),
   oneOf(
     expectIdentifier('TRUE'),
     expectIdentifier('FALSE'),
@@ -227,31 +209,24 @@ const constantExpr: Parser<Expression> = seq(
     stringConstant
   ),
   _
-)
+)((val, _ws) => Expression.createConstant(val))
 
 const parameterExpr: Parser<Expression> = seq(
-  (_$, index, _ws) => Expression.createParameter(index),
   symbolKeepWS('$'),
   int('[0-9]+'),
   _
-)
+)((_$, index, _ws) => Expression.createParameter(index))
 
 const parenthesizedExpr: Parser<Expression> = parenthesized(
   lazy(() => expression)
 )
 
 const typeName: Parser<string> = seq(
-  (id, arraySuffix) => id + arraySuffix,
   identifier,
-  oneOf<'[]' | ''>(
-    seq((_) => '[]', symbol('['), symbol(']')),
-    seq((_) => '', _)
-  )
-)
+  oneOf<'[]' | ''>(seqConst('[]', symbol('['), symbol(']')), seqConst('', _))
+)((id, arraySuffix) => id + arraySuffix)
 
 const primaryExpr: Parser<Expression> = seq(
-  (expr, typeCast) =>
-    typeCast != null ? Expression.createTypeCast(expr, typeCast) : expr,
   oneOf(
     arraySubQueryExpr,
     caseExpr,
@@ -261,7 +236,9 @@ const primaryExpr: Parser<Expression> = seq(
     parameterExpr,
     parenthesizedExpr
   ),
-  optional(seq($2, symbol('::'), typeName))
+  optional(seq2(symbol('::'), typeName))
+)((expr, typeCast) =>
+  typeCast != null ? Expression.createTypeCast(expr, typeCast) : expr
 )
 
 function makeUnaryOp(
@@ -269,12 +246,12 @@ function makeUnaryOp(
   nextExpr: Parser<Expression>
 ): Parser<Expression> {
   return seq(
-    (ops, next) =>
-      ops.length > 0
-        ? ops.reduceRight((acc, op) => Expression.createUnaryOp(op, acc), next)
-        : next,
     many(oper),
     nextExpr
+  )((ops, next) =>
+    ops.length > 0
+      ? ops.reduceRight((acc, op) => Expression.createUnaryOp(op, acc), next)
+      : next
   )
 }
 
@@ -283,13 +260,13 @@ function makeBinaryOp(
   nextExpr: Parser<Expression>
 ): Parser<Expression> {
   return seq(
-    (first, rest) =>
-      rest.reduce(
-        (acc, val) => Expression.createBinaryOp(acc, val.op, val.next),
-        first
-      ),
     nextExpr,
-    many(seq((op, next) => ({ op, next }), oper, nextExpr))
+    many(seq(oper, nextExpr)((op, next) => ({ op, next })))
+  )((first, rest) =>
+    rest.reduce(
+      (acc, val) => Expression.createBinaryOp(acc, val.op, val.next),
+      first
+    )
   )
 }
 
@@ -297,17 +274,16 @@ const oneOfOperators = (...ops: string[]): Parser<string> =>
   oneOf(...ops.map(operator))
 
 const subscriptExpr = seq(
-  (next, subs) =>
-    subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next),
   primaryExpr,
   many(
-    seq(
-      $2,
+    seq2(
       symbol('['),
       lazy(() => expression),
       symbol(']')
     )
   )
+)((next, subs) =>
+  subs.reduce((acc, val) => Expression.createBinaryOp(acc, '[]', val), next)
 )
 const unaryPlusMinus = makeUnaryOp(oneOfOperators('+', '-'), subscriptExpr)
 const expExpr = makeBinaryOp(operator('^'), unaryPlusMinus)
@@ -315,10 +291,9 @@ const mulDivModExpr = makeBinaryOp(oneOfOperators('*', '/', '%'), expExpr)
 const addSubExpr = makeBinaryOp(oneOfOperators('+', '-'), mulDivModExpr)
 
 const existsExpr = seq(
-  (_exists, subquery) => Expression.createExistsOp(subquery),
   reservedWord('EXISTS'),
   parenthesized(lazy(() => select))
-)
+)((_exists, subquery) => Expression.createExistsOp(subquery))
 
 type OtherExprRhs =
   | OtherExprRhs.In
@@ -333,15 +308,14 @@ namespace OtherExprRhs {
     rhs: Select
   }
   const in_: Parser<In> = seq(
-    (op, rhs) => ({ kind: 'InExprRhs', op, rhs }),
     attempt(
       oneOf<'IN' | 'NOT IN'>(
         reservedWord('IN'),
-        seq((_) => 'NOT IN', reservedWord('NOT'), reservedWord('IN'))
+        seqConst('NOT IN', reservedWord('NOT'), reservedWord('IN'))
       )
     ),
     parenthesized(lazy(() => select))
-  )
+  )((op, rhs) => ({ kind: 'InExprRhs', op, rhs }))
 
   export type Ternary = {
     kind: 'TernaryExprRhs'
@@ -350,7 +324,6 @@ namespace OtherExprRhs {
     rhs2: Expression
   }
   const ternary: Parser<Ternary> = seq(
-    (op, rhs1, _and, rhs2) => ({ kind: 'TernaryExprRhs', op, rhs1, rhs2 }),
     oneOf(
       attempt(sepReserveds('NOT BETWEEN SYMMETRIC')),
       attempt(sepReserveds('BETWEEN SYMMETRIC')),
@@ -360,14 +333,14 @@ namespace OtherExprRhs {
     addSubExpr,
     reservedWord('AND'),
     addSubExpr
-  )
+  )((op, rhs1, _and, rhs2) => ({ kind: 'TernaryExprRhs', op, rhs1, rhs2 }))
 
   export type UnarySuffix = {
     kind: 'UnarySuffix'
     op: '!'
   }
-  const unarySuffix: Parser<UnarySuffix> = seq(
-    (_) => ({ kind: 'UnarySuffix', op: '!' }),
+  const unarySuffix: Parser<UnarySuffix> = seqConst(
+    { kind: 'UnarySuffix', op: '!' },
     operator('!')
   )
 
@@ -377,7 +350,6 @@ namespace OtherExprRhs {
     rhs: Expression
   }
   const otherOp: Parser<OtherOp> = seq(
-    (op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }),
     oneOf(
       anyOperatorExcept([
         '<',
@@ -398,7 +370,7 @@ namespace OtherExprRhs {
       reservedWord('LIKE')
     ),
     addSubExpr
-  )
+  )((op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }))
 
   export const parser = oneOf<OtherExprRhs>(in_, ternary, unarySuffix, otherOp)
 
@@ -423,10 +395,10 @@ namespace OtherExprRhs {
 }
 
 const otherExpr = seq(
-  (first, rest) =>
-    rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first),
   addSubExpr,
   many(OtherExprRhs.parser)
+)((first, rest) =>
+  rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first)
 )
 const existsOrOtherExpr = oneOf(existsExpr, otherExpr)
 
@@ -436,7 +408,6 @@ const comparisonExpr = makeBinaryOp(
 )
 
 const isExpr = seq(
-  (next, op) => (op ? Expression.createUnaryOp(op, next) : next),
   comparisonExpr,
   optional(
     oneOf(
@@ -452,7 +423,7 @@ const isExpr = seq(
       sepReserveds('IS NOT UNKNOWN')
     )
   )
-)
+)((next, op) => (op ? Expression.createUnaryOp(op, next) : next))
 const notExpr = makeUnaryOp(reservedWord('NOT'), isExpr)
 const andExpr = makeBinaryOp(reservedWord('AND'), notExpr)
 const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
@@ -467,18 +438,16 @@ const identifierList: Parser<string[]> = parenthesized(
 
 // WITH
 
-const withQueries: Parser<WithQuery[]> = seq(
-  $2,
+const withQueries: Parser<WithQuery[]> = seq2(
   reservedWord('WITH'),
   sepBy1(
     symbol(','),
     seq(
-      (as, columns, _as, stmt) => WithQuery.create(as, columns, stmt),
       identifier,
       optional(identifierList),
       reservedWord('AS'),
       parenthesized(lazy(() => statementParser))
-    )
+    )((as, columns, _as, stmt) => WithQuery.create(as, columns, stmt))
   )
 )
 
@@ -497,18 +466,15 @@ type JoinSpec = {
 }
 
 const crossJoin: Parser<JoinSpec> = seq(
-  (_cj, tableExpr) => ({ join: { kind: 'Cross' }, tableExpr }),
   sepReserveds('CROSS JOIN'),
   lazy(() => tableExpression)
-)
+)((_cj, tableExpr) => ({ join: { kind: 'Cross' }, tableExpr }))
 
 const qualifiedJoinType: Parser<TableExpression.JoinType> = seq(
-  (joinType, _join) => joinType || 'INNER',
   optional(
     oneOf(
       reservedWord('INNER'),
-      seq(
-        $1,
+      seq1(
         oneOf(
           reservedWord('LEFT'),
           reservedWord('RIGHT'),
@@ -519,46 +485,40 @@ const qualifiedJoinType: Parser<TableExpression.JoinType> = seq(
     )
   ),
   reservedWord('JOIN')
-)
+)((joinType, _join) => joinType || 'INNER')
 
 const qualifiedJoin: Parser<JoinSpec> = seq(
-  (type, tableExpr, condition) => ({
-    join: { kind: 'Qualified', type, condition },
-    tableExpr,
-  }),
   qualifiedJoinType,
   lazy(() => tableExpression),
   oneOf(
     seq(
-      (_on, expr) => TableExpression.createJoinOn(expr),
       reservedWord('ON'),
       expression
-    ),
+    )((_on, expr) => TableExpression.createJoinOn(expr)),
     seq(
-      (_using, columns) => TableExpression.createJoinUsing(columns),
       reservedWord('USING'),
       identifierList
-    )
+    )((_using, columns) => TableExpression.createJoinUsing(columns))
   )
-)
+)((type, tableExpr, condition) => ({
+  join: { kind: 'Qualified', type, condition },
+  tableExpr,
+}))
 
-const naturalJoinType: Parser<TableExpression.JoinType> = seq(
-  $2,
+const naturalJoinType: Parser<TableExpression.JoinType> = seq2(
   reservedWord('NATURAL'),
   qualifiedJoinType
 )
 
 const naturalJoin: Parser<JoinSpec> = seq(
-  (type, tableExpr) => ({ join: { kind: 'Natural', type }, tableExpr }),
   naturalJoinType,
   lazy(() => tableExpression)
-)
+)((type, tableExpr) => ({ join: { kind: 'Natural', type }, tableExpr }))
 
 const table: Parser<TableExpression> = seq(
-  TableExpression.createTable,
   tableRef,
   optional(as)
-)
+)(TableExpression.createTable)
 
 function tableExprReducer(
   acc: TableExpression,
@@ -585,11 +545,9 @@ function tableExprReducer(
 }
 
 const tableExpression: Parser<TableExpression> = seq(
-  (lhs, rest) => (rest.length === 0 ? lhs : rest.reduce(tableExprReducer, lhs)),
   oneOf(
     attempt(
-      seq(
-        $2,
+      seq2(
         symbol('('),
         lazy(() => tableExpression),
         symbol(')')
@@ -597,58 +555,54 @@ const tableExpression: Parser<TableExpression> = seq(
     ),
     attempt(
       seq(
-        (stmt, as) => TableExpression.createSubQuery(stmt, as),
         parenthesized(lazy(() => statementParser)),
         as
-      )
+      )((stmt, as) => TableExpression.createSubQuery(stmt, as))
     ),
     table
   ),
   many(oneOf(crossJoin, qualifiedJoin, naturalJoin))
-)
+)((lhs, rest) => (rest.length === 0 ? lhs : rest.reduce(tableExprReducer, lhs)))
 
 const from: Parser<TableExpression> = seq(
-  (_from, tableExpr, rest) =>
-    rest.length === 0
-      ? tableExpr
-      : // Implicit join equals to CROSS JOIN
-        rest.reduce(
-          (acc, next) => TableExpression.createCrossJoin(acc, next),
-          tableExpr
-        ),
   reservedWord('FROM'),
   tableExpression,
-  many(seq($2, symbol(','), tableExpression))
+  many(seq2(symbol(','), tableExpression))
+)((_from, tableExpr, rest) =>
+  rest.length === 0
+    ? tableExpr
+    : // Implicit join equals to CROSS JOIN
+      rest.reduce(
+        (acc, next) => TableExpression.createCrossJoin(acc, next),
+        tableExpr
+      )
 )
 
 // WHERE
 
-const where: Parser<Expression> = seq($2, reservedWord('WHERE'), expression)
+const where: Parser<Expression> = seq2(reservedWord('WHERE'), expression)
 
 // GROUP BY & HAVING
 
-const groupBy: Parser<Expression[]> = seq(
-  $3,
+const groupBy: Parser<Expression[]> = seq3(
   reservedWord('GROUP'),
   reservedWord('BY'),
   sepBy1(symbol(','), expression)
 )
 
-const having: Parser<Expression> = seq($2, reservedWord('HAVING'), expression)
+const having: Parser<Expression> = seq2(reservedWord('HAVING'), expression)
 
 // WINDOW
 
-const window: Parser<NamedWindowDefinition[]> = seq(
-  $2,
+const window: Parser<NamedWindowDefinition[]> = seq2(
   reservedWord('WINDOW'),
   sepBy1(
     symbol(','),
     seq(
-      (name, _as, window) => NamedWindowDefinition.create(name, window),
       identifier,
       reservedWord('AS'),
       parenthesized(windowDefinition)
-    )
+    )((name, _as, window) => NamedWindowDefinition.create(name, window))
   )
 )
 
@@ -657,72 +611,61 @@ const window: Parser<NamedWindowDefinition[]> = seq(
 const orderByOrder: Parser<OrderBy.Order> = oneOf<OrderBy.Order>(
   reservedWord('ASC'),
   reservedWord('DESC'),
-  seq((_using, op) => ['USING', op], reservedWord('USING'), anyOperator)
+  seq(reservedWord('USING'), anyOperator)((_using, op) => ['USING', op])
 )
 
-const orderByNulls: Parser<OrderBy.Nulls> = seq(
-  $2,
+const orderByNulls: Parser<OrderBy.Nulls> = seq2(
   reservedWord('NULLS'),
   oneOf(reservedWord('FIRST'), reservedWord('LAST'))
 )
 
 const orderByItem: Parser<OrderBy> = seq(
-  (expr, order, nulls) => OrderBy.create(expr, order, nulls),
   expression,
   optional(orderByOrder),
   optional(orderByNulls)
-)
+)((expr, order, nulls) => OrderBy.create(expr, order, nulls))
 
 const orderBy: Parser<OrderBy[]> = seq(
-  (_order, _by, list) => list,
   reservedWord('ORDER'),
   reservedWord('BY'),
   sepBy1(symbol(','), orderByItem)
-)
+)((_order, _by, list) => list)
 
 // LIMIT
 
 const limit: Parser<Limit> = seq(
-  (_l, count, offset) => Limit.create(count, offset),
   reservedWord('LIMIT'),
-  oneOf(seq($null, reservedWord('ALL')), expression),
-  optional(seq($2, reservedWord('OFFSET'), expression))
-)
+  oneOf(seqNull(reservedWord('ALL')), expression),
+  optional(seq2(reservedWord('OFFSET'), expression))
+)((_l, count, offset) => Limit.create(count, offset))
 
 // SELECT
 
 const distinct: Parser<Distinct> = oneOf<Distinct>(
   reservedWord('ALL'),
   seq(
-    (_distinct, on) => (on ? on : 'DISTINCT'),
     reservedWord('DISTINCT'),
     optional(
-      seq(
-        $2,
-        reservedWord('ON'),
-        parenthesized(sepBy1(symbol(','), expression))
-      )
+      seq2(reservedWord('ON'), parenthesized(sepBy1(symbol(','), expression)))
     )
-  )
+  )((_distinct, on) => (on ? on : 'DISTINCT'))
 )
 
-const allFields: Parser<SelectListItem> = seq(
-  (_) => SelectListItem.createAllFields(),
+const allFields: Parser<SelectListItem> = seqConst(
+  SelectListItem.createAllFields(),
   symbol('*')
 )
 
 const allTableFields: Parser<SelectListItem> = seq(
-  (table, _p, _a) => SelectListItem.createAllTableFields(table),
   identifier,
   symbol('.'),
   symbol('*')
-)
+)((table, _p, _a) => SelectListItem.createAllTableFields(table))
 
 const selectListExpression: Parser<SelectListItem> = seq(
-  (expr, as) => SelectListItem.createSelectListExpression(expr, as),
   expression,
   optional(as)
-)
+)((expr, as) => SelectListItem.createSelectListExpression(expr, as))
 
 const selectListItem = oneOf(
   allFields,
@@ -733,16 +676,6 @@ const selectListItem = oneOf(
 const selectList: Parser<SelectListItem[]> = sepBy1(symbol(','), selectListItem)
 
 const selectBody: Parser<SelectBody> = seq(
-  (_sel, distinct, list, from, where, groupBy, having, window) =>
-    SelectBody.create(
-      distinct || 'ALL',
-      list,
-      from,
-      where,
-      groupBy || [],
-      having,
-      window || []
-    ),
   reservedWord('SELECT'),
   optional(distinct),
   selectList,
@@ -751,12 +684,20 @@ const selectBody: Parser<SelectBody> = seq(
   optional(groupBy),
   optional(having),
   optional(window)
+)((_sel, distinct, list, from, where, groupBy, having, window) =>
+  SelectBody.create(
+    distinct || 'ALL',
+    list,
+    from,
+    where,
+    groupBy || [],
+    having,
+    window || []
+  )
 )
 
 const selectSetOps: Parser<SelectOp[]> = many(
   seq(
-    (op, duplicates, body) =>
-      SelectOp.create(op, duplicates || 'DISTINCT', body),
     oneOf(
       reservedWord('UNION'),
       reservedWord('INTERSECT'),
@@ -764,62 +705,56 @@ const selectSetOps: Parser<SelectOp[]> = many(
     ),
     optional(oneOf(reservedWord('ALL'), reservedWord('DISTINCT'))),
     selectBody
+  )((op, duplicates, body) =>
+    SelectOp.create(op, duplicates || 'DISTINCT', body)
   )
 )
 
 const select: Parser<Select> = seq(
-  (withQueries, body, setOps, orderBy, limit) =>
-    Select.create(withQueries || [], body, setOps, orderBy || [], limit),
   optional(withQueries),
   selectBody,
   selectSetOps,
   optional(orderBy),
   optional(limit)
+)((withQueries, body, setOps, orderBy, limit) =>
+  Select.create(withQueries || [], body, setOps, orderBy || [], limit)
 )
 
 // INSERT
 
 const defaultValues: Parser<Values> = seq(
-  (_def, _val) => Values.defaultValues,
   reservedWord('DEFAULT'),
   reservedWord('VALUES')
-)
+)((_def, _val) => Values.defaultValues)
 
 const expressionValues: Parser<Values> = seq(
-  (_val, values) => Values.createExpressionValues(values),
   reservedWord('VALUES'),
   sepBy(
     symbol(','),
     parenthesized(
-      sepBy1(
-        symbol(','),
-        oneOf(seq($null, reservedWord('DEFAULT')), expression)
-      )
+      sepBy1(symbol(','), oneOf(seqNull(reservedWord('DEFAULT')), expression))
     )
   )
-)
+)((_val, values) => Values.createExpressionValues(values))
 
 const values: Parser<Values> = oneOf(defaultValues, expressionValues)
 
-const onConstraint = seq(
-  $null,
+const onConstraint = seqNull(
   reservedWord('ON'),
   reservedWord('CONSTRAINT'),
   identifier
 )
 
 const conflictTarget: Parser<null> = oneOf(
-  seq($null, identifierList),
+  seqNull(identifierList),
   onConstraint
 )
 
-const conflictAction: Parser<UpdateAssignment[] | null> = seq(
-  $2,
+const conflictAction: Parser<UpdateAssignment[] | null> = seq2(
   reservedWord('DO'),
   oneOf(
-    seq($null, reservedWord('NOTHING')),
-    seq(
-      $2,
+    seqNull(reservedWord('NOTHING')),
+    seq2(
       reservedWord('UPDATE'),
       lazy(() => updateAssignments)
     )
@@ -827,37 +762,24 @@ const conflictAction: Parser<UpdateAssignment[] | null> = seq(
 )
 
 const onConflict: Parser<UpdateAssignment[] | null> = seq(
-  (_on, _conflict, _target, action) => action,
   reservedWord('ON'),
   reservedWord('CONFLICT'),
   optional(conflictTarget),
   conflictAction
-)
+)((_on, _conflict, _target, action) => action)
 
-const returning: Parser<SelectListItem[]> = seq(
-  $2,
+const returning: Parser<SelectListItem[]> = seq2(
   reservedWord('RETURNING'),
   selectList
 )
 
-const insertInto: Parser<TableRef> = seq(
-  $3,
+const insertInto: Parser<TableRef> = seq3(
   reservedWord('INSERT'),
   reservedWord('INTO'),
   tableRef
 )
 
 const insert: Parser<Insert> = seq(
-  (withQueries, table, as, columns, values, onConflict, returning) =>
-    Insert.create(
-      withQueries || [],
-      table,
-      as,
-      columns || [],
-      values,
-      onConflict || [],
-      returning || []
-    ),
   optional(withQueries),
   insertInto,
   optional(reqAs),
@@ -868,37 +790,35 @@ const insert: Parser<Insert> = seq(
   ),
   optional(onConflict),
   optional(returning)
+)((withQueries, table, as, columns, values, onConflict, returning) =>
+  Insert.create(
+    withQueries || [],
+    table,
+    as,
+    columns || [],
+    values,
+    onConflict || [],
+    returning || []
+  )
 )
 
 // UPDATE
 
-const updateAssignments: Parser<UpdateAssignment[]> = seq(
-  $2,
+const updateAssignments: Parser<UpdateAssignment[]> = seq2(
   reservedWord('SET'),
   sepBy1(
     symbol(','),
     seq(
-      (columnName, _eq, value) => ({ columnName, value }),
       identifier,
       symbol('='),
       expression
-    )
+    )((columnName, _eq, value) => ({ columnName, value }))
   )
 )
 
-const updateTable: Parser<TableRef> = seq($2, reservedWord('UPDATE'), tableRef)
+const updateTable: Parser<TableRef> = seq2(reservedWord('UPDATE'), tableRef)
 
 const update: Parser<Update> = seq(
-  (withQueries, table, as, updates, from, where, returning) =>
-    Update.create(
-      withQueries || [],
-      table,
-      as,
-      updates,
-      from,
-      where,
-      returning || []
-    ),
   optional(withQueries),
   updateTable,
   optional(reqAs),
@@ -906,35 +826,43 @@ const update: Parser<Update> = seq(
   optional(from),
   optional(where),
   optional(returning)
+)((withQueries, table, as, updates, from, where, returning) =>
+  Update.create(
+    withQueries || [],
+    table,
+    as,
+    updates,
+    from,
+    where,
+    returning || []
+  )
 )
 
 // DELETE
 
-const deleteFrom: Parser<TableRef> = seq(
-  $3,
+const deleteFrom: Parser<TableRef> = seq3(
   reservedWord('DELETE'),
   reservedWord('FROM'),
   tableRef
 )
 
 const delete_: Parser<Delete> = seq(
-  (table, as, where, returning) =>
-    Delete.create(table, as, where, returning || []),
   deleteFrom,
   optional(reqAs),
   optional(where),
   optional(returning)
+)((table, as, where, returning) =>
+  Delete.create(table, as, where, returning || [])
 )
 
 // parse
 
-const statementParser: Parser<AST> = seq(
-  $1,
+const statementParser: Parser<AST> = seq1(
   oneOf<Statement>(select, insert, update, delete_),
   optional(symbol(';'))
 )
 
-const topLevelParser: Parser<AST> = seq($2, _, statementParser, end)
+const topLevelParser: Parser<AST> = seq2(_, statementParser, end)
 
 export function parse(source: string): Either<string, AST> {
   return tryCatch(

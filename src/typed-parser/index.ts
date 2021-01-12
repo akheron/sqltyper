@@ -230,49 +230,85 @@ export function run<A>(parser: Parser<A>, source: string): A {
 /**
  * Apply given parsers and convert the results to another value.
  */
-export function seq<A extends Array<any>, B>(
-  map: (...args: { [I in keyof A]: A[I] }) => B,
+export function seq<A extends any[]>(
   ...parsers: { [I in keyof A]: Parser<A[I]> }
-): Parser<B> {
-  return (source, context) => {
-    const values: any = []
-    for (let i = 0; i < parsers.length; i++) {
-      const parser = parsers[i]
-      const result = parser(source, context)
-      if (isFailure(result)) {
-        return result
+): <B>(map: (...args: A) => B) => Parser<B> {
+  return (map) => {
+    return (source, context) => {
+      const values: any = []
+      for (let i = 0; i < parsers.length; i++) {
+        const parser = parsers[i]
+        const result = parser(source, context)
+        if (isFailure(result)) {
+          return result
+        }
+        values[i] = result
       }
-      values[i] = result
+      return map(...values)
     }
-    return map(...values)
   }
 }
 
 /**
- * `seq($null, ...)` will return null.
+ * Apply given parsers and return a constant value
  */
-export function $null(..._: unknown[]): null {
+export function seqConst<A, P extends Parser<any>[]>(
+  value: A,
+  ...parsers: P
+): Parser<A> {
+  return seq(...parsers)(() => value)
+}
+
+/**
+ * Apply given parsers and return null
+ */
+export function seqNull<P extends Parser<any>[]>(...parsers: P): Parser<null> {
+  return seqConst(null, ...parsers)
+}
+
+/**
+ * Apply given parsers and return the result of the first parser
+ */
+export function seq1<A, P extends Parser<any>[]>(
+  parserA: Parser<A>,
+  ...parsers: P
+): Parser<A> {
+  return seq(parserA, ...parsers)($1)
+}
+
+/**
+ * Apply given parsers and return the result of the second parser
+ */
+export function seq2<A, B, P extends Parser<any>[]>(
+  parserA: Parser<A>,
+  parserB: Parser<B>,
+  ...parsers: P
+): Parser<B> {
+  return seq(parserA, parserB, ...parsers)($2)
+}
+
+/**
+ * Apply given parsers and return the result of the third parser
+ */
+export function seq3<A, B, C, P extends Parser<any>[]>(
+  parserA: Parser<A>,
+  parserB: Parser<B>,
+  parserC: Parser<C>,
+  ...parsers: P
+): Parser<C> {
+  return seq(parserA, parserB, parserC, ...parsers)($3)
+}
+
+function $null(..._: unknown[]): null {
   return null
 }
-
-/**
- * `seq($1, ...)` will return the first result.
- */
-export function $1<A>(a: A): A {
+function $1<A>(a: A): A {
   return a
 }
-
-/**
- * `seq($2, ...)` will return the second result.
- */
-export function $2<A>(_1: any, a: A): A {
+function $2<A>(_1: any, a: A): A {
   return a
 }
-
-/**
- * `seq($3, ...)` will return the third result.
- */
-export function $3<A>(_1: any, _2: any, a: A): A {
+function $3<A>(_1: any, _2: any, a: A): A {
   return a
 }
 
@@ -565,7 +601,7 @@ function nextItem<A>(
   separator: Parser<unknown>,
   itemParser: Parser<A>
 ): Parser<A> {
-  return seq($2, attempt(separator), itemParser)
+  return seq(attempt(separator), itemParser)($2)
 }
 
 /**
@@ -577,13 +613,12 @@ export function sepBy<A>(
 ): Parser<A[]> {
   return oneOf(
     seq(
-      (head, tail) => {
-        tail.unshift(head)
-        return tail
-      },
       itemParser,
       many(nextItem(separator, itemParser))
-    ),
+    )((head, tail) => {
+      tail.unshift(head)
+      return tail
+    }),
     constant([])
   )
 }
@@ -596,13 +631,12 @@ export function sepBy1<A>(
   itemParser: Parser<A>
 ): Parser<A[]> {
   return seq(
-    (head, tail) => {
-      tail.unshift(head)
-      return tail
-    },
     itemParser,
     many(nextItem(separator, itemParser))
-  )
+  )((head, tail) => {
+    tail.unshift(head)
+    return tail
+  })
 }
 
 /**
@@ -651,13 +685,12 @@ export function sepUntil1<A>(
   itemParser: Parser<A>
 ): Parser<A[]> {
   return seq(
-    (head, tail) => {
-      tail.unshift(head)
-      return tail
-    },
     itemParser,
-    manyUntil(end, seq($2, separator, itemParser))
-  )
+    manyUntil(end, seq(separator, itemParser)($2))
+  )((head, tail) => {
+    tail.unshift(head)
+    return tail
+  })
 }
 
 /**
@@ -725,7 +758,7 @@ export function braced<A>(
   end: string,
   itemParser: Parser<A>
 ): Parser<A> {
-  return seq($3, symbol(start), _, itemParser, _, symbol(end))
+  return seq(symbol(start), _, itemParser, _, symbol(end))($3)
 }
 
 /**
@@ -738,9 +771,8 @@ export function bracedSep<A>(
   itemParser: Parser<A>
 ): Parser<A[]> {
   return seq(
-    $3,
     symbol(start),
     _,
-    sepUntil(seq($null, _, symbol(end)), separator, itemParser)
-  )
+    sepUntil(seq(_, symbol(end))($null), separator, itemParser)
+  )($3)
 }

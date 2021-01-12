@@ -1,7 +1,4 @@
 import {
-  $1,
-  $2,
-  $null,
   Parser,
   attempt,
   constant,
@@ -13,6 +10,10 @@ import {
   match,
   oneOf,
   seq,
+  seq1,
+  seq2,
+  seqConst,
+  seqNull,
   skip,
   stringBefore,
   stringBeforeEndOr,
@@ -23,19 +24,18 @@ import { sqlReservedWords } from '../constants'
 // Token parsers
 
 // whitespace and comments
-export const _: Parser<null> = seq(
-  $null,
+export const _: Parser<null> = seqNull(
   skip('\\s*'),
   many(
     oneOf(
-      seq($null, expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')),
-      seq($null, expectString('/*'), stringUntil('\\*/'), skip('\\s*'))
+      seqNull(expectString('--'), stringBeforeEndOr('\n'), skip('\\s*')),
+      seqNull(expectString('/*'), stringUntil('\\*/'), skip('\\s*'))
     )
   )
 )
 
 export function symbol(s: string): Parser<null> {
-  return seq($null, expectString(s, 'symbol'), _)
+  return seqNull(expectString(s, 'symbol'), _)
 }
 
 // Like symbol but doesn't skip whitespace
@@ -45,32 +45,27 @@ export function symbolKeepWS(s: string): Parser<null> {
 
 export const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
 
-export const quotedEscape = seq(
-  $2,
+export const quotedEscape = seq2(
   symbolKeepWS('\\'),
   oneOf(keyword('"', '"'), keyword('\\', '\\'))
 )
 export const quotedInner: Parser<string> = seq(
-  (s, tail) => s + tail,
   stringBefore('[\\"]'),
   oneOf(
     seq(
-      (e, t) => e + t,
       quotedEscape,
       lazy(() => quotedInner)
-    ),
+    )((e, t) => e + t),
     constant('')
   )
-)
-export const quotedIdentifier = seq(
-  $2,
+)((s, tail) => s + tail)
+export const quotedIdentifier = seq2(
   symbolKeepWS('"'),
   quotedInner,
   symbol('"')
 )
 
-export const identifier = seq(
-  $1,
+export const identifier = seq1(
   attempt(
     oneOf(
       map(
@@ -87,8 +82,8 @@ export const identifier = seq(
 )
 
 export function expectIdentifier<T extends string>(ident: T): Parser<T> {
-  return seq(
-    (_) => ident,
+  return seqConst(
+    ident,
     attempt(
       map(
         (match, toError) =>
@@ -105,8 +100,7 @@ export function expectIdentifier<T extends string>(ident: T): Parser<T> {
 export const reservedWord = <A extends string>(word: A): Parser<A> => {
   if (!sqlReservedWords.includes(word))
     throw new Error(`INTERNAL ERROR: ${word} is not included in reservedWords`)
-  return seq(
-    $1,
+  return seq1(
     attempt(
       map(
         (match, toError) =>
@@ -122,14 +116,14 @@ export const reservedWord = <A extends string>(word: A): Parser<A> => {
 
 export const sepReserveds = (words: string): Parser<string> =>
   attempt(
-    seq(
-      (_) => words,
-      ...words.split(/\s+/).map((word) => seq($null, reservedWord(word), _)),
+    seqConst(
+      words,
+      ...words.split(/\s+/).map((word) => seqNull(reservedWord(word), _)),
       _
     )
   )
 
-export const anyOperator = seq($1, match('[-+*/<>=~!@#%^&|`?]{1,63}'), _)
+export const anyOperator = seq1(match('[-+*/<>=~!@#%^&|`?]{1,63}'), _)
 
 export const operator = (op: string): Parser<string> =>
   attempt(
