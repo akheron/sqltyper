@@ -1,4 +1,4 @@
-import { Parser, $2, attempt, seq, oneOf } from '../typed-parser'
+import { Parser, attempt, seq, seq2, oneOf } from '../typed-parser'
 import { Expression } from '../ast'
 import { expectIdentifier, symbol } from './token'
 import { optional, parenthesized } from './utils'
@@ -13,17 +13,16 @@ export function specialFunctionCall(
     argsParser: Parser<Expression[]>
   ) {
     return seq(
-      (_, argList) =>
-        Expression.createFunctionCall(funcName, argList, null, null),
       expectIdentifier(funcName),
       parenthesized(argsParser)
+    )((_, argList) =>
+      Expression.createFunctionCall(funcName, argList, null, null)
     )
   }
 
   const overlayFunction: Parser<Expression> = specialFunctionParser(
     'overlay',
     seq(
-      (a1, _placing, a2, _from, a3, _for, a4) => [a1, a2, a3, a4],
       primaryExpr,
       expectIdentifier('placing'),
       primaryExpr,
@@ -31,28 +30,26 @@ export function specialFunctionCall(
       primaryExpr,
       expectIdentifier('for'),
       primaryExpr
-    )
+    )((a1, _placing, a2, _from, a3, _for, a4) => [a1, a2, a3, a4])
   )
 
   const positionFunction: Parser<Expression> = specialFunctionParser(
     'position',
     seq(
-      (a1, _in, a2) => [a1, a2],
       primaryExpr,
       expectIdentifier('in'),
       primaryExpr
-    )
+    )((a1, _in, a2) => [a1, a2])
   )
 
   const substringFunction: Parser<Expression> = specialFunctionParser(
     'substring',
     seq(
-      (a1, _from, a2, a3) => (a3 ? [a1, a2, a3] : [a1, a2]),
       primaryExpr,
       expectIdentifier('from'),
       primaryExpr,
-      optional(seq($2, expectIdentifier('for'), primaryExpr))
-    )
+      optional(seq2(expectIdentifier('for'), primaryExpr))
+    )((a1, _from, a2, a3) => (a3 ? [a1, a2, a3] : [a1, a2]))
   )
 
   type TrimDirection = 'leading' | 'trailing' | 'both'
@@ -81,32 +78,28 @@ export function specialFunctionCall(
   const trimFunction: Parser<Expression> = specialFunctionParser(
     'trim',
     seq(
-      (dir, [str, chrs]) => trimArgs(dir, chrs, str),
       optional(trimDirection),
       oneOf<[Expression, Expression | null]>(
         seq(
-          (_from, str, chars) => [str, chars],
           expectIdentifier('from'),
           primaryExpr,
-          optional(seq($2, symbol(','), primaryExpr))
-        ),
+          optional(seq2(symbol(','), primaryExpr))
+        )((_from, str, chars) => [str, chars]),
         oneOf(
           attempt(
             seq(
-              (chrs, _from, str) => [str, chrs],
               primaryExpr,
               expectIdentifier('from'),
               primaryExpr
-            )
+            )((chrs, _from, str) => [str, chrs])
           ),
           seq(
-            (str, chrs) => [str, chrs],
             primaryExpr,
-            optional(seq($2, symbol(','), primaryExpr))
-          )
+            optional(seq2(symbol(','), primaryExpr))
+          )((str, chrs) => [str, chrs])
         )
       )
-    )
+    )((dir, [str, chrs]) => trimArgs(dir, chrs, str))
   )
 
   return oneOf(
