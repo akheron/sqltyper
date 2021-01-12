@@ -223,7 +223,8 @@ async function watchDirectories(
     watch(
       dirPath,
       { filter: (fileName) => hasOneOfExtensions(fileExtensions, fileName) },
-      async (event: 'update' | 'remove', filePath: string) => {
+      async (event, filePath) => {
+        if (!event || !filePath) return
         eventBuffer.push({
           type: event,
           dirPath,
