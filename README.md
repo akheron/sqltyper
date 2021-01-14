@@ -1,6 +1,6 @@
 # sqltyper - Type your SQL queries!
 
-[![CircleCI](https://circleci.com/gh/akheron/sqltyper.svg?style=shield)](https://circleci.com/gh/akheron/sqltyper)
+![tests](https://github.com/akheron/sqltyper/workflows/tests/badge.svg)
 
 SQL is a typed language, but most solutions for using an SQL database from typed
 languages don't make use of that typing information in a way that would actually
