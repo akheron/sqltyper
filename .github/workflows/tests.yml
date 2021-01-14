@@ -1,0 +1,47 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: sqltyper
+          POSTGRES_DB: sqltyper
+          POSTGRES_PASSWORD: sqltyper
+        ports:
+          - "5432:5432"
+
+    strategy:
+      matrix:
+        node-version: [12.x, 14.x, 15.x]
+
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: sqltyper
+      PGPASSWORD: sqltyper
+      PGDATABASE: sqltyper
+
+    steps:
+      # Install psql
+      # - run: sudo apt-get update
+      # - run: sudo apt-get install postgresql-client-9.6
+
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: yarn install
+      - run: yarn build
+      - run: yarn lint
+      - run: yarn sql:check
+      - run: yarn test
