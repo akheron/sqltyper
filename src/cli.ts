@@ -59,7 +59,7 @@ async function main(): Promise<number> {
   }
 
   const dirPaths: string[] = []
-  for (const dirPath of args._) {
+  for (const dirPath of args._.map((arg) => arg.toString())) {
     if (!(await fs.stat(dirPath)).isDirectory()) {
       console.error(`Not a directory: ${dirPath}`)
       return 1
