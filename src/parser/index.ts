@@ -136,10 +136,8 @@ const windowDefinition: Parser<WindowDefinition> = oneOf<WindowDefinition>(
 
 const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
   identifier,
-  oneOf<
-    string | [Expression[], Expression | null, WindowDefinition | null] | null
-  >(
-    seq2(symbol('.'), identifier),
+  optional(seq2(symbol('.'), identifier)),
+  optional(
     seq(
       functionArguments,
       optional(
@@ -159,18 +157,25 @@ const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
           oneOf(identifier, parenthesized(windowDefinition))
         )
       )
-    )((argList, filter, window) => [argList, filter, window]),
-    _
+    )((argList, filter, window) => [argList, filter, window] as const)
   )
-)((ident, rest) => {
-  if (rest === null) {
-    return Expression.createColumnRef(ident)
-  } else if (typeof rest === 'string') {
-    return Expression.createTableColumnRef(ident, rest)
-  } else {
-    const [argList, filter, window] = rest
-    return Expression.createFunctionCall(ident, argList, filter, window)
+)((ident, ident2, fnCall) => {
+  if (fnCall) {
+    const [argList, filter, window] = fnCall
+    if (ident2)
+      return Expression.createFunctionCall(
+        ident,
+        ident2,
+        argList,
+        filter,
+        window
+      )
+    return Expression.createFunctionCall(null, ident, argList, filter, window)
   }
+  if (ident2) {
+    return Expression.createTableColumnRef(ident, ident2)
+  }
+  return Expression.createColumnRef(ident)
 })
 
 const strEscape = seq2(

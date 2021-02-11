@@ -16,7 +16,7 @@ export function specialFunctionCall(
       expectIdentifier(funcName),
       parenthesized(argsParser)
     )((_, argList) =>
-      Expression.createFunctionCall(funcName, argList, null, null)
+      Expression.createFunctionCall(null, funcName, argList, null, null)
     )
   }
 
