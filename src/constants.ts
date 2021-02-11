@@ -1,5 +1,7 @@
 /// SQL reserved words
 
+import { NullSafety, Operator, SqlFunction } from './types'
+
 export const sqlReservedWords: string[] = [
   'ALL',
   'AND',
@@ -73,28 +75,7 @@ export const sqlReservedWords: string[] = [
   'WITH',
 ]
 
-// An operator or function is:
-//
-// - `safe` if the result is NULL if and only if at least one the
-//   arguments/operands is NULL
-//
-// - `neverNull` if the result is is never NULL regardless of the
-//   arguments/operands
-//
-// - `unsafe` otherwise
-//
-export type NullSafety = 'safe' | 'neverNull' | 'unsafe'
-
 // SQL operators
-
-export type Operator = {
-  op: string
-
-  // does `a op b` equal `b op a`. null means unary or ternary operator.
-  commutative: boolean | null
-
-  nullSafety: NullSafety
-}
 
 export const operators: Operator[] = [
   // name (upper case!), commutative, nullSafety
@@ -163,12 +144,7 @@ export const operators: Operator[] = [
 
 // SQL functions
 
-export type SqlFunction = {
-  name: string
-  nullSafety: NullSafety
-}
-
-export const functions: SqlFunction[] = [
+export const builtinFunctions: SqlFunction[] = [
   //   name (lower case!), nullSafety
 
   // 9.2. Comparison Functions and Operators
@@ -279,5 +255,5 @@ function op(
 }
 
 function func(name: string, nullSafety: NullSafety): SqlFunction {
-  return { name: name.toLowerCase(), nullSafety }
+  return { schema: null, name: name.toLowerCase(), nullSafety }
 }

@@ -1,13 +1,8 @@
 import * as Option from 'fp-ts/lib/Option'
 import { pipe } from 'fp-ts/lib/pipeable'
 
-import {
-  Operator,
-  SqlFunction,
-  NullSafety,
-  operators,
-  functions,
-} from './constants'
+import { operators, builtinFunctions } from './constants'
+import { Operator, SqlFunction, NullSafety } from './types'
 
 export function findOperator(name: string): Option.Option<Operator> {
   const upCaseName = name.toUpperCase()
@@ -30,14 +25,16 @@ export function operatorNullSafety(name: string): NullSafety | null {
   )
 }
 
-export function findFunction(name: string): Option.Option<SqlFunction> {
+export function findBuiltinFunction(name: string): Option.Option<SqlFunction> {
   const downCaseName = name.toLowerCase()
-  return Option.fromNullable(functions.find((f) => f.name === downCaseName))
+  return Option.fromNullable(
+    builtinFunctions.find((f) => f.name === downCaseName)
+  )
 }
 
-export function functionNullSafety(name: string): NullSafety | null {
+export function builtinFunctionNullSafety(name: string): NullSafety | null {
   return pipe(
-    findFunction(name),
+    findBuiltinFunction(name),
     Option.map((func) => func.nullSafety),
     Option.toNullable
   )

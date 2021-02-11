@@ -1,8 +1,12 @@
 import * as Either from 'fp-ts/lib/Either'
+import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
+import { pipe } from 'fp-ts/lib/pipeable'
 import * as postgres from './postgres'
-import { Oid } from './types'
+import { NullSafety, Oid, SqlFunction } from './types'
 import * as sql from './sql'
+import { builtinFunctionNullSafety } from './const-utils'
+import { asyncCached } from './func-utils'
 
 export type Table = {
   name: string
@@ -34,51 +38,86 @@ export interface SchemaClient {
   ): TaskEither.TaskEither<string, Table>
   getEnums(): Promise<Enum[]>
   getArrayTypes(): Promise<ArrayType[]>
+  functionNullSafety(
+    schemaName: string | null,
+    functionName: string
+  ): Task.Task<NullSafety | null>
 }
 
 export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
-  function getTable(
+  const getTable = (
     schemaName: string | null,
     tableName: string
-  ): TaskEither.TaskEither<string, Table> {
-    return async () => {
-      const result = await sql.tableColumns(postgresClient, {
-        schemaName: schemaName || 'public',
-        tableName,
-      })
-      if (result.length === 0) {
-        return Either.left(
-          `No such table: ${fullTableName(schemaName, tableName)}`
-        )
-      }
-      return Either.right({
-        name: tableName,
-        columns: result.map((col) => ({
-          hidden: col.attnum < 0,
-          name: col.attname,
-          nullable: !col.attnotnull,
-          type: col.atttypid,
-        })),
-      })
+  ): TaskEither.TaskEither<string, Table> => async () => {
+    const result = await sql.tableColumns(postgresClient, {
+      schemaName: schemaName || 'public',
+      tableName,
+    })
+    if (result.length === 0) {
+      return Either.left(
+        `No such table: ${fullTableName(schemaName, tableName)}`
+      )
     }
+    return Either.right({
+      name: tableName,
+      columns: result.map((col) => ({
+        hidden: col.attnum < 0,
+        name: col.attname,
+        nullable: !col.attnotnull,
+        type: col.atttypid,
+      })),
+    })
   }
 
-  async function getEnums(): Promise<Enum[]> {
-    return (await sql.enums(postgresClient)).map((row) => ({
-      oid: row.oid,
-      name: row.typname,
-      labels: row.labels,
-    }))
+  const getEnums = asyncCached(
+    async (): Promise<Enum[]> =>
+      (await sql.enums(postgresClient)).map((row) => ({
+        oid: row.oid,
+        name: row.typname,
+        labels: row.labels,
+      }))
+  )
+
+  const getArrayTypes = asyncCached(
+    async (): Promise<ArrayType[]> =>
+      (await sql.arrayTypes(postgresClient)).map((row) => ({
+        oid: row.oid,
+        elemType: row.typelem,
+      }))
+  )
+
+  const getFunctions = asyncCached(
+    async (): Promise<SqlFunction[]> =>
+      (await sql.functions(postgresClient)).map((row) => ({
+        schema: row.nspname,
+        name: row.proname,
+        nullSafety: 'unsafe',
+      }))
+  )
+
+  const functionNullSafety = (
+    schemaName: string | null,
+    functionName: string
+  ): Task.Task<NullSafety | null> => {
+    const builtin =
+      schemaName === null ? builtinFunctionNullSafety(functionName) : null
+    if (builtin !== null) return Task.of(builtin)
+
+    return pipe(
+      getFunctions,
+      Task.map((functions) => {
+        const fn = functions.find(
+          (fn) =>
+            fn.name === functionName &&
+            (schemaName === null || fn.schema === schemaName)
+        )
+        if (fn) return fn.nullSafety
+        return null
+      })
+    )
   }
 
-  async function getArrayTypes(): Promise<ArrayType[]> {
-    return (await sql.arrayTypes(postgresClient)).map((row) => ({
-      oid: row.oid,
-      elemType: row.typelem,
-    }))
-  }
-
-  return { getTable, getEnums, getArrayTypes }
+  return { getTable, getEnums, getArrayTypes, functionNullSafety }
 }
 
 function fullTableName(schemaName: string | null, tableName: string): string {

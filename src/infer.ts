@@ -17,7 +17,7 @@ import {
   traverseAIM,
   traverseATE,
 } from './fp-utils'
-import { functionNullSafety, operatorNullSafety } from './const-utils'
+import { builtinFunctionNullSafety, operatorNullSafety } from './const-utils'
 import { FieldNullability } from './field-nullability'
 import { parse } from './parser'
 import { SchemaClient, Table, Column } from './schema'
@@ -644,44 +644,48 @@ function inferExpressionNullability(
     // - The function is not NULL safe: it can return NULL even if all
     //   of its arguments are non-NULL
     //
-    functionCall: ({ funcName, argList }) => {
-      switch (functionNullSafety(funcName)) {
-        case 'safe':
-          return pipe(
-            traverseATE(argList, (arg) =>
-              inferExpressionNullability(
-                client,
-                outsideCTEs,
-                sourceColumns,
-                paramNullability,
-                nonNullExprs,
-                arg
-              )
-            ),
-            TaskEither.map((argNullability) =>
-              pipe(
-                sequenceAW(argNullability),
-                Warn.map((an) =>
-                  FieldNullability.any(
-                    an.some((nullability) => nullability.nullable)
+    functionCall: ({ schema, funcName, argList }) =>
+      pipe(
+        client.functionNullSafety(schema, funcName),
+        Task.chain((nullSafety) => {
+          switch (nullSafety) {
+            case 'safe':
+              return pipe(
+                traverseATE(argList, (arg) =>
+                  inferExpressionNullability(
+                    client,
+                    outsideCTEs,
+                    sourceColumns,
+                    paramNullability,
+                    nonNullExprs,
+                    arg
+                  )
+                ),
+                TaskEither.map((argNullability) =>
+                  pipe(
+                    sequenceAW(argNullability),
+                    Warn.map((an) =>
+                      FieldNullability.any(
+                        an.some((nullability) => nullability.nullable)
+                      )
+                    )
                   )
                 )
               )
-            )
-          )
-        case 'unsafe':
-          return anyTE(true)
-        case 'neverNull':
-          return anyTE(false)
-        case null:
-          return TaskEither.right(
-            Warn.warning(
-              FieldNullability.any(true),
-              `Unknown function '${funcName}'`
-            )
-          )
-      }
-    },
+            case 'unsafe':
+              return anyTE(true)
+            case 'neverNull':
+              return anyTE(false)
+            case null:
+              return TaskEither.right(
+                Warn.warning(
+                  FieldNullability.any(true),
+                  `Unknown function '${funcName}'`
+                )
+              )
+          }
+        })
+      ),
 
     // expr IN (subquery) returns NULL if expr is NULL
     inOp: ({ lhs }) =>
@@ -860,7 +864,8 @@ function getNonNullSubExpressionsFromRowCond(
       return [expression]
     },
     functionCall: ({ funcName, argList }) => {
-      if (functionNullSafety(funcName) === 'safe') {
+      // It's enough to check builtin functions because non-builtins are never null safe
+      if (builtinFunctionNullSafety(funcName) === 'safe') {
         return pipe(
           argList,
           Array.map((arg) =>

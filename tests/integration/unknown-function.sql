@@ -20,8 +20,7 @@ CREATE TABLE person (
 --- query -----------------------------------------------------------------
 
 SELECT
-  foobarbaz(age, age) AS a1,
-  age +~+ age AS a2
+  age +~+ age AS a
 FROM person
 
 --- expected row count ----------------------------------------------------
@@ -30,12 +29,10 @@ many
 
 --- expected column types -------------------------------------------------
 
-a1: number | null
-a2: number | null
+a: number | null
 
 --- expected param types --------------------------------------------------
 
 --- expected warnings -----------------------------------------------------
 
-Unknown function 'foobarbaz'
 Unknown operator '+~+'
