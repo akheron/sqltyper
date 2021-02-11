@@ -62,3 +62,30 @@ export namespace ValueType {
 }
 
 export type TsType = string
+
+// An operator or function is:
+//
+// - `safe` if the result is NULL if and only if at least one the
+//   arguments/operands is NULL
+//
+// - `neverNull` if the result is is never NULL regardless of the
+//   arguments/operands
+//
+// - `unsafe` otherwise
+//
+export type NullSafety = 'safe' | 'neverNull' | 'unsafe'
+
+export type Operator = {
+  op: string
+
+  // does `a op b` equal `b op a`. null means unary or ternary operator.
+  commutative: boolean | null
+
+  nullSafety: NullSafety
+}
+
+export type SqlFunction = {
+  schema: string | null
+  name: string
+  nullSafety: NullSafety
+}
