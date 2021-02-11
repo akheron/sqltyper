@@ -126,6 +126,7 @@ export namespace Expression {
 
   export type FunctionCall = {
     kind: 'FunctionCall'
+    schema: string | null
     funcName: string
     argList: Expression[]
     filter: Expression | null
@@ -133,6 +134,7 @@ export namespace Expression {
   }
 
   export function createFunctionCall(
+    schema: string | null,
     funcName: string,
     argList: Expression[],
     filter: Expression | null,
@@ -140,6 +142,7 @@ export namespace Expression {
   ): FunctionCall {
     return {
       kind: 'FunctionCall',
+      schema,
       funcName,
       argList,
       filter,
