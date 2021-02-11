@@ -457,6 +457,7 @@ function inferExpressionName(expression: ast.Expression): string {
   return ast.Expression.walkSome(expression, '?column?', {
     columnRef: ({ column }) => column,
     tableColumnRef: ({ column }) => column,
+    functionCall: ({ funcName }) => funcName,
   })
 }
 
