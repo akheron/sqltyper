@@ -1,10 +1,7 @@
 # Changelog
 
-## Unreleased
-
-**Dependencies**
-
-- Requires TypeScript >=3.8, <4.0 for now
+This file lists changes up to version 1.0.1. See
+https://github.com/akheron/sqltyper/releases for newer releases.
 
 ## 1.0.1
 
