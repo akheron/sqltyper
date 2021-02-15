@@ -264,6 +264,17 @@ less the same as sqltyper, but for Scala, and is designed to be used with MySQL.
 It uses JDBC, and is implemented as a Scala macro rather than an offline code
 generation tool.
 
+## Releasing
+
+```
+$ yarn version --new-version <major|minor|patch>
+$ yarn publish
+$ git push origin main --tags
+```
+
+Open https://github.com/akheron/sqltyper/releases, edit the draft release,
+select the newest version tag, adjust the description as needed.
+
 [node-postgres]: https://node-postgres.com/
 [postgres.js]: https://github.com/porsager/postgres
 [sqlτyped]: https://github.com/jonifreeman/sqltyped
