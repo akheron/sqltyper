@@ -1,6 +1,6 @@
 # sqltyper - Type your SQL queries!
 
-![tests](https://github.com/akheron/sqltyper/workflows/tests/badge.svg)
+[![tests](https://github.com/akheron/sqltyper/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/akheron/sqltyper/actions/workflows/tests.yml)
 
 SQL is a typed language, but most solutions for using an SQL database from typed
 languages don't make use of that typing information in a way that would actually
