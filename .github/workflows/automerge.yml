@@ -1,15 +1,13 @@
-name: Auto-merge minor/patch updates
+name: Auto-merge dependabot updates
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: '0 * * * *'
 jobs:
   test:
-    name: Auto-merge minor and patch dependency updates
+    name: Auto-merge dependabot updates
     runs-on: ubuntu-latest
     steps:
-      - uses: akheron/dependabot-pr-action@master
+      - uses: akheron/dependabot-cron-action@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          merge-minor: true
-          merge-patch: true
           merge-method: rebase
