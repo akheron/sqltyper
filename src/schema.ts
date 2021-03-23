@@ -60,12 +60,14 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
     }
     return Either.right({
       name: tableName,
-      columns: result.map((col) => ({
-        hidden: col.attnum < 0,
-        name: col.attname,
-        nullable: !col.attnotnull,
-        type: col.atttypid,
-      })),
+      columns: result
+        .filter((col) => col.attisdropped === false)
+        .map((col) => ({
+          hidden: col.attnum < 0,
+          name: col.attname,
+          nullable: !col.attnotnull,
+          type: col.atttypid,
+        })),
     })
   }
 

@@ -1,4 +1,4 @@
-SELECT attnum, attname, atttypid, attnotnull
+SELECT attnum, attname, atttypid, attnotnull, attisdropped
 FROM pg_catalog.pg_attribute attr
 JOIN pg_catalog.pg_class cls on attr.attrelid = cls.oid
 JOIN pg_catalog.pg_namespace nsp ON nsp.oid = cls.relnamespace
