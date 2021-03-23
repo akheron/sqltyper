@@ -13,6 +13,6 @@ export async function runPrettier(
     return tsCode
   }
 
-  const options = await resolveConfig(filePath)
+  const options = await resolveConfig(filePath, { editorconfig: true })
   return await format(tsCode, { ...options, filepath: filePath })
 }
