@@ -461,6 +461,7 @@ export type TableExpression =
   | TableExpression.SubQuery
   | TableExpression.CrossJoin
   | TableExpression.QualifiedJoin
+  | TableExpression.FunctionCall
 
 export namespace TableExpression {
   export type Table = {
@@ -471,6 +472,19 @@ export namespace TableExpression {
 
   export function createTable(table: TableRef, as: string | null): Table {
     return { kind: 'Table', table, as }
+  }
+
+  export type FunctionCall = {
+    kind: 'FunctionCall'
+    func: Expression.FunctionCall
+    as: string
+  }
+
+  export function createFunctionCall(
+    func: Expression.FunctionCall,
+    as: string
+  ): FunctionCall {
+    return { kind: 'FunctionCall', func, as }
   }
 
   export type SubQuery = {
@@ -537,6 +551,7 @@ export namespace TableExpression {
     tableExpr: TableExpression,
     handlers: {
       table: (node: Table) => T
+      functionCall: (node: FunctionCall) => T
       subQuery: (node: SubQuery) => T
       crossJoin: (node: CrossJoin) => T
       qualifiedJoin: (node: QualifiedJoin) => T
@@ -545,6 +560,8 @@ export namespace TableExpression {
     switch (tableExpr.kind) {
       case 'Table':
         return handlers.table(tableExpr)
+      case 'FunctionCall':
+        return handlers.functionCall(tableExpr)
       case 'SubQuery':
         return handlers.subQuery(tableExpr)
       case 'CrossJoin':

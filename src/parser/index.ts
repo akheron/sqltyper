@@ -564,6 +564,24 @@ const tableExpression: Parser<TableExpression> = seq(
         as
       )((stmt, as) => TableExpression.createSubQuery(stmt, as))
     ),
+    attempt(
+      seq(
+        seq(
+          identifier,
+          optional(seq2(symbol('.'), identifier)),
+          functionArguments
+        )((ident, ident2, argList) =>
+          Expression.createFunctionCall(
+            ident2 ? ident : null,
+            ident2 ? ident2 : ident,
+            argList,
+            null,
+            null
+          )
+        ),
+        as
+      )((fnCall, as) => TableExpression.createFunctionCall(fnCall, as))
+    ),
     table
   ),
   many(oneOf(crossJoin, qualifiedJoin, naturalJoin))
