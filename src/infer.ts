@@ -1317,7 +1317,7 @@ function findNonHiddenSourceColumns(
     sourceColumns.filter(
       (col) =>
         (isSourceColumn(col) && !col.hidden) ||
-        true /* VirtualField's are never hidden */
+        !isSourceColumn(col) /* VirtualField's are never hidden */
     ),
     Either.fromPredicate(
       (result) => result.length > 0,
