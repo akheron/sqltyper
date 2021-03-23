@@ -1193,7 +1193,7 @@ function getSourceColumnsForTableExpr(
       functionCall: ({ func, as }): InferM.InferM<VirtualField[]> =>
         InferM.map((nullability: FieldNullability) => [
           {
-            name: as,
+            name: as || inferExpressionName(func),
             nullability,
           },
         ])(

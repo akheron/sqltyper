@@ -579,7 +579,7 @@ const tableExpression: Parser<TableExpression> = seq(
             null
           )
         ),
-        as
+        optional(as)
       )((fnCall, as) => TableExpression.createFunctionCall(fnCall, as))
     ),
     table

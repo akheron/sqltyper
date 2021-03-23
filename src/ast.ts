@@ -477,12 +477,12 @@ export namespace TableExpression {
   export type FunctionCall = {
     kind: 'FunctionCall'
     func: Expression.FunctionCall
-    as: string
+    as: string | null
   }
 
   export function createFunctionCall(
     func: Expression.FunctionCall,
-    as: string
+    as: string | null
   ): FunctionCall {
     return { kind: 'FunctionCall', func, as }
   }
