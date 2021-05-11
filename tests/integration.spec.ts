@@ -54,33 +54,34 @@ describe('Integration tests', () => {
   ): () => Promise<Either.Either<string, void>> {
     return pipe(
       TaskEither.fromEither(parseTestFile(filePath)),
-      TaskEither.chain((testFile) => () =>
-        alwaysRollback(sql, async (tx) => {
-          const clients = await C.clients(tx)
+      TaskEither.chain(
+        (testFile) => () =>
+          alwaysRollback(sql, async (tx) => {
+            const clients = await C.clients(tx)
 
-          // Setup
-          await testSetup(tx, testFile.setup)
+            // Setup
+            await testSetup(tx, testFile.setup)
 
-          // Check expectations
-          return await pipe(
-            sqlToStatementDescription(clients, testFile.query),
-            TaskEither.chain((stmtWithWarnings) => {
-              const warnings = stmtWithWarnings.warnings
-              if (testFile.warnings.length === 0 && warnings.length > 0) {
-                // No warnings expected => Treat warnings as errors
-                return TaskEither.left(
-                  Warn.format(warnings, true, process.stdout.columns || 78)
+            // Check expectations
+            return await pipe(
+              sqlToStatementDescription(clients, testFile.query),
+              TaskEither.chain((stmtWithWarnings) => {
+                const warnings = stmtWithWarnings.warnings
+                if (testFile.warnings.length === 0 && warnings.length > 0) {
+                  // No warnings expected => Treat warnings as errors
+                  return TaskEither.left(
+                    Warn.format(warnings, true, process.stdout.columns || 78)
+                  )
+                }
+                return TaskEither.right(stmtWithWarnings)
+              }),
+              TaskEither.chain((stmtWithWarnings) =>
+                TaskEither.rightTask(
+                  checkExpectations(clients, testFile, stmtWithWarnings)
                 )
-              }
-              return TaskEither.right(stmtWithWarnings)
-            }),
-            TaskEither.chain((stmtWithWarnings) =>
-              TaskEither.rightTask(
-                checkExpectations(clients, testFile, stmtWithWarnings)
               )
-            )
-          )()
-        })
+            )()
+          })
       ),
       TaskEither.mapLeft((errorMessage) => {
         throw new Error(`Failed to run ${fileName}: ${errorMessage}`)
@@ -160,19 +161,21 @@ function parseTestFile(filePath: string): Either.Either<string, TestFile> {
     encoding: 'utf-8',
   })
 
-  const testFile = (setup: string) => (query: string) => (
-    outputRowCount: StatementRowCount
-  ) => (columnTypes: Field[]) => (paramTypes: Field[]) => (
-    warnings: string[]
-  ): TestFile => ({
-    filePath,
-    setup,
-    query,
-    outputRowCount,
-    columnTypes,
-    paramTypes,
-    warnings,
-  })
+  const testFile =
+    (setup: string) =>
+    (query: string) =>
+    (outputRowCount: StatementRowCount) =>
+    (columnTypes: Field[]) =>
+    (paramTypes: Field[]) =>
+    (warnings: string[]): TestFile => ({
+      filePath,
+      setup,
+      query,
+      outputRowCount,
+      columnTypes,
+      paramTypes,
+      warnings,
+    })
 
   return pipe(
     Either.right(testFile),

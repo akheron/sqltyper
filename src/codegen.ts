@@ -58,25 +58,28 @@ export function generateTypeScript(
   )
 }
 
-const typeScriptString = (
-  sourceFileName: string,
-  target: CodegenTarget,
-  module: string,
-  funcName: string,
-  sql: string
-) => (params: string) => (returnType: string) => (queryValues: string) => (
-  outputValue: string
-): string =>
-  generators[target]({
-    sourceFileName,
-    module,
-    funcName,
-    sql,
-    params,
-    returnType,
-    queryValues,
-    outputValue,
-  })
+const typeScriptString =
+  (
+    sourceFileName: string,
+    target: CodegenTarget,
+    module: string,
+    funcName: string,
+    sql: string
+  ) =>
+  (params: string) =>
+  (returnType: string) =>
+  (queryValues: string) =>
+  (outputValue: string): string =>
+    generators[target]({
+      sourceFileName,
+      module,
+      funcName,
+      sql,
+      params,
+      returnType,
+      queryValues,
+      outputValue,
+    })
 
 type GeneratorOptions = {
   sourceFileName: string
@@ -171,14 +174,14 @@ function funcReturnType(
   )
 }
 
-const columnType = (types: TypeClient) => (
-  column: NamedValue
-): Task.Task<string> => {
-  return pipe(
-    types.columnType(column),
-    Task.map(({ name, type }) => `${stringLiteral(name)}: ${type}`)
-  )
-}
+const columnType =
+  (types: TypeClient) =>
+  (column: NamedValue): Task.Task<string> => {
+    return pipe(
+      types.columnType(column),
+      Task.map(({ name, type }) => `${stringLiteral(name)}: ${type}`)
+    )
+  }
 
 function outputValue(
   target: CodegenTarget,

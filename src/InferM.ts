@@ -21,9 +21,8 @@ export const right: <A = never>(a: A) => InferM<A> = flow(
   TaskEither.right
 )
 
-export const payload: <A>(
-  fa: InferM<A>
-) => TaskEither.TaskEither<string, A> = TaskEither.map((warn) => warn.payload)
+export const payload: <A>(fa: InferM<A>) => TaskEither.TaskEither<string, A> =
+  TaskEither.map((warn) => warn.payload)
 
 export const warnings: <A>(
   fa: InferM<A>
@@ -39,8 +38,9 @@ export const map: <A, B>(f: (a: A) => B) => (fa: InferM<A>) => InferM<B> = flow(
 export function chain<A, B>(f: (a: A) => InferM<B>) {
   return (ma: InferM<A>): InferM<B> =>
     pipe(
-      TaskEither.right((p: Warn.Warn<B>) => (w: Warn.Warning[]) =>
-        Warn.make(p.payload, p.warnings.concat(w))
+      TaskEither.right(
+        (p: Warn.Warn<B>) => (w: Warn.Warning[]) =>
+          Warn.make(p.payload, p.warnings.concat(w))
       ),
       TaskEither.ap(
         pipe(
@@ -55,8 +55,9 @@ export function chain<A, B>(f: (a: A) => InferM<B>) {
 export function ap<A>(fa: InferM<A>) {
   return <B>(fab: InferM<(a: A) => B>): InferM<B> =>
     pipe(
-      TaskEither.right((p: B) => (w1: Warn.Warning[]) => (w2: Warn.Warning[]) =>
-        Warn.make(p, w1.concat(w2))
+      TaskEither.right(
+        (p: B) => (w1: Warn.Warning[]) => (w2: Warn.Warning[]) =>
+          Warn.make(p, w1.concat(w2))
       ),
       TaskEither.ap(pipe(payload(fab), TaskEither.ap(payload(fa)))),
       TaskEither.ap(warnings(fa)),

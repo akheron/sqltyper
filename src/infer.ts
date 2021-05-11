@@ -267,17 +267,18 @@ function inferSetOpsOutput(
       // its output is not indluded
       if (setOp.op !== 'EXCEPT') {
         result = pipe(
-          Warn.of((aa: VirtualField[]) => (bb: VirtualField[]) =>
-            pipe(
-              Array.zip(aa, bb),
-              Array.map(([a, b]) => ({
-                // Column names are determined by the first SELECT
-                name: a.name,
-                nullability: FieldNullability.disjunction(a.nullability)(
-                  b.nullability
-                ),
-              }))
-            )
+          Warn.of(
+            (aa: VirtualField[]) => (bb: VirtualField[]) =>
+              pipe(
+                Array.zip(aa, bb),
+                Array.map(([a, b]) => ({
+                  // Column names are determined by the first SELECT
+                  name: a.name,
+                  nullability: FieldNullability.disjunction(a.nullability)(
+                    b.nullability
+                  ),
+                }))
+              )
           ),
           Warn.ap(result),
           Warn.ap(columns)
@@ -584,12 +585,12 @@ function inferExpressionNullability(
         case 'safe':
           return pipe(
             InferM.right(
-              (a: FieldNullability) => (b: FieldNullability) => (
-                c: FieldNullability
-              ) =>
-                FieldNullability.disjunction(
-                  FieldNullability.disjunction(a)(b)
-                )(c)
+              (a: FieldNullability) =>
+                (b: FieldNullability) =>
+                (c: FieldNullability) =>
+                  FieldNullability.disjunction(
+                    FieldNullability.disjunction(a)(b)
+                  )(c)
             ),
             InferM.ap(
               inferExpressionNullability(
@@ -723,20 +724,18 @@ function inferExpressionNullability(
       }
       return pipe(
         InferM.right(
-          (branchNullabilities: FieldNullability[]) => (
-            elseNullability: FieldNullability
-          ) =>
-            branchNullabilities.reduce(
-              (a, b) => FieldNullability.disjunction(a)(b),
-              elseNullability
-            )
+          (branchNullabilities: FieldNullability[]) =>
+            (elseNullability: FieldNullability) =>
+              branchNullabilities.reduce(
+                (a, b) => FieldNullability.disjunction(a)(b),
+                elseNullability
+              )
         ),
         InferM.ap(
           pipe(
             branches.map(({ condition, result }) => {
-              const nonNullExprsByCond = getNonNullSubExpressionsFromRowCond(
-                condition
-              )
+              const nonNullExprsByCond =
+                getNonNullSubExpressionsFromRowCond(condition)
               return inferExpressionNullability(
                 client,
                 outsideCTEs,
@@ -971,13 +970,13 @@ function updateToParamNullability(
   )
 }
 
-const makeParamNullability = (index: Option.Option<number>) => (
-  column: Column
-): Option.Option<ParamNullability> =>
-  pipe(
-    index,
-    Option.map((index) => ({ index, nullable: column.nullable }))
-  )
+const makeParamNullability =
+  (index: Option.Option<number>) =>
+  (column: Column): Option.Option<ParamNullability> =>
+    pipe(
+      index,
+      Option.map((index) => ({ index, nullable: column.nullable }))
+    )
 
 function findInsertColumns(
   client: SchemaClient,
@@ -996,22 +995,22 @@ function findInsertColumns(
   )
 }
 
-const combineParamNullability = (
-  valuesListParams: Array<Array<Option.Option<number>>>
-) => (targetColumns: Column[]): ParamNullability[] => {
-  return pipe(
-    valuesListParams.map((valuesParams) =>
-      R.zip(targetColumns, valuesParams).map(([column, param]) =>
-        pipe(
-          param,
-          Option.map((index) => ({ index, nullable: column.nullable }))
+const combineParamNullability =
+  (valuesListParams: Array<Array<Option.Option<number>>>) =>
+  (targetColumns: Column[]): ParamNullability[] => {
+    return pipe(
+      valuesListParams.map((valuesParams) =>
+        R.zip(targetColumns, valuesParams).map(([column, param]) =>
+          pipe(
+            param,
+            Option.map((index) => ({ index, nullable: column.nullable }))
+          )
         )
-      )
-    ),
-    R.flatten,
-    Array.filterMap(identity)
-  )
-}
+      ),
+      R.flatten,
+      Array.filterMap(identity)
+    )
+  }
 
 function applyParamNullability(
   stmt: StatementDescription,

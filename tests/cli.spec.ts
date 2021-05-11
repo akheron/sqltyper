@@ -94,9 +94,8 @@ describe('cli', () => {
   })
 
   it('exit status 1 on failure', () => {
-    let error:
-      | (Error & childProcess.SpawnSyncReturns<Buffer>)
-      | undefined = undefined
+    let error: (Error & childProcess.SpawnSyncReturns<Buffer>) | undefined =
+      undefined
     try {
       runCli(invalidSqlsDir)
     } catch (err) {

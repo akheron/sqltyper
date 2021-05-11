@@ -45,31 +45,33 @@ export interface SchemaClient {
 }
 
 export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
-  const getTable = (
-    schemaName: string | null,
-    tableName: string
-  ): TaskEither.TaskEither<string, Table> => async () => {
-    const result = await sql.tableColumns(postgresClient, {
-      schemaName: schemaName || 'public',
-      tableName,
-    })
-    if (result.length === 0) {
-      return Either.left(
-        `No such table: ${fullTableName(schemaName, tableName)}`
-      )
+  const getTable =
+    (
+      schemaName: string | null,
+      tableName: string
+    ): TaskEither.TaskEither<string, Table> =>
+    async () => {
+      const result = await sql.tableColumns(postgresClient, {
+        schemaName: schemaName || 'public',
+        tableName,
+      })
+      if (result.length === 0) {
+        return Either.left(
+          `No such table: ${fullTableName(schemaName, tableName)}`
+        )
+      }
+      return Either.right({
+        name: tableName,
+        columns: result
+          .filter((col) => col.attisdropped === false)
+          .map((col) => ({
+            hidden: col.attnum < 0,
+            name: col.attname,
+            nullable: !col.attnotnull,
+            type: col.atttypid,
+          })),
+      })
     }
-    return Either.right({
-      name: tableName,
-      columns: result
-        .filter((col) => col.attisdropped === false)
-        .map((col) => ({
-          hidden: col.attnum < 0,
-          name: col.attname,
-          nullable: !col.attnotnull,
-          type: col.atttypid,
-        })),
-    })
-  }
 
   const getEnums = asyncCached(
     async (): Promise<Enum[]> =>

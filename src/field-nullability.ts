@@ -34,23 +34,23 @@ export namespace FieldNullability {
     }
   }
 
-  export const disjunction = (a: FieldNullability) => (
-    b: FieldNullability
-  ): FieldNullability =>
-    walk(a, {
-      any: (aAny) =>
-        walk(b, {
-          any: (bAny) => any(aAny.nullable || bAny.nullable),
-          array: (bArray) => any(aAny.nullable || bArray.nullable),
-        }),
-      array: (aArray) =>
-        walk(b, {
-          any: (bAny) => any(aArray.nullable || bAny.nullable),
-          array: (bArray) =>
-            array(
-              aArray.nullable || bArray.nullable,
-              aArray.elemNullable || bArray.elemNullable
-            ),
-        }),
-    })
+  export const disjunction =
+    (a: FieldNullability) =>
+    (b: FieldNullability): FieldNullability =>
+      walk(a, {
+        any: (aAny) =>
+          walk(b, {
+            any: (bAny) => any(aAny.nullable || bAny.nullable),
+            array: (bArray) => any(aAny.nullable || bArray.nullable),
+          }),
+        array: (aArray) =>
+          walk(b, {
+            any: (bAny) => any(aArray.nullable || bAny.nullable),
+            array: (bArray) =>
+              array(
+                aArray.nullable || bArray.nullable,
+                aArray.elemNullable || bArray.elemNullable
+              ),
+          }),
+      })
 }
