@@ -317,7 +317,7 @@ function inferSelectBodyOutput(
 function inferSelectListOutput(
   client: SchemaClient,
   outsideCTEs: VirtualTable[],
-  sourceColumns: SourceColumn[],
+  sourceColumns: (SourceColumn | VirtualField)[],
   paramNullability: ParamNullability[],
   conditions: Array<ast.Expression | null>,
   selectList: ast.SelectListItem[]
@@ -350,7 +350,7 @@ function inferSelectListOutput(
 function inferSelectListItemOutput(
   client: SchemaClient,
   outsideCTEs: VirtualTable[],
-  sourceColumns: SourceColumn[],
+  sourceColumns: (SourceColumn | VirtualField)[],
   paramNullability: ParamNullability[],
   nonNullExpressions: ast.Expression[],
   selectListItem: ast.SelectListItem
@@ -368,7 +368,7 @@ function inferSelectListItemOutput(
             ),
             Either.map((columns) =>
               columns.map((column) => ({
-                name: column.columnName,
+                name: isSourceColumn(column) ? column.columnName : column.name,
                 nullability: column.nullability,
               }))
             )
@@ -384,7 +384,7 @@ function inferSelectListItemOutput(
             ),
             Either.map((columns) =>
               columns.map((column) => ({
-                name: column.columnName,
+                name: isSourceColumn(column) ? column.columnName : column.name,
                 nullability: column.nullability,
               }))
             )
@@ -416,19 +416,21 @@ type NonNullableColumn = { tableName: string | null; columnName: string }
 
 function isColumnNonNullable(
   nonNullableColumns: NonNullableColumn[],
-  sourceColumn: SourceColumn
+  sourceColumn: SourceColumn | VirtualField
 ): boolean {
-  return nonNullableColumns.some((nonNull) =>
-    nonNull.tableName
-      ? sourceColumn.tableAlias === nonNull.tableName
-      : true && sourceColumn.columnName === nonNull.columnName
-  )
+  return isSourceColumn(sourceColumn)
+    ? nonNullableColumns.some((nonNull) =>
+        nonNull.tableName
+          ? sourceColumn.tableAlias === nonNull.tableName
+          : true && sourceColumn.columnName === nonNull.columnName
+      )
+    : !sourceColumn.nullability.nullable // TODO correct?
 }
 
 function applyExpressionNonNullability(
   nonNullableExpressions: ast.Expression[],
-  sourceColumns: SourceColumn[]
-): SourceColumn[] {
+  sourceColumns: (SourceColumn | VirtualField)[]
+): (SourceColumn | VirtualField)[] {
   const nonNullableColumns = pipe(
     nonNullableExpressions,
     R.map((expr) =>
@@ -464,7 +466,7 @@ function inferExpressionName(expression: ast.Expression): string {
 function inferExpressionNullability(
   client: SchemaClient,
   outsideCTEs: VirtualTable[],
-  sourceColumns: SourceColumn[],
+  sourceColumns: (SourceColumn | VirtualField)[],
   paramNullability: ParamNullability[],
   nonNullExprs: ast.Expression[],
   expression: ast.Expression
@@ -485,7 +487,13 @@ function inferExpressionNullability(
     // have a NOT NULL constraint
     tableColumnRef: ({ table, column }) =>
       pipe(
-        InferM.fromEither(findSourceTableColumn(table, column, sourceColumns)),
+        InferM.fromEither(
+          findSourceTableColumn(
+            table,
+            column,
+            sourceColumns.filter(isSourceColumn)
+          )
+        ),
         InferM.map((column) => column.nullability)
       ),
 
@@ -1173,7 +1181,7 @@ function getSourceColumnsForTableExpr(
   paramNullability: ParamNullability[],
   tableExpr: ast.TableExpression | null,
   setNullable = false
-): InferM.InferM<SourceColumn[]> {
+): InferM.InferM<(SourceColumn | VirtualField)[]> {
   if (!tableExpr) {
     return InferM.right([])
   }
@@ -1182,6 +1190,22 @@ function getSourceColumnsForTableExpr(
     ast.TableExpression.walk(tableExpr, {
       table: ({ table, as }) =>
         getSourceColumnsForTable(client, ctes, table, as),
+      functionCall: ({ func, as }): InferM.InferM<VirtualField[]> =>
+        InferM.map((nullability: FieldNullability) => [
+          {
+            name: as || inferExpressionName(func),
+            nullability,
+          },
+        ])(
+          inferExpressionNullability(
+            client,
+            ctes,
+            [], // TODO?
+            paramNullability,
+            [], // TODO?
+            func
+          )
+        ),
       subQuery: ({ query, as }) =>
         getSourceColumnsForSubQuery(client, ctes, paramNullability, query, as),
       crossJoin: ({ left, right }) =>
@@ -1248,21 +1272,31 @@ function getSourceColumnsForSubQuery(
 }
 
 function setSourceColumnsAsNullable(
-  sourceColumns: SourceColumn[]
-): SourceColumn[] {
-  return sourceColumns.map((col) => ({
-    ...col,
-    nullability: { ...col.nullability, nullable: true },
-  }))
+  sourceColumns: (SourceColumn | VirtualField)[]
+): (SourceColumn | VirtualField)[] {
+  return sourceColumns.map((col) =>
+    isSourceColumn(col)
+      ? {
+          ...col,
+          nullability: { ...col.nullability, nullable: true },
+        }
+      : {
+          ...col,
+          nullability: { ...col.nullability, nullable: true },
+        }
+  )
 }
 
 function combineSourceColumns(
-  ...sourceColumns: Array<InferM.InferM<SourceColumn[]>>
-): InferM.InferM<SourceColumn[]> {
+  ...sourceColumns: Array<InferM.InferM<(SourceColumn | VirtualField)[]>>
+): InferM.InferM<(SourceColumn | VirtualField)[]> {
   return pipe(
     sourceColumns,
     sequenceAIM,
-    InferM.map<SourceColumn[][], SourceColumn[]>(R.flatten)
+    InferM.map<
+      (SourceColumn | VirtualField)[][],
+      (SourceColumn | VirtualField)[]
+    >(R.flatten)
   )
 }
 
@@ -1272,11 +1306,19 @@ function isConstantExprOf(expectedValue: string, expr: ast.Expression) {
   })
 }
 
+function isSourceColumn(c: SourceColumn | VirtualField): c is SourceColumn {
+  return !!(c as SourceColumn).tableAlias
+}
+
 function findNonHiddenSourceColumns(
-  sourceColumns: SourceColumn[]
-): Either.Either<string, SourceColumn[]> {
+  sourceColumns: (SourceColumn | VirtualField)[]
+): Either.Either<string, (SourceColumn | VirtualField)[]> {
   return pipe(
-    sourceColumns.filter((col) => !col.hidden),
+    sourceColumns.filter(
+      (col) =>
+        (isSourceColumn(col) && !col.hidden) ||
+        !isSourceColumn(col) /* VirtualField's are never hidden */
+    ),
     Either.fromPredicate(
       (result) => result.length > 0,
       () => `No columns`
@@ -1286,12 +1328,14 @@ function findNonHiddenSourceColumns(
 
 function findNonHiddenSourceTableColumns(
   tableName: string,
-  sourceColumns: SourceColumn[]
+  sourceColumns: (SourceColumn | VirtualField)[]
 ): Either.Either<string, SourceColumn[]> {
   return pipe(
     findNonHiddenSourceColumns(sourceColumns),
     Either.map((sourceColumns) =>
-      sourceColumns.filter((col) => col.tableAlias === tableName)
+      sourceColumns
+        .filter(isSourceColumn)
+        .filter((col) => col.tableAlias === tableName)
     ),
     Either.chain((result) =>
       result.length > 0
@@ -1317,10 +1361,14 @@ function findSourceTableColumn(
 
 function findSourceColumn(
   columnName: string,
-  sourceColumns: SourceColumn[]
-): Either.Either<string, SourceColumn> {
+  sourceColumns: (SourceColumn | VirtualField)[]
+): Either.Either<string, SourceColumn | VirtualField> {
   return pipe(
-    sourceColumns.find((col) => col.columnName === columnName),
+    sourceColumns.find(
+      (col) =>
+        (isSourceColumn(col) && col.columnName === columnName) ||
+        (!isSourceColumn(col) && col.name === columnName)
+    ),
     Either.fromNullable(`Unknown column ${columnName}`)
   )
 }

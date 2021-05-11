@@ -38,6 +38,10 @@ export interface SchemaClient {
   ): TaskEither.TaskEither<string, Table>
   getEnums(): Promise<Enum[]>
   getArrayTypes(): Promise<ArrayType[]>
+  getFunction(
+    schemaName: string | null,
+    functionName: string
+  ): TaskEither.TaskEither<string, SqlFunction>
   functionNullSafety(
     schemaName: string | null,
     functionName: string
@@ -54,9 +58,7 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
       tableName,
     })
     if (result.length === 0) {
-      return Either.left(
-        `No such table: ${fullTableName(schemaName, tableName)}`
-      )
+      return Either.left(`No such table: ${fullName(schemaName, tableName)}`)
     }
     return Either.right({
       name: tableName,
@@ -87,6 +89,27 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
         elemType: row.typelem,
       }))
   )
+
+  // TODO: handle overloaded functions
+  const getFunction = (
+    schemaName: string | null,
+    functionName: string
+  ): TaskEither.TaskEither<string, SqlFunction> => async () => {
+    const allFunctions = await getFunctions()
+    const res = allFunctions.find(
+      (f) =>
+        schemaName !== null &&
+        f.schema === schemaName &&
+        f.name === functionName
+    )
+    if (res) {
+      return Either.right(res)
+    } else {
+      return Either.left(
+        `No such function: ${fullName(schemaName, functionName)}`
+      )
+    }
+  }
 
   const getFunctions = asyncCached(
     async (): Promise<SqlFunction[]> =>
@@ -119,9 +142,9 @@ export function schemaClient(postgresClient: postgres.Sql<{}>): SchemaClient {
     )
   }
 
-  return { getTable, getEnums, getArrayTypes, functionNullSafety }
+  return { getTable, getEnums, getArrayTypes, getFunction, functionNullSafety }
 }
 
-function fullTableName(schemaName: string | null, tableName: string): string {
+function fullName(schemaName: string | null, tableName: string): string {
   return (schemaName ? schemaName + '.' : '') + tableName
 }
