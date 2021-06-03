@@ -7,6 +7,7 @@ import {
   generateTypeScript,
   validateStatement,
   TsModule,
+  TsModuleDir,
   generateIndexModule,
   CodegenTarget,
 } from './codegen'
@@ -78,6 +79,8 @@ export function generateTSCode(
 export { TsModule, TsModuleDir } from './codegen'
 
 export function indexModuleTS(
+  dirPath: string,
+  nestedDirs: TsModuleDir[],
   tsModules: TsModule[],
   options?: {
     prettierFileName?: string | null | undefined
@@ -85,7 +88,7 @@ export function indexModuleTS(
 ): Task.Task<string> {
   const { prettierFileName = null } = options || {}
   return pipe(
-    Task.of(generateIndexModule(tsModules)),
+    Task.of(generateIndexModule(dirPath, nestedDirs, tsModules)),
     Task.chain((tsCode) =>
       prettierFileName != null
         ? () => runPrettier(prettierFileName, tsCode)
