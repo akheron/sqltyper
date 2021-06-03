@@ -273,24 +273,33 @@ function queryValues(
 ////////////////////////////////////////////////////////////////////////
 
 export type TsModule = {
-  sqlFileName: string
-  tsFileName: string
+  sqlFileName: string // full path
+  tsFileName: string // full path
   funcName: string
 }
 
 export type TsModuleDir = {
-  dirPath: string
+  dirPath: string // full path
+  nestedDirs: TsModuleDir[]
   modules: TsModule[]
   hasErrors: boolean
 }
 
-export function generateIndexModule(modules: TsModule[]): string {
-  return modules
+export function generateIndexModule(
+  dirPath: string,
+  nestedDirs: TsModuleDir[],
+  modules: TsModule[]
+): string {
+  const nestedDirsStr = nestedDirs
+    .map((dir) => `export * from '${path.relative(dirPath, dir.dirPath)}';`)
+    .join('\n')
+  const modulesStr = modules
     .map(
       ({ tsFileName, funcName }) =>
         `export { ${funcName} } from './${baseNameWithoutExt(tsFileName)}';`
     )
     .join('\n')
+  return nestedDirsStr + '\n' + modulesStr
 }
 
 function baseNameWithoutExt(filePath: string): string {

@@ -195,6 +195,7 @@ type WatchEvent = {
 }
 
 type WatchEventHandler = (
+  nestedDirs: TsModuleDir[],
   modules: TsModule[],
   type: 'update' | 'remove',
   dirPath: string,
@@ -260,6 +261,7 @@ async function handleWatchEvents(
     if (moduleDir == null) return moduleDirs
 
     const newModules = await eventHandler(
+      moduleDir.nestedDirs,
       moduleDir.modules,
       type,
       dirPath,
@@ -270,6 +272,7 @@ async function handleWatchEvents(
         (moduleDir) => moduleDir.dirPath === dirPath,
         (moduleDir) => ({
           dirPath: moduleDir.dirPath,
+          nestedDirs: moduleDir.nestedDirs,
           modules: newModules,
           hasErrors: moduleDir.hasErrors,
         }),
@@ -286,6 +289,7 @@ function makeWatchEventHandler(
   options: Options
 ): WatchEventHandler {
   return async (
+    nestedDirs: TsModuleDir[],
     tsModules: TsModule[],
     type: 'update' | 'remove',
     dirPath: string,
@@ -324,6 +328,7 @@ function makeWatchEventHandler(
         maybeWriteIndexModule(
           options.index,
           dirPath,
+          nestedDirs,
           newModules,
           options.prettify
         )
@@ -387,7 +392,8 @@ function processDirectories(
         dirPaths,
         fileExtensions,
         (filePath) => processSQLFile(clients, filePath, false, options),
-        (dirPath, tsModules) => processSQLDirectory(dirPath, tsModules, options)
+        (dirPath, nestedDirs: TsModuleDir[], tsModules) =>
+          processSQLDirectory(dirPath, nestedDirs, tsModules, options)
       )
     ),
     Task.map((moduleDirs) => {
@@ -411,7 +417,7 @@ function checkDirectories(
     dirPaths,
     fileExtensions,
     (filePath) => processSQLFile(clients, filePath, true, options),
-    (_dirPath, tsModules) => checkDirectoryResult(tsModules)
+    (_dirPath, _nestedDirs, tsModules) => checkDirectoryResult(tsModules)
   )
 }
 
@@ -425,7 +431,11 @@ function mapDirectories<T, U>(
   dirPaths: string[],
   fileExtensions: string[],
   fileProcessor: (filePath: string) => Task.Task<T>,
-  dirProcessor: (dirPath: string, fileResults: T[]) => Task.Task<U>
+  dirProcessor: (
+    dirPath: string,
+    nestedDirs: U[],
+    fileResults: T[]
+  ) => Task.Task<U>
 ): Task.Task<U[]> {
   return traverseATs(dirPaths, (dirPath) =>
     mapDirectory(dirPath, fileExtensions, fileProcessor, dirProcessor)
@@ -436,12 +446,29 @@ function mapDirectory<T, U>(
   dirPath: string,
   fileExtensions: string[],
   fileProcessor: (filePath: string) => Task.Task<T>,
-  dirProcessor: (dirPath: string, fileResults: T[]) => Task.Task<U>
+  dirProcessor: (
+    dirPath: string,
+    nestedDirs: U[],
+    fileResults: T[]
+  ) => Task.Task<U>
 ): Task.Task<U> {
   return pipe(
     findSQLFilePaths(dirPath, fileExtensions),
-    Task.chain((filePaths) => traverseATs(filePaths, fileProcessor)),
-    Task.chain((results) => dirProcessor(dirPath, results))
+    Task.chain((res) =>
+      pipe(
+        traverseATs(res.nestedDirs, (dirPath) =>
+          mapDirectory(dirPath, fileExtensions, fileProcessor, dirProcessor)
+        ),
+        Task.chain((processedDirs) =>
+          pipe(
+            traverseATs(res.sqlFiles, fileProcessor),
+            Task.chain((processedFiles) =>
+              dirProcessor(dirPath, processedDirs, processedFiles)
+            )
+          )
+        )
+      )
+    )
   )
 }
 
@@ -503,6 +530,7 @@ function processSQLFile(
 
 function processSQLDirectory(
   dirPath: string,
+  nestedDirs: TsModuleDir[],
   modules: Option.Option<TsModule>[],
   options: Options
 ): Task.Task<TsModuleDir> {
@@ -512,22 +540,33 @@ function processSQLDirectory(
     maybeWriteIndexModule(
       options.index,
       dirPath,
+      nestedDirs,
       successfulModules,
       options.prettify
     ),
-    Task.map((modules) => ({ hasErrors, dirPath, modules }))
+    Task.map((modules) => ({ hasErrors, dirPath, modules, nestedDirs }))
+  )
+}
+
+function moduleDirContainsSqlFiles(dir: TsModuleDir): boolean {
+  return (
+    dir.modules.length > 0 || dir.nestedDirs.some(moduleDirContainsSqlFiles)
   )
 }
 
 function maybeWriteIndexModule(
   write: boolean,
   dirPath: string,
+  nestedDirs: TsModuleDir[],
   tsModules: TsModule[],
   prettify: boolean
 ): Task.Task<TsModule[]> {
   const tsPath = path.join(dirPath, 'index.ts')
 
-  if (write) {
+  if (
+    write &&
+    (tsModules.length > 0 || nestedDirs.some(moduleDirContainsSqlFiles))
+  ) {
     return pipe(
       Task.of(tsModules),
       Task.map((modules) =>
@@ -541,9 +580,14 @@ function maybeWriteIndexModule(
         )
       ),
       Task.chain((sortedModules) =>
-        indexModuleTS(sortedModules, {
-          prettierFileName: prettify ? tsPath : null,
-        })
+        indexModuleTS(
+          dirPath,
+          nestedDirs.filter(moduleDirContainsSqlFiles),
+          sortedModules,
+          {
+            prettierFileName: prettify ? tsPath : null,
+          }
+        )
       ),
       Task.chain((tsCode) => async () => {
         if (await isFileOutOfDate(tsPath, tsCode)) {
@@ -590,10 +634,20 @@ async function removeOutputFile(filePath: string): Promise<void> {
   console.log(`Removing ${tsPath}`)
 }
 
+function mapPartial<A, B>(as: A[], f: (a: A) => null | B): B[] {
+  function isNotNull<A>(a: A | null): a is A {
+    return a !== null
+  }
+  return as.map(f).filter(isNotNull)
+}
+
 function findSQLFilePaths(
   dirPath: string,
   fileExtensions: string[]
-): Task.Task<string[]> {
+): Task.Task<{
+  sqlFiles: string[]
+  nestedDirs: string[]
+}> {
   return pipe(
     () =>
       fs.readdir(dirPath, {
@@ -604,14 +658,18 @@ function findSQLFilePaths(
       pipe(
         traverseATs(dirents, (dirent) =>
           pipe(
-            isSQLFile(fileExtensions, dirPath, dirent.name),
-            Task.map((is) => (is ? Option.some(dirent) : Option.none))
+            categoriseDirEnt(fileExtensions, dirPath, dirent.name),
+            Task.map((typ) => [typ, dirent] as const)
           )
         ),
-        Task.map(Array.filterMap(identity)),
-        Task.map((dirents) =>
-          dirents.map((dirent) => path.join(dirPath, dirent.name))
-        )
+        Task.map((dirents) => ({
+          sqlFiles: mapPartial(dirents, ([typ, dirent]) =>
+            typ === 'sqlfile' ? path.join(dirPath, dirent.name) : null
+          ),
+          nestedDirs: mapPartial(dirents, ([typ, dirent]) =>
+            typ === 'dir' ? path.join(dirPath, dirent.name) : null
+          ),
+        }))
       )
     )
   )
@@ -629,19 +687,23 @@ function extensions(e: string): string[] {
   return e.split(',').map((ext) => `.${ext}`)
 }
 
-function isSQLFile(
+function categoriseDirEnt(
   extensions: string[],
   dirPath: string,
   fileName: string
-): Task.Task<boolean> {
+): Task.Task<null | 'dir' | 'sqlfile'> {
   return async () => {
     let stats
     try {
       stats = await fs.stat(path.join(dirPath, fileName))
     } catch (_err) {
-      return false
+      return null
     }
     return stats.isFile() && hasOneOfExtensions(extensions, fileName)
+      ? 'sqlfile'
+      : stats.isDirectory()
+      ? 'dir'
+      : null
   }
 }
 
