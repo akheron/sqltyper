@@ -38,7 +38,7 @@ type Options = {
 }
 
 async function main(): Promise<number> {
-  const args = parseArgs()
+  const args = await parseArgs()
   if (!args._.length) {
     console.error('No input files. Try with `--help`.')
     return 1
