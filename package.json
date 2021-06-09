@@ -53,7 +53,7 @@
     "packet-reader": "^1.0.0",
     "ramda": "^0.27.0",
     "typescript": ">=3.8",
-    "wrap-ansi": "^7.0.0",
+    "wrap-ansi": "^8.0.0",
     "yargs": "^17.0.0"
   }
 }
