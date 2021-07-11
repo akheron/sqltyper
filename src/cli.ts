@@ -509,16 +509,17 @@ function processSQLFile(
       }
       return Either.right(undefined)
     }),
-    TaskEither.orElse((errorMessage) => async (): Promise<
-      Either.Either<undefined, undefined>
-    > => {
-      console.error(`${filePath}: ${errorMessage}`)
-      if (!checkOnly) {
-        console.log(`Removing ${tsPath}`)
-        await tryCatch(() => fs.unlink(tsPath))
-      }
-      return Either.left(undefined)
-    }),
+    TaskEither.orElse(
+      (errorMessage) =>
+        async (): Promise<Either.Either<undefined, undefined>> => {
+          console.error(`${filePath}: ${errorMessage}`)
+          if (!checkOnly) {
+            console.log(`Removing ${tsPath}`)
+            await tryCatch(() => fs.unlink(tsPath))
+          }
+          return Either.left(undefined)
+        }
+    ),
     TaskEither.map(() => ({
       sqlFileName: path.basename(filePath),
       tsFileName: path.basename(tsPath),
