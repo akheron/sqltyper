@@ -30,7 +30,7 @@
     "test": "jest"
   },
   "devDependencies": {
-    "@types/jest": "^26.0.10",
+    "@types/jest": "^27.0.0",
     "@types/node": "^16.3.1",
     "@types/ramda": "^0.27.3",
     "@types/wrap-ansi": "^3.0.0",
