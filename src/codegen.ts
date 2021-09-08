@@ -9,8 +9,12 @@ import * as pkginfo from './pkginfo'
 import { TypeClient } from './tstype'
 import { StatementDescription, NamedValue } from './types'
 
-export type CodegenTarget = 'pg' | 'postgres'
-export const codegenTargets: ReadonlyArray<CodegenTarget> = ['pg', 'postgres']
+export type CodegenTarget = 'pg' | 'postgres' | 'pg-promise'
+export const codegenTargets: ReadonlyArray<CodegenTarget> = [
+  'pg',
+  'postgres',
+  'pg-promise',
+]
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -146,6 +150,30 @@ export async function ${funcName}(
 }
 `
   },
+  'pg-promise'({
+    sourceFileName,
+    module,
+    funcName,
+    params,
+    returnType,
+    sql,
+    queryValues,
+    outputValue,
+  }: GeneratorOptions) {
+    return `\
+${topComment(sourceFileName)}
+
+import pgp from '${module}'
+
+export async function ${funcName}(
+  client: pgp.IDatabase<any, any>${params}
+): Promise<${returnType}> {
+    const result = await client.query(\`\\
+${sql}\`${queryValues})
+    return ${outputValue}
+}
+`
+  },
 }
 
 function hasOnlyPositionalParams(stmt: StatementDescription) {
@@ -197,6 +225,9 @@ function outputValue(
       rows = 'result'
       count = 'result.count'
       break
+    case 'pg-promise':
+      rows = 'result'
+      count = 'result.length'
   }
   switch (stmt.rowCount) {
     case 'zero':
