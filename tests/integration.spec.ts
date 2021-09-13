@@ -214,7 +214,9 @@ async function testSetup(sql: postgres.Sql<{}>, setupStatement: string) {
   try {
     return await sql.unsafe(setupStatement)
   } catch (err) {
-    throw new Error(errorToString(err, setupStatement))
+    throw new Error(
+      errorToString(err as postgres.PostgresError, setupStatement)
+    )
   }
 }
 
@@ -278,7 +280,7 @@ async function alwaysRollback<T>(
       throw new Error(ROLLBACK_MARKER)
     })
   } catch (err) {
-    if (err.message !== ROLLBACK_MARKER) throw err
+    if ((err as postgres.PostgresError).message !== ROLLBACK_MARKER) throw err
   }
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return result!
