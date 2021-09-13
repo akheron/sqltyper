@@ -163,7 +163,7 @@ export async function ${funcName}(
     return `\
 ${topComment(sourceFileName)}
 
-import pgp from '${module}'
+import * as pgp from '${module}'
 
 export async function ${funcName}(
   client: pgp.IDatabase<any, any>${params}
