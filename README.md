@@ -68,8 +68,9 @@ safe to use it with any query.
 npm install --save-dev sqltyper
 ```
 
-The generated TypeScript code uses [node-postgres] or [postgres.js] to execute
-the queries, so either `pg` or `postgres` is a required runtime dependency:
+The generated TypeScript code uses [node-postgres], [postgres.js], or
+[pg-promise] to execute the queries, so either `pg` or `postgres` is a required
+runtime dependency:
 
 ```
 npm install --save pg
@@ -192,8 +193,8 @@ Watch files and run the conversion when something changes. Default: `false`.
 
 `--target`, `-t`
 
-Whether to generate code for `pg` ([node-postgres]) or `postgres`
-([postgres.js]). Default: `pg`.
+Whether to generate code for `pg` ([node-postgres]), `postgres` ([postgres.js]),
+or `pg-promise` ([pg-promise]). Default: `pg`.
 
 `--module`, `-m`
 
@@ -277,4 +278,5 @@ select the newest version tag, adjust the description as needed.
 
 [node-postgres]: https://node-postgres.com/
 [postgres.js]: https://github.com/porsager/postgres
+[pg-promise]: http://vitaly-t.github.io/pg-promise/
 [sqlτyped]: https://github.com/jonifreeman/sqltyped

@@ -148,7 +148,8 @@ function parseArgs() {
     })
     .option('module', {
       alias: 'm',
-      description: 'Where to import node-postgres or postgres.js from.',
+      description:
+        'Where to import node-postgres, postgres.js, or pg-promise from.',
       type: 'string',
     })
     .option('check', {
