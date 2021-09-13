@@ -5,8 +5,7 @@ import * as Either from 'fp-ts/lib/Either'
 import * as Option from 'fp-ts/lib/Option'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import { flow, identity } from 'fp-ts/lib/function'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { flow, identity, pipe } from 'fp-ts/lib/function'
 
 import * as ast from './ast'
 import {

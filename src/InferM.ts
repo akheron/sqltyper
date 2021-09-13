@@ -1,7 +1,6 @@
 import * as Either from 'fp-ts/lib/Either'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import { flow } from 'fp-ts/lib/function'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { flow, pipe } from 'fp-ts/lib/function'
 
 import * as Warn from './Warn'
 

@@ -1,5 +1,5 @@
 import * as Option from 'fp-ts/lib/Option'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { pipe } from 'fp-ts/lib/function'
 
 import { operators, builtinFunctions } from './constants'
 import { Operator, SqlFunction, NullSafety } from './types'

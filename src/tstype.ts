@@ -1,7 +1,7 @@
 import * as ts from 'typescript'
 import * as Option from 'fp-ts/lib/Option'
 import * as Task from 'fp-ts/lib/Task'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { pipe } from 'fp-ts/lib/function'
 
 import { NamedValue, ValueType, Oid, TsType } from './types'
 import * as postgres from './postgres'

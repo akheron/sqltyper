@@ -5,11 +5,11 @@ import * as postgres from '../src/postgres'
 
 import * as Array from 'fp-ts/lib/Array'
 import * as Either from 'fp-ts/lib/Either'
-import * as Ord from 'fp-ts/lib/Ord'
+import { Ord as ordString } from 'fp-ts/lib/string'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
 import { identity } from 'fp-ts/lib/function'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { pipe } from 'fp-ts/lib/function'
 
 import { sqlToStatementDescription } from '../src/index'
 import * as C from '../src/clients'
@@ -124,10 +124,10 @@ function checkExpectations(
     )()
 
     // Expected warnings (only check the summary)
-    expect(pipe(testFile.warnings, Array.sort(Ord.ordString))).toEqual(
+    expect(pipe(testFile.warnings, Array.sort(ordString))).toEqual(
       pipe(
         warnings.map((w) => w.summary),
-        Array.sort(Ord.ordString)
+        Array.sort(ordString)
       )
     )
   }

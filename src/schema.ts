@@ -1,7 +1,7 @@
 import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { pipe } from 'fp-ts/lib/function'
 import * as postgres from './postgres'
 import { NullSafety, Oid, SqlFunction } from './types'
 import * as sql from './sql'
