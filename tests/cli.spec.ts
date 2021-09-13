@@ -94,12 +94,12 @@ describe('cli', () => {
   })
 
   it('exit status 1 on failure', () => {
-    let error: (Error & childProcess.SpawnSyncReturns<Buffer>) | undefined =
-      undefined
+    type ErrorType = (Error & childProcess.SpawnSyncReturns<Buffer>) | undefined
+    let error: ErrorType = undefined
     try {
       runCli(invalidSqlsDir)
     } catch (err) {
-      error = err
+      error = err as ErrorType
     }
     expect(error?.status).toEqual(1)
     expect(error?.message).toContain('ERROR:  syntax error at or near "foo"')
