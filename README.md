@@ -69,13 +69,15 @@ npm install --save-dev sqltyper
 ```
 
 The generated TypeScript code uses [node-postgres], [postgres.js], or
-[pg-promise] to execute the queries, so either `pg` or `postgres` is a required
-runtime dependency:
+[pg-promise] to execute the queries, so either `pg`, `postgres`, or `pg-promise`
+is a required runtime dependency:
 
 ```
 npm install --save pg
 # or
 npm install --save postgres@beta
+# or
+npm install --save pg-promise
 ```
 
 At the time of writing, you need to install the `@beta` verson of postgres.js to
