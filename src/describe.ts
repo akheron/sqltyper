@@ -1,5 +1,5 @@
 import * as TaskEither from 'fp-ts/lib/TaskEither'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { pipe } from 'fp-ts/lib/function'
 import * as R from 'ramda'
 
 import { StatementDescription, ValueType } from './types'

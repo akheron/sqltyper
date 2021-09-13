@@ -2,7 +2,7 @@ import * as path from 'path'
 
 import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
-import { pipe } from 'fp-ts/lib/pipeable'
+import { pipe } from 'fp-ts/lib/function'
 
 import { traverseATs } from './fp-utils'
 import * as pkginfo from './pkginfo'
