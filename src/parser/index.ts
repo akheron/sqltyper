@@ -3,10 +3,8 @@ import {
   ParseError,
   Parser,
   attempt,
-  constant,
   end,
   int,
-  keyword,
   lazy,
   many,
   match,
@@ -20,7 +18,6 @@ import {
   seq3,
   seqConst,
   seqNull,
-  stringBefore,
 } from '../typed-parser'
 import {
   AST,
@@ -55,6 +52,7 @@ import {
   operator,
   reservedWord,
   sepReserveds,
+  stringConstant,
   symbol,
   symbolKeepWS,
 } from './token'
@@ -177,32 +175,6 @@ const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
   }
   return Expression.createColumnRef(ident)
 })
-
-const strEscape = seq2(
-  symbolKeepWS('\\'),
-  oneOf(
-    keyword("'", "'"),
-    keyword('\\', '\\'),
-    keyword('/', '/'),
-    keyword('b', '\b'),
-    keyword('f', '\f'),
-    keyword('n', '\n'),
-    keyword('r', '\r'),
-    keyword('t', '\t')
-  )
-)
-const strInner: Parser<string> = seq(
-  stringBefore("[\\']"),
-  oneOf(
-    seq(
-      strEscape,
-      lazy(() => strInner)
-    )((e, t) => e + t),
-    constant('')
-  )
-)((s, tail) => s + tail)
-
-const stringConstant = seq2(symbolKeepWS("'"), strInner, symbol("'"))
 
 const constantExpr: Parser<Expression> = seq(
   oneOf(
