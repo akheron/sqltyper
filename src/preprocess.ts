@@ -4,7 +4,7 @@ import { Either, left, right } from 'fp-ts/lib/Either'
 export function preprocessSQL(
   sql: string
 ): Either<string, { sql: string; paramNames: string[] }> {
-  const namedParamMatch = sql.match(/\$\{\w+\}|(?<!:):\w+/g)
+  const namedParamMatch = sql.match(/\$\{[a-zA-Z]\w*\}|(?<!:):[a-zA-Z]\w*/g)
   const numberedParamMatch = sql.match(/\$\d+/g)
   if (namedParamMatch != null && numberedParamMatch != null) {
     const firstNamedParam = namedParamMatch[0]
