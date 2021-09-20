@@ -57,6 +57,7 @@ import {
   symbolKeepWS,
 } from './token'
 import { specialFunctionCall } from './special-functions'
+import { prefixTypeCast, psqlTypeCast } from './typecasts'
 
 // ( ... )
 export function parenthesized<T>(parser: Parser<T>): Parser<T> {
@@ -198,22 +199,18 @@ const parenthesizedExpr: Parser<Expression> = parenthesized(
   lazy(() => expression)
 )
 
-const typeName: Parser<string> = seq(
-  identifier,
-  oneOf<'[]' | ''>(seqConst('[]', symbol('['), symbol(']')), seqConst('', _))
-)((id, arraySuffix) => id + arraySuffix)
-
 const primaryExpr: Parser<Expression> = seq(
   oneOf(
     arraySubQueryExpr,
     caseExpr,
     attempt(specialFunctionCall(lazy(() => primaryExpr))),
+    attempt(prefixTypeCast),
     columnRefOrFunctionCallExpr,
     constantExpr,
     parameterExpr,
     parenthesizedExpr
   ),
-  optional(seq2(symbol('::'), typeName))
+  optional(psqlTypeCast)
 )((expr, typeCast) =>
   typeCast != null ? Expression.createTypeCast(expr, typeCast) : expr
 )
