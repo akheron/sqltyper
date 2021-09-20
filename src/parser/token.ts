@@ -111,14 +111,19 @@ export const reservedWord = <A extends string>(word: A): Parser<A> => {
   )
 }
 
-export const sepReserveds = (words: string): Parser<string> =>
+const sep = (
+  makeParser: (word: string) => Parser<unknown>,
+  words: string
+): Parser<string> =>
   attempt(
-    seqConst(
-      words,
-      ...words.split(/\s+/).map((word) => seqNull(reservedWord(word), _)),
-      _
-    )
+    seq(...words.split(/\s+/).map((word) => makeParser(word)))((_) => words)
   )
+
+export const sepReserveds = (words: string): Parser<string> =>
+  sep(reservedWord, words)
+
+export const sepExpectIdentifiers = (words: string): Parser<string> =>
+  sep(expectIdentifier, words)
 
 export const anyOperator = seq1(match('[-+*/<>=~!@#%^&|`?]{1,63}'), _)
 

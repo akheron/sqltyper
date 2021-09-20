@@ -103,7 +103,7 @@ export const nodePgBuiltinTypes = new Map<Oid, TsType>([
   [1184, 'Date'], // timestamp
   [600, '{ x: number; y: number }'], // point
   [718, '{ x: number; y: number; radius: number }'], // circle
-  [1186, '{ hours: number; minutes: number, seconds: number }'], // interval
+  [1186, '{ hours: number; minutes: number; seconds: number }'], // interval
   [17, 'Buffer'], // bytea
   // TODO: JSON could be typed more accurately because it only has
   // string, number, boolean, null, and objects and arrays of them
