@@ -134,29 +134,29 @@ const windowDefinition: Parser<WindowDefinition> = oneOf<WindowDefinition>(
   }))
 )
 
+const windowFilter: Parser<Expression> = seq2(
+  reservedWord('FILTER'),
+  parenthesized(
+    seq2(
+      reservedWord('WHERE'),
+      lazy(() => expression)
+    )
+  )
+)
+
+const windowOver: Parser<WindowDefinition> = seq2(
+  reservedWord('OVER'),
+  oneOf(identifier, parenthesized(windowDefinition))
+)
+
 const columnRefOrFunctionCallExpr: Parser<Expression> = seq(
   identifier,
   optional(seq2(symbol('.'), identifier)),
   optional(
     seq(
       functionArguments,
-      optional(
-        seq2(
-          reservedWord('FILTER'),
-          parenthesized(
-            seq2(
-              reservedWord('WHERE'),
-              lazy(() => expression)
-            )
-          )
-        )
-      ),
-      optional(
-        seq2(
-          reservedWord('OVER'),
-          oneOf(identifier, parenthesized(windowDefinition))
-        )
-      )
+      optional(windowFilter),
+      optional(windowOver)
     )((argList, filter, window) => [argList, filter, window] as const)
   )
 )((ident, ident2, fnCall) => {
