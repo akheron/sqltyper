@@ -57,6 +57,7 @@ import {
   symbolKeepWS,
 } from './token'
 import { specialFunctionCall } from './special-functions'
+import { specialTypeCast } from './special-typecasts'
 
 // ( ... )
 export function parenthesized<T>(parser: Parser<T>): Parser<T> {
@@ -102,6 +103,13 @@ const caseExpr: Parser<Expression> = seq(
   reservedWord('END')
 )((_case, branch1, branches, else_, _end) =>
   Expression.createCase([branch1, ...branches], else_)
+)
+
+const constantTypeCast: Parser<Expression> = seq(
+  identifier,
+  stringConstant
+)((targetType, str) =>
+  Expression.createTypeCast(Expression.createConstant(str), targetType)
 )
 
 const functionArguments: Parser<Expression[]> = parenthesized(
@@ -208,6 +216,8 @@ const primaryExpr: Parser<Expression> = seq(
     arraySubQueryExpr,
     caseExpr,
     attempt(specialFunctionCall(lazy(() => primaryExpr))),
+    attempt(specialTypeCast),
+    attempt(constantTypeCast),
     columnRefOrFunctionCallExpr,
     constantExpr,
     parameterExpr,
