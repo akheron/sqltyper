@@ -45,6 +45,14 @@ export function symbolKeepWS(s: string): Parser<null> {
 
 export const matchIdentifier = match('[a-zA-Z_][a-zA-Z0-9_]*')
 
+export const unquotedIdentifier: Parser<string> = map(
+  (identifier, toError) =>
+    sqlReservedWords.includes(identifier.toUpperCase())
+      ? toError(`Expected an identifier, got reserved word ${identifier}`)
+      : identifier,
+  matchIdentifier
+)
+
 export const quotedEscape = seq2(
   symbolKeepWS('\\'),
   oneOf(keyword('"', '"'), keyword('\\', '\\'))
@@ -66,18 +74,7 @@ export const quotedIdentifier = seq2(
 )
 
 export const identifier = seq1(
-  attempt(
-    oneOf(
-      map(
-        (identifier, toError) =>
-          sqlReservedWords.includes(identifier.toUpperCase())
-            ? toError(`Expected an identifier, got reserved word ${identifier}`)
-            : identifier,
-        matchIdentifier
-      ),
-      quotedIdentifier
-    )
-  ),
+  attempt(oneOf(unquotedIdentifier, quotedIdentifier)),
   _
 )
 
