@@ -260,6 +260,17 @@ will return the number of affected rows instead of any columns. Furthermore, a
 Then, it outputs a TypeScript function that is correctly typed, and when run,
 executes your query and converts input and output data to/from PostgreSQL.
 
+## About versioning
+
+sqltyper follows [semantic versioning](https://semver.org), but enhancements to
+the parser and inferring logic are considered bug fixes, and thus only the patch
+version is incremented for releases that only contain these changes. The
+reasoning behind this is that all PostgreSQL syntax and semantics that sqltyper
+fails to support is a bug.
+
+Other enhancements, like adding more CLI options, code generation targets, etc.
+are considered new features as usual.
+
 ## Prior art
 
 The main motivator for sqltyper was [sqlτyped] by Joni Freeman. It does more or
