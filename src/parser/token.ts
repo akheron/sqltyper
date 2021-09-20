@@ -141,3 +141,30 @@ export const anyOperatorExcept = (exclude: string[]): Parser<string> =>
       anyOperator
     )
   )
+
+const strEscape = seq2(
+  symbolKeepWS('\\'),
+  oneOf(
+    keyword("'", "'"),
+    keyword('\\', '\\'),
+    keyword('/', '/'),
+    keyword('b', '\b'),
+    keyword('f', '\f'),
+    keyword('n', '\n'),
+    keyword('r', '\r'),
+    keyword('t', '\t')
+  )
+)
+
+const strInner: Parser<string> = seq(
+  stringBefore("[\\']"),
+  oneOf(
+    seq(
+      strEscape,
+      lazy(() => strInner)
+    )((e, t) => e + t),
+    constant('')
+  )
+)((s, tail) => s + tail)
+
+export const stringConstant = seq2(symbolKeepWS("'"), strInner, symbol("'"))
