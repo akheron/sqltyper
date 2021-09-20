@@ -2745,9 +2745,9 @@ node-releases@^1.1.71:
   integrity sha512-uW7fodD6pyW2FZNZnp/Z3hvWKeEW1Y8R1+1CnErE8cXFXzl5blBOoVB41CvMer6P6Q0S5FXDwcHgFd1Wj0U9zg==
 
 node-watch@^0.7.1:
-  version "0.7.1"
-  resolved "https://registry.yarnpkg.com/node-watch/-/node-watch-0.7.1.tgz#0caaa6a6833b0d533487f953c52a6c787769ba7c"
-  integrity sha512-UWblPYuZYrkCQCW5PxAwYSxaELNBLUckrTBBk8xr1/bUgyOkYYTsUcV4e3ytcazFEOyiRyiUrsG37pu6I0I05g==
+  version "0.7.2"
+  resolved "https://registry.yarnpkg.com/node-watch/-/node-watch-0.7.2.tgz#545f057da8500487eb8287adcb4cb5a7338d7e21"
+  integrity sha512-g53VjSARRv1JdST0LZRIg8RiuLr1TaBbVPsVvxh0/0Ymvi0xYUjDuoqQQAWtHJQUXhiShowPT/aXKNeHBcyQsw==
 
 normalize-path@^3.0.0:
   version "3.0.0"
