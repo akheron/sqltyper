@@ -795,7 +795,7 @@ const updateTable: Parser<TableRef> = seq2(reservedWord('UPDATE'), tableRef)
 const update: Parser<Update> = seq(
   optional(withQueries),
   updateTable,
-  optional(reqAs),
+  optional(as),
   updateAssignments,
   optional(from),
   optional(where),
