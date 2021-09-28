@@ -11,6 +11,7 @@ export type Expression =
   | Expression.BinaryOp
   | Expression.TernaryOp
   | Expression.ExistsOp
+  | Expression.AnyOp
   | Expression.InOp
   | Expression.FunctionCall
   | Expression.ArraySubQuery
@@ -109,6 +110,15 @@ export namespace Expression {
     return { kind: 'ExistsOp', subquery }
   }
 
+  export type AnyOp = {
+    kind: 'AnyOp'
+    subquery: Select
+  }
+
+  export function createAnyOp(subquery: Select): AnyOp {
+    return { kind: 'AnyOp', subquery }
+  }
+
   export type InOp = {
     kind: 'InOp'
     lhs: Expression
@@ -202,6 +212,7 @@ export namespace Expression {
       binaryOp?: (value: BinaryOp) => T
       ternaryOp?: (value: TernaryOp) => T
       existsOp?: (value: ExistsOp) => T
+      anyOp?: (value: AnyOp) => T
       inOp?: (value: InOp) => T
       functionCall?: (value: FunctionCall) => T
       arraySubQuery?: (value: ArraySubQuery) => T
@@ -228,6 +239,8 @@ export namespace Expression {
         return handlers.ternaryOp == null ? elseVal : handlers.ternaryOp(expr)
       case 'ExistsOp':
         return handlers.existsOp == null ? elseVal : handlers.existsOp(expr)
+      case 'AnyOp':
+        return handlers.anyOp == null ? elseVal : handlers.anyOp(expr)
       case 'InOp':
         return handlers.inOp == null ? elseVal : handlers.inOp(expr)
       case 'FunctionCall':
@@ -256,6 +269,7 @@ export namespace Expression {
       binaryOp: (value: BinaryOp) => T
       ternaryOp: (value: TernaryOp) => T
       existsOp: (value: ExistsOp) => T
+      anyOp: (value: AnyOp) => T
       inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
       arraySubQuery: (value: ArraySubQuery) => T
@@ -280,6 +294,8 @@ export namespace Expression {
         return handlers.ternaryOp(expr)
       case 'ExistsOp':
         return handlers.existsOp(expr)
+      case 'AnyOp':
+        return handlers.anyOp(expr)
       case 'InOp':
         return handlers.inOp(expr)
       case 'FunctionCall':
@@ -334,6 +350,9 @@ export namespace Expression {
           equals(a.rhs2, b.rhs2)
         )
       case 'ExistsOp':
+        if (a.kind !== b.kind) return false
+        return false // TODO
+      case 'AnyOp':
         if (a.kind !== b.kind) return false
         return false // TODO
       case 'InOp':

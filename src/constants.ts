@@ -5,6 +5,7 @@ import { NullSafety, Operator, SqlFunction } from './types'
 export const sqlReservedWords: string[] = [
   'ALL',
   'AND',
+  'ANY',
   'ARRAY',
   'AS',
   'ASC',

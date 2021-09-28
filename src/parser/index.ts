@@ -269,6 +269,11 @@ const existsExpr = seq(
   parenthesized(lazy(() => select))
 )((_exists, subquery) => Expression.createExistsOp(subquery))
 
+const anyExpr = seq(
+  reservedWord('ANY'),
+  parenthesized(lazy(() => select))
+)((_any, subquery) => Expression.createAnyOp(subquery))
+
 type OtherExprRhs =
   | OtherExprRhs.In
   | OtherExprRhs.Ternary
@@ -374,11 +379,10 @@ const otherExpr = seq(
 )((first, rest) =>
   rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first)
 )
-const existsOrOtherExpr = oneOf(existsExpr, otherExpr)
 
 const comparisonExpr = makeBinaryOp(
   oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
-  existsOrOtherExpr
+  oneOf(existsExpr, anyExpr, otherExpr)
 )
 
 const isExpr = seq(

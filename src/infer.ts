@@ -636,6 +636,9 @@ function inferExpressionNullability(
     // EXISTS (subquery) never returns NULL
     existsOp: () => anyTE(false),
 
+    // ANY (subquery) never returns NULL
+    anyOp: () => anyTE(true),
+
     // A function call has two options:
     //
     // - The function is known to be NULL safe: it returns NULL only
