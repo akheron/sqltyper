@@ -114,13 +114,13 @@ export namespace Expression {
     kind: 'InOp'
     lhs: Expression
     op: 'IN' | 'NOT IN'
-    subquery: Select
+    subquery: Select | Expression[]
   }
 
   export function createInOp(
     lhs: Expression,
     op: 'IN' | 'NOT IN',
-    subquery: Select
+    subquery: Select | Expression[]
   ): InOp {
     return { kind: 'InOp', lhs, op, subquery }
   }

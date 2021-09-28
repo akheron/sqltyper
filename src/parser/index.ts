@@ -282,7 +282,7 @@ namespace OtherExprRhs {
   export type In = {
     kind: 'InExprRhs'
     op: 'IN' | 'NOT IN'
-    rhs: Select
+    rhs: Select | Expression[]
   }
   const in_: Parser<In> = seq(
     attempt(
@@ -291,7 +291,12 @@ namespace OtherExprRhs {
         seqConst('NOT IN', reservedWord('NOT'), reservedWord('IN'))
       )
     ),
-    parenthesized(lazy(() => select))
+    parenthesized(
+      oneOf<Select | Expression[]>(
+        lazy(() => select),
+        sepBy1(symbol(','), constantExpr)
+      )
+    )
   )((op, rhs) => ({ kind: 'InExprRhs', op, rhs }))
 
   export type Ternary = {
