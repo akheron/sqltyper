@@ -4,7 +4,9 @@ import { Either, left, right } from 'fp-ts/lib/Either'
 export function preprocessSQL(
   sql: string
 ): Either<string, { sql: string; paramNames: string[] }> {
-  const namedParamMatch = sql.match(/\$\{[a-zA-Z]\w*\}|(?<!:):[a-zA-Z]\w*/g)
+  const namedParamMatch = sql.match(
+    /\$\{[a-zA-Z]\w*(?::\w*)?\}|(?<!:):[a-zA-Z]\w*/g
+  )
   const numberedParamMatch = sql.match(/\$\d+/g)
   if (namedParamMatch != null && numberedParamMatch != null) {
     const firstNamedParam = namedParamMatch[0]
@@ -34,8 +36,13 @@ function handleNamedParams(
   let current = 1
 
   params.forEach((param) => {
-    //                              ${paramName}         :paramName
-    const name = param[0] === '$' ? param.slice(2, -1) : param.slice(1)
+    const name = (
+      param[0] === '$'
+        ? // ${paramName}
+          param.slice(2, -1)
+        : // :paramName
+          param.slice(1)
+    ).replace(/(\w*)(?::\w*)?/, '$1')
     if (!paramIndices.has(name)) {
       paramIndices.set(name, current)
       current++
@@ -45,7 +52,10 @@ function handleNamedParams(
   let mangledSQL = sql
   for (const [name, index] of paramIndices) {
     mangledSQL = mangledSQL
-      .replace(new RegExp('\\$\\{' + name + '\\}', 'g'), '$' + index)
+      .replace(
+        new RegExp('\\$\\{' + name + '(:\\w*)?\\}', 'g'),
+        (_match, arg) => `$${index}${arg ? arg : ''}`
+      )
       .replace(new RegExp('(?<!:):' + name, 'g'), '$' + index)
   }
 
