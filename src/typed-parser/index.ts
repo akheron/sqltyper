@@ -376,7 +376,7 @@ export function oneOf<A>(...parsers: Parser<A>[]): Parser<A> {
     const errors = []
     const originalOffset = context.offset
     for (const parser of parsers) {
-      const result = parser(source, context)
+      const result = attempt(parser)(source, context)
       if (!(result instanceof AbstractFailure)) {
         return result
       }
