@@ -5,7 +5,6 @@ import { pipe } from 'fp-ts/lib/function'
 import { Clients } from './clients'
 import {
   generateTypeScript,
-  validateStatement,
   TsModule,
   TsModuleDir,
   generateIndexModule,
@@ -28,7 +27,19 @@ export function sqlToStatementDescription(
     TaskEither.chain((processed) =>
       describeStatement(clients.postgres, processed.sql, processed.paramNames)
     ),
-    TaskEither.chain((stmt) => Task.of(validateStatement(stmt))),
+    TaskEither.chain((stmt) => {
+      const columnNames: Set<string> = new Set()
+      stmt.columns = stmt.columns
+        .filter(({ name }) => {
+          if (columnNames.has(name)) {
+            return false
+          }
+          columnNames.add(name)
+          return true
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+      return TaskEither.right(stmt)
+    }),
     TaskEither.chain((stmt) =>
       TaskEither.rightTask(inferStatementNullability(clients.schema, stmt))
     )

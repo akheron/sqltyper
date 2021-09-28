@@ -1,6 +1,5 @@
 import * as path from 'path'
 
-import * as Either from 'fp-ts/lib/Either'
 import * as Task from 'fp-ts/lib/Task'
 import { pipe } from 'fp-ts/lib/function'
 
@@ -15,30 +14,6 @@ export const codegenTargets: ReadonlyArray<CodegenTarget> = [
   'postgres',
   'pg-promise',
 ]
-
-////////////////////////////////////////////////////////////////////////
-
-export function validateStatement(
-  stmt: StatementDescription
-): Either.Either<string, StatementDescription> {
-  const columnNames: Set<string> = new Set()
-  const conflicts: Set<string> = new Set()
-
-  stmt.columns.forEach(({ name }) => {
-    if (columnNames.has(name)) {
-      conflicts.add(name)
-    } else {
-      columnNames.add(name)
-    }
-  })
-
-  if (conflicts.size) {
-    const dup = [...conflicts.values()].sort().join(', ')
-    return Either.left(`Duplicate output columns: ${dup}`)
-  }
-
-  return Either.right(stmt)
-}
 
 ////////////////////////////////////////////////////////////////////////
 

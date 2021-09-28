@@ -91,6 +91,18 @@ export function inferColumnNullability(
 ): InferM.InferM<StatementDescription> {
   return pipe(
     getOutputColumns(client, [], paramNullability, tree),
+    InferM.map((outputColumns) => {
+      const columnNames: Set<string> = new Set()
+      return outputColumns
+        .filter((outputColumn) => {
+          if (columnNames.has(outputColumn.name)) {
+            return false
+          }
+          columnNames.add(outputColumn.name)
+          return true
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+    }),
     InferM.chain((outputColumns) =>
       InferM.fromEither(applyColumnNullability(statement, outputColumns))
     )
