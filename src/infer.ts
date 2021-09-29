@@ -687,15 +687,51 @@ function inferExpressionNullability(
         })
       ),
 
-    // expr IN (subquery) returns NULL if expr is NULL
-    inOp: ({ lhs }) =>
-      inferExpressionNullability(
-        client,
-        outsideCTEs,
-        sourceColumns,
-        paramNullability,
-        nonNullExprs,
-        lhs
+    inOp: ({ lhs, rhs }) =>
+      pipe(
+        // expr IN (*) returns NULL if expr is NULL
+        inferExpressionNullability(
+          client,
+          outsideCTEs,
+          sourceColumns,
+          paramNullability,
+          nonNullExprs,
+          lhs
+        ),
+        Task.chain(() => {
+          switch (rhs.kind) {
+            // expr IN (exprlist) returns NULL is any expr is NULL and there
+            // is no match
+            case 'InExprList':
+              return pipe(
+                traverseATE(rhs.exprList, (expr) =>
+                  inferExpressionNullability(
+                    client,
+                    outsideCTEs,
+                    sourceColumns,
+                    paramNullability,
+                    nonNullExprs,
+                    expr
+                  )
+                ),
+                TaskEither.map((exprNullability) =>
+                  pipe(
+                    sequenceAW(exprNullability),
+                    Warn.map((an) =>
+                      FieldNullability.any(
+                        an.some((nullability) => nullability.nullable)
+                      )
+                    )
+                  )
+                )
+              )
+            // expr IN (subquery) returns NULL if the subquery can generate NULL
+            // and there is no match
+            case 'InSubquery':
+              // TODO: handle subquery returning NULL
+              return anyTE(false)
+          }
+        })
       ),
 
     // ARRAY(subquery) is never null as a whole. The nullability of
