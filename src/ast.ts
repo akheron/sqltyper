@@ -797,9 +797,7 @@ export namespace WithQuery {
 
 // ---------------------------------------------------------------------
 
-export type Statement = [WithQuery[], Select | Insert | Update] | Delete
-
-export type AST = Statement
+export type AST = [WithQuery[], Select | Insert | Update] | Delete
 
 export function walk<T>(
   ast: AST,

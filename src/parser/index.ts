@@ -31,7 +31,6 @@ import {
   SelectBody,
   SelectOp,
   SelectListItem,
-  Statement,
   TableExpression,
   TableRef,
   UpdateAssignment,
