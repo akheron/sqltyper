@@ -685,13 +685,12 @@ const selectSetOps: Parser<SelectOp[]> = many(
 )
 
 const select: Parser<Select> = seq(
-  optional(withQueries),
   selectBody,
   selectSetOps,
   optional(orderBy),
   optional(limit)
-)((withQueries, body, setOps, orderBy, limit) =>
-  Select.create(withQueries || [], body, setOps, orderBy || [], limit)
+)((body, setOps, orderBy, limit) =>
+  Select.create(body, setOps, orderBy || [], limit)
 )
 
 // INSERT
@@ -754,7 +753,6 @@ const insertInto: Parser<TableRef> = seq3(
 )
 
 const insert: Parser<Insert> = seq(
-  optional(withQueries),
   insertInto,
   optional(reqAs),
   optional(identifierList),
@@ -764,9 +762,8 @@ const insert: Parser<Insert> = seq(
   ),
   optional(onConflict),
   optional(returning)
-)((withQueries, table, as, columns, values, onConflict, returning) =>
+)((table, as, columns, values, onConflict, returning) =>
   Insert.create(
-    withQueries || [],
     table,
     as,
     columns || [],
@@ -793,23 +790,14 @@ const updateAssignments: Parser<UpdateAssignment[]> = seq2(
 const updateTable: Parser<TableRef> = seq2(reservedWord('UPDATE'), tableRef)
 
 const update: Parser<Update> = seq(
-  optional(withQueries),
   updateTable,
   optional(reqAs),
   updateAssignments,
   optional(from),
   optional(where),
   optional(returning)
-)((withQueries, table, as, updates, from, where, returning) =>
-  Update.create(
-    withQueries || [],
-    table,
-    as,
-    updates,
-    from,
-    where,
-    returning || []
-  )
+)((table, as, updates, from, where, returning) =>
+  Update.create(table, as, updates, from, where, returning || [])
 )
 
 // DELETE
@@ -832,7 +820,13 @@ const delete_: Parser<Delete> = seq(
 // parse
 
 const statementParser: Parser<AST> = seq1(
-  oneOf<Statement>(select, insert, update, delete_),
+  oneOf<AST>(
+    seq(
+      optional(withQueries),
+      oneOf<Select | Insert | Update>(select, insert, update)
+    )((ctes, statement) => [ctes || [], statement]),
+    delete_
+  ),
   optional(symbol(';'))
 )
 

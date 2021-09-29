@@ -630,7 +630,6 @@ export namespace SelectOp {
 
 export type Select = {
   kind: 'Select'
-  ctes: WithQuery[]
   body: SelectBody
   setOps: SelectOp[]
   orderBy: OrderBy[]
@@ -639,7 +638,6 @@ export type Select = {
 
 export namespace Select {
   export function create(
-    ctes: WithQuery[],
     body: SelectBody,
     setOps: SelectOp[],
     orderBy: OrderBy[],
@@ -647,7 +645,6 @@ export namespace Select {
   ): Select {
     return {
       kind: 'Select',
-      ctes,
       body,
       setOps,
       orderBy,
@@ -694,7 +691,6 @@ export namespace Values {
 
 export type Insert = {
   kind: 'Insert'
-  ctes: WithQuery[]
   table: TableRef
   as: string | null
   columns: string[]
@@ -705,7 +701,6 @@ export type Insert = {
 
 export namespace Insert {
   export function create(
-    ctes: WithQuery[],
     table: TableRef,
     as: string | null,
     columns: string[],
@@ -715,7 +710,6 @@ export namespace Insert {
   ): Insert {
     return {
       kind: 'Insert',
-      ctes,
       table,
       as,
       columns,
@@ -735,7 +729,6 @@ export type UpdateAssignment = {
 
 export type Update = {
   kind: 'Update'
-  ctes: WithQuery[]
   table: TableRef
   as: string | null
   updates: UpdateAssignment[]
@@ -746,7 +739,6 @@ export type Update = {
 
 export namespace Update {
   export function create(
-    ctes: WithQuery[],
     table: TableRef,
     as: string | null,
     updates: UpdateAssignment[],
@@ -756,7 +748,6 @@ export namespace Update {
   ): Update {
     return {
       kind: 'Update',
-      ctes,
       table,
       as,
       updates,
@@ -806,27 +797,37 @@ export namespace WithQuery {
 
 // ---------------------------------------------------------------------
 
-export type Statement = Select | Insert | Update | Delete
+export type Statement = [WithQuery[], Select | Insert | Update] | Delete
 
 export type AST = Statement
 
 export function walk<T>(
   ast: AST,
   handlers: {
-    select: (node: Select) => T
-    insert: (node: Insert) => T
-    update: (node: Update) => T
+    select: (node: Select, ctes: WithQuery[]) => T
+    insert: (node: Insert, ctes: WithQuery[]) => T
+    update: (node: Update, ctes: WithQuery[]) => T
     delete: (node: Delete) => T
   }
 ): T {
-  switch (ast.kind) {
+  const [ctes, statement] = ((): [
+    WithQuery[],
+    Select | Insert | Update | Delete
+  ] => {
+    if (Array.isArray(ast)) {
+      return ast
+    } else {
+      return [[], ast]
+    }
+  })()
+  switch (statement.kind) {
     case 'Select':
-      return handlers.select(ast)
+      return handlers.select(statement, ctes)
     case 'Insert':
-      return handlers.insert(ast)
+      return handlers.insert(statement, ctes)
     case 'Update':
-      return handlers.update(ast)
+      return handlers.update(statement, ctes)
     case 'Delete':
-      return handlers.delete(ast)
+      return handlers.delete(statement)
   }
 }

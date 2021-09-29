@@ -104,7 +104,7 @@ function getOutputColumns(
   tree: ast.AST
 ): InferM.InferM<VirtualField[]> {
   return ast.walk(tree, {
-    select: ({ ctes, body, setOps }) =>
+    select: ({ body, setOps }, ctes) =>
       pipe(
         combineVirtualTables(
           outsideCTEs,
@@ -134,7 +134,7 @@ function getOutputColumns(
           )
         )
       ),
-    update: ({ ctes, table, as, from, where, returning }) =>
+    update: ({ table, as, from, where, returning }, ctes) =>
       pipe(
         combineVirtualTables(
           outsideCTEs,
@@ -702,7 +702,7 @@ function inferExpressionNullability(
     // the inside depends on the inside select list expression
     arraySubQuery: ({ subquery }) =>
       pipe(
-        getOutputColumns(client, outsideCTEs, paramNullability, subquery),
+        getOutputColumns(client, outsideCTEs, paramNullability, [[], subquery]),
         InferM.chain((columns) => {
           if (columns.length != 1)
             return TaskEither.left('subquery must return only one column')
