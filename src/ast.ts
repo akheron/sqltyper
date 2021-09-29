@@ -110,19 +110,32 @@ export namespace Expression {
     return { kind: 'ExistsOp', subquery }
   }
 
+  export type InSubquery = { kind: 'InSubquery'; subquery: Select }
+
+  export function createInSubquery(subquery: Select): InSubquery {
+    return { kind: 'InSubquery', subquery }
+  }
+
+  export type InExprList = { kind: 'InExprList'; exprList: Expression[] }
+
+  export function createInExprList(exprList: Expression[]): InExprList {
+    return { kind: 'InExprList', exprList }
+  }
+
+  export type InRhs = InSubquery | InExprList
   export type InOp = {
     kind: 'InOp'
     lhs: Expression
     op: 'IN' | 'NOT IN'
-    subquery: Select | Expression[]
+    rhs: InRhs
   }
 
   export function createInOp(
     lhs: Expression,
     op: 'IN' | 'NOT IN',
-    subquery: Select | Expression[]
+    rhs: InRhs
   ): InOp {
-    return { kind: 'InOp', lhs, op, subquery }
+    return { kind: 'InOp', lhs, op, rhs }
   }
 
   export type FunctionCall = {
