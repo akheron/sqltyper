@@ -102,7 +102,7 @@ function checkExpectations(
     )
 
     // Expected row count
-    expect(testFile.outputRowCount).toEqual(statementDescription.rowCount)
+    expect(statementDescription.rowCount).toEqual(testFile.outputRowCount)
 
     // Expected column types
     await pipe(
@@ -124,12 +124,12 @@ function checkExpectations(
     )()
 
     // Expected warnings (only check the summary)
-    expect(pipe(testFile.warnings, Array.sort(ordString))).toEqual(
+    expect(
       pipe(
         warnings.map((w) => w.summary),
         Array.sort(ordString)
       )
-    )
+    ).toEqual(pipe(testFile.warnings, Array.sort(ordString)))
   }
 }
 
