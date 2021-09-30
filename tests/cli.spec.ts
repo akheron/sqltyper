@@ -19,14 +19,20 @@ const cliPath = path.join(__dirname, '../dist/src/cli.js')
 const user = process.env.PGUSER || os.userInfo().username
 const db = process.env.PGDATABASE || 'postgres'
 
+function recursiveDeleteTsFiles(dir: string) {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((dirent) => {
+    const { name } = dirent
+    if (dirent.isDirectory()) {
+      recursiveDeleteTsFiles(path.join(dir, name))
+    } else if (path.extname(dirent.name) === '.ts') {
+      fs.unlinkSync(path.join(dir, name))
+    }
+  })
+}
+
 function removeGeneratedFiles() {
   // eslint-disable-next-line @typescript-eslint/no-extra-semi
-  ;[sqlsDir, invalidSqlsDir].forEach((dir) =>
-    fs
-      .readdirSync(dir)
-      .filter((fileName) => path.extname(fileName) === '.ts')
-      .forEach((fileName) => fs.unlinkSync(path.join(dir, fileName)))
-  )
+  ;[sqlsDir, invalidSqlsDir].forEach(recursiveDeleteTsFiles)
   if (fs.existsSync(checkTs)) fs.unlinkSync(checkTs)
 }
 
