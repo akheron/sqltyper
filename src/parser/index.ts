@@ -832,7 +832,7 @@ const delete_: Parser<Delete> = seq(
 // parse
 
 const statementParser: Parser<AST> = seq1(
-  oneOf<Statement>(select, insert, update, delete_),
+  oneOf<Statement>(attempt(select), attempt(insert), attempt(update), delete_),
   optional(symbol(';'))
 )
 
