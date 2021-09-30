@@ -1051,20 +1051,18 @@ function inferRowCount(
     },
 
     insert: ({ valuesOrSelect, returning }) =>
-      valuesOrSelect.kind === 'Select'
-        ? 'many'
-        : ast.Values.walk(valuesOrSelect, {
-            // INSERT INTO xxx DEFAULT VALUES always creates a single row
-            defaultValues: () => 'one',
-            exprValues: (exprValues) =>
-              returning.length
-                ? // Check the length of the VALUES expression list
-                  exprValues.valuesList.length === 1
-                  ? 'one'
-                  : 'many'
-                : // No RETURNING, no output
-                  'zero',
-          }),
+      returning.length > 0
+        ? valuesOrSelect.kind === 'Select'
+          ? 'many'
+          : ast.Values.walk(valuesOrSelect, {
+              // INSERT INTO xxx DEFAULT VALUES always creates a single row
+              defaultValues: () => 'one',
+              exprValues: (exprValues) =>
+                // Check the length of the VALUES expression list
+                exprValues.valuesList.length === 1 ? 'one' : 'many',
+            })
+        : // No RETURNING, no output
+          'zero',
 
     update: ({ returning }) =>
       returning.length
