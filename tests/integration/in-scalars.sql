@@ -1,16 +1,19 @@
--- Array columns are nullable if they don't have the NOT NULL
--- constraint. Furthermore, their items are always nullable.
 --- setup -----------------------------------------------------------------
 
-CREATE TABLE person (
-  child_ages integer[],
-  parent_ages integer[] NOT NULL
+CREATE TABLE test (
+  foo integer NOT NULL,
+  bar integer,
+  baz integer
 );
 
 --- query -----------------------------------------------------------------
 
-SELECT child_ages, parent_ages
-FROM person
+SELECT
+    1 IN (foo, :param) AS a,
+    1 IN (foo, bar) AS b,
+    1 + NULL IN (1, 2, 3) AS c,
+    1 IN ((SELECT foo FROM test LIMIT 1), 1, 2) AS d
+FROM test
 
 --- expected row count ----------------------------------------------------
 
@@ -18,7 +21,11 @@ many
 
 --- expected column types -------------------------------------------------
 
-child_ages: Array<number | null> | null
-parent_ages: Array<number | null>
+a: boolean
+b: boolean | null
+c: boolean | null
+d: boolean
 
 --- expected param types --------------------------------------------------
+
+param: number
