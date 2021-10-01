@@ -689,49 +689,68 @@ function inferExpressionNullability(
 
     inOp: ({ lhs, rhs }) =>
       pipe(
-        // expr IN (*) returns NULL if expr is NULL
-        inferExpressionNullability(
-          client,
-          outsideCTEs,
-          sourceColumns,
-          paramNullability,
-          nonNullExprs,
-          lhs
+        InferM.right(FieldNullability.disjunction),
+        InferM.ap(
+          // expr IN (*) returns NULL if expr is NULL
+          inferExpressionNullability(
+            client,
+            outsideCTEs,
+            sourceColumns,
+            paramNullability,
+            nonNullExprs,
+            lhs
+          )
         ),
-        Task.chain(() => {
-          switch (rhs.kind) {
-            // expr IN (exprlist) returns NULL is any expr is NULL and there
-            // is no match
-            case 'InExprList':
-              return pipe(
-                traverseATE(rhs.exprList, (expr) =>
-                  inferExpressionNullability(
-                    client,
-                    outsideCTEs,
-                    sourceColumns,
-                    paramNullability,
-                    nonNullExprs,
-                    expr
-                  )
-                ),
-                TaskEither.map((exprNullability) =>
-                  pipe(
-                    sequenceAW(exprNullability),
-                    Warn.map((an) =>
-                      FieldNullability.any(
-                        an.some((nullability) => nullability.nullable)
+        InferM.ap(
+          (() => {
+            switch (rhs.kind) {
+              // expr IN (exprlist) returns NULL if any expr in exprList is NULL and there
+              // is no match
+              case 'InExprList':
+                return pipe(
+                  traverseATE(rhs.exprList, (expr) =>
+                    inferExpressionNullability(
+                      client,
+                      outsideCTEs,
+                      sourceColumns,
+                      paramNullability,
+                      nonNullExprs,
+                      expr
+                    )
+                  ),
+                  TaskEither.map((exprNullability) =>
+                    pipe(
+                      sequenceAW(exprNullability),
+                      Warn.map((an) =>
+                        FieldNullability.any(
+                          an.some((nullability) => nullability.nullable)
+                        )
                       )
                     )
                   )
                 )
-              )
-            // expr IN (subquery) returns NULL if the subquery can generate NULL
-            // and there is no match
-            case 'InSubquery':
-              // TODO: handle subquery returning NULL
-              return anyTE(false)
-          }
-        })
+
+              // expr IN (subquery) is nullable if the subquery can generate NULL
+              // and there is no match
+              case 'InSubquery':
+                return pipe(
+                  getOutputColumns(
+                    client,
+                    outsideCTEs,
+                    paramNullability,
+                    rhs.subquery
+                  ),
+                  InferM.chain((columns) => {
+                    if (columns.length != 1)
+                      return TaskEither.left(
+                        'subquery must return only one column'
+                      )
+                    return anyTE(columns[0].nullability.nullable)
+                  })
+                )
+            }
+          })()
+        )
       ),
 
     // ARRAY(subquery) is never null as a whole. The nullability of
@@ -880,7 +899,7 @@ function getNonNullSubExpressionsFromRowCond(
           ]
         }
       }
-      if (op === 'AND' || operatorNullSafety(op) === 'safe') {
+      if (operatorNullSafety(op) === 'safe') {
         // For safe operators, both sides must be non-nullable for the
         // result to be non-nullable.
         return [
@@ -920,6 +939,14 @@ function getNonNullSubExpressionsFromRowCond(
         )
       }
       return [expression]
+    },
+    inOp: () => {
+      // TODO For the IN operator (expr IN (subquery), expr IN (exprlist)) we could infer
+      // that expr is non-nullable if we could say something about the nullability of the
+      // sole column of the scalar subquery or the expressions in exprlist. Currently this
+      // function doesn't have enough info about the query to call getOutputColumns or
+      // inferExpressionNullability.
+      return []
     },
   })
 }

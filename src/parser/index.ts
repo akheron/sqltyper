@@ -273,42 +273,6 @@ const existsExpr = seq(
   parenthesized(lazy(() => select))
 )((_exists, subquery) => Expression.createExistsOp(subquery))
 
-const otherExpr = seq(
-  addSubExpr,
-  many(OtherExprRhs.parser)
-)((first, rest) =>
-  rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first)
-)
-const existsOrOtherExpr = oneOf(existsExpr, otherExpr)
-
-const comparisonExpr = makeBinaryOp(
-  oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
-  existsOrOtherExpr
-)
-
-const isExpr = seq(
-  comparisonExpr,
-  optional(
-    oneOf(
-      sepReserveds('IS NULL'),
-      sepReserveds('IS NOT NULL'),
-      reservedWord('ISNULL'),
-      reservedWord('NOTNULL'),
-      sepReserveds('IS TRUE'),
-      sepReserveds('IS NOT TRUE'),
-      sepReserveds('IS FALSE'),
-      sepReserveds('IS NOT FALSE'),
-      sepReserveds('IS UNKNOWN'),
-      sepReserveds('IS NOT UNKNOWN')
-    )
-  )
-)((next, op) => (op ? Expression.createUnaryOp(op, next) : next))
-const notExpr = makeUnaryOp(reservedWord('NOT'), isExpr)
-const andExpr = makeBinaryOp(reservedWord('AND'), notExpr)
-const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
-
-const expression: Parser<Expression> = orExpr
-
 type OtherExprRhs =
   | OtherExprRhs.In
   | OtherExprRhs.Ternary
@@ -334,7 +298,13 @@ namespace OtherExprRhs {
           Expression.createInSubquery,
           lazy(() => select)
         ),
-        map(Expression.createInExprList, sepBy1(symbol(','), expression))
+        map(
+          Expression.createInExprList,
+          sepBy1(
+            symbol(','),
+            lazy(() => expression)
+          )
+        )
       )
     )
   )((op, rhs) => ({ kind: 'InExprRhs', op, rhs }))
@@ -415,6 +385,42 @@ namespace OtherExprRhs {
     }
   }
 }
+
+const otherExpr = seq(
+  addSubExpr,
+  many(OtherExprRhs.parser)
+)((first, rest) =>
+  rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first)
+)
+const existsOrOtherExpr = oneOf(existsExpr, otherExpr)
+
+const comparisonExpr = makeBinaryOp(
+  oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
+  existsOrOtherExpr
+)
+
+const isExpr = seq(
+  comparisonExpr,
+  optional(
+    oneOf(
+      sepReserveds('IS NULL'),
+      sepReserveds('IS NOT NULL'),
+      reservedWord('ISNULL'),
+      reservedWord('NOTNULL'),
+      sepReserveds('IS TRUE'),
+      sepReserveds('IS NOT TRUE'),
+      sepReserveds('IS FALSE'),
+      sepReserveds('IS NOT FALSE'),
+      sepReserveds('IS UNKNOWN'),
+      sepReserveds('IS NOT UNKNOWN')
+    )
+  )
+)((next, op) => (op ? Expression.createUnaryOp(op, next) : next))
+const notExpr = makeUnaryOp(reservedWord('NOT'), isExpr)
+const andExpr = makeBinaryOp(reservedWord('AND'), notExpr)
+const orExpr: Parser<Expression> = makeBinaryOp(reservedWord('OR'), andExpr)
+
+const expression: Parser<Expression> = orExpr
 
 // (name1, name2, ...)
 
