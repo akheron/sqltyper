@@ -81,7 +81,7 @@ const tableRef: Parser<TableRef> = seq(
 
 const arraySubQueryExpr: Parser<Expression> = seq(
   reservedWord('ARRAY'),
-  parenthesized(lazy(() => select))
+  parenthesized(lazy(() => subquerySelect))
 )((_arr, subquery) => Expression.createArraySubQuery(subquery))
 
 const caseBranch: Parser<Expression.CaseBranch> = seq(
@@ -198,7 +198,7 @@ const parameterExpr: Parser<Expression> = seq(
 
 const parenthesizedSubqueryOrExpr: Parser<Expression> = parenthesized(
   oneOf(
-    seq(lazy(() => select))(Expression.createScalarSubQuery),
+    seq(lazy(() => subquerySelect))(Expression.createScalarSubQuery),
     lazy(() => expression)
   )
 )
@@ -270,7 +270,7 @@ const addSubExpr = makeBinaryOp(oneOfOperators('+', '-'), mulDivModExpr)
 
 const existsExpr = seq(
   reservedWord('EXISTS'),
-  parenthesized(lazy(() => select))
+  parenthesized(lazy(() => subquerySelect))
 )((_exists, subquery) => Expression.createExistsOp(subquery))
 
 type OtherExprRhs =
@@ -296,7 +296,7 @@ namespace OtherExprRhs {
       oneOf<Expression.InRhs>(
         map(
           Expression.createInSubquery,
-          lazy(() => select)
+          lazy(() => subquerySelect)
         ),
         map(
           Expression.createInExprList,
@@ -702,15 +702,20 @@ const selectSetOps: Parser<SelectOp[]> = many(
   )
 )
 
-const select: Parser<Select> = seq(
-  optional(withQueries),
+const select: Parser<(withQueries: WithQuery[]) => Select> = seq(
   selectBody,
   selectSetOps,
   optional(orderBy),
   optional(limit)
-)((withQueries, body, setOps, orderBy, limit) =>
-  Select.create(withQueries || [], body, setOps, orderBy || [], limit)
+)(
+  (body, setOps, orderBy, limit) => (withQueries) =>
+    Select.create(withQueries, body, setOps, orderBy || [], limit)
 )
+
+const subquerySelect: Parser<Select> = seq(
+  optional(withQueries),
+  select
+)((withQueries, select) => select(withQueries ?? []))
 
 // INSERT
 
@@ -771,27 +776,27 @@ const insertInto: Parser<TableRef> = seq3(
   tableRef
 )
 
-const insert: Parser<Insert> = seq(
-  optional(withQueries),
+const insert: Parser<(withQueries: WithQuery[]) => Insert> = seq(
   insertInto,
   optional(reqAs),
   optional(identifierList),
   oneOf<Values | Select>(
     values,
-    lazy(() => select)
+    lazy(() => subquerySelect)
   ),
   optional(onConflict),
   optional(returning)
-)((withQueries, table, as, columns, values, onConflict, returning) =>
-  Insert.create(
-    withQueries || [],
-    table,
-    as,
-    columns || [],
-    values,
-    onConflict || [],
-    returning || []
-  )
+)(
+  (table, as, columns, values, onConflict, returning) => (withQueries) =>
+    Insert.create(
+      withQueries || [],
+      table,
+      as,
+      columns || [],
+      values,
+      onConflict || [],
+      returning || []
+    )
 )
 
 // UPDATE
@@ -810,24 +815,16 @@ const updateAssignments: Parser<UpdateAssignment[]> = seq2(
 
 const updateTable: Parser<TableRef> = seq2(reservedWord('UPDATE'), tableRef)
 
-const update: Parser<Update> = seq(
-  optional(withQueries),
+const update: Parser<(withQueries: WithQuery[]) => Update> = seq(
   updateTable,
   optional(as),
   updateAssignments,
   optional(from),
   optional(where),
   optional(returning)
-)((withQueries, table, as, updates, from, where, returning) =>
-  Update.create(
-    withQueries || [],
-    table,
-    as,
-    updates,
-    from,
-    where,
-    returning || []
-  )
+)(
+  (table, as, updates, from, where, returning) => (withQueries) =>
+    Update.create(withQueries, table, as, updates, from, where, returning || [])
 )
 
 // DELETE
@@ -838,21 +835,28 @@ const deleteFrom: Parser<TableRef> = seq3(
   tableRef
 )
 
-const delete_: Parser<Delete> = seq(
+const delete_: Parser<(withQueries: WithQuery[]) => Delete> = seq(
   deleteFrom,
   optional(reqAs),
   optional(where),
   optional(returning)
-)((table, as, where, returning) =>
-  Delete.create(table, as, where, returning || [])
+)(
+  (table, as, where, returning) => (/* TODO: CTEs with DELETE */) =>
+    Delete.create(table, as, where, returning || [])
 )
 
 // parse
 
-const statementParser: Parser<AST> = seq1(
-  oneOf<Statement>(attempt(select), attempt(insert), attempt(update), delete_),
+const statementParser: Parser<AST> = seq(
+  optional(withQueries),
+  oneOf<(withQueries: WithQuery[]) => Statement>(
+    select,
+    insert,
+    update,
+    delete_
+  ),
   optional(symbol(';'))
-)
+)((withQueries, stmt) => stmt(withQueries ?? []))
 
 const topLevelParser: Parser<AST> = seq2(_, statementParser, end)
 
