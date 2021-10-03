@@ -162,9 +162,15 @@ function getOutputColumns(
           )
         )
       ),
-    delete: ({ table, as, where, returning }) =>
+    delete: ({ ctes, table, as, where, returning }) =>
       pipe(
-        getSourceColumnsForTable(client, outsideCTEs, table, as),
+        combineVirtualTables(
+          outsideCTEs,
+          getVirtualTablesForWithQueries(client, paramNullability, ctes)
+        ),
+        InferM.chain((combinedCTEs) =>
+          getSourceColumnsForTable(client, combinedCTEs, table, as)
+        ),
         InferM.chain((sourceColumns) =>
           inferSelectListOutput(
             client,
