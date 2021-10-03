@@ -841,8 +841,8 @@ const delete_: Parser<(withQueries: WithQuery[]) => Delete> = seq(
   optional(where),
   optional(returning)
 )(
-  (table, as, where, returning) => (/* TODO: CTEs with DELETE */) =>
-    Delete.create(table, as, where, returning || [])
+  (table, as, where, returning) => (withQueries: WithQuery[]) =>
+    Delete.create(withQueries, table, as, where, returning || [])
 )
 
 // parse

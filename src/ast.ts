@@ -802,6 +802,7 @@ export namespace Update {
 
 export type Delete = {
   kind: 'Delete'
+  ctes: WithQuery[]
   table: TableRef
   as: string | null
   where: Expression | null
@@ -810,12 +811,13 @@ export type Delete = {
 
 export namespace Delete {
   export function create(
+    ctes: WithQuery[],
     table: TableRef,
     as: string | null,
     where: Expression | null,
     returning: SelectListItem[]
   ): Delete {
-    return { kind: 'Delete', table, as, where, returning }
+    return { kind: 'Delete', ctes, table, as, where, returning }
   }
 }
 
