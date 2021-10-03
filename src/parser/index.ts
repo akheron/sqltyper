@@ -195,8 +195,11 @@ const parameterExpr: Parser<Expression> = seq(
   _
 )((_$, index, _ws) => Expression.createParameter(index))
 
-const parenthesizedExpr: Parser<Expression> = parenthesized(
-  lazy(() => expression)
+const parenthesizedSubqueryOrExpr: Parser<Expression> = parenthesized(
+  oneOf(
+    seq(lazy(() => select))(Expression.createScalarSubQuery),
+    lazy(() => expression)
+  )
 )
 
 const primaryExpr: Parser<Expression> = seq(
@@ -208,7 +211,7 @@ const primaryExpr: Parser<Expression> = seq(
     columnRefOrFunctionCallExpr,
     constantExpr,
     parameterExpr,
-    parenthesizedExpr
+    parenthesizedSubqueryOrExpr
   ),
   optional(psqlTypeCast)
 )((expr, typeCast) =>

@@ -715,6 +715,17 @@ function inferExpressionNullability(
         })
       ),
 
+    scalarSubQuery: ({ subquery }) =>
+      // (subquery) is nullable if the single output column of the subquery is nullable
+      pipe(
+        getOutputColumns(client, outsideCTEs, paramNullability, subquery),
+        InferM.chain((columns) => {
+          if (columns.length != 1)
+            return TaskEither.left('subquery must return only one column')
+          return anyTE(columns[0].nullability.nullable)
+        })
+      ),
+
     case: ({ branches, else_ }) => {
       if (else_ === null) {
         // No ELSE branch => Rows that match none of the branches

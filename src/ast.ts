@@ -14,6 +14,7 @@ export type Expression =
   | Expression.InOp
   | Expression.FunctionCall
   | Expression.ArraySubQuery
+  | Expression.ScalarSubQuery
   | Expression.Case
   | Expression.TypeCast
 
@@ -159,6 +160,14 @@ export namespace Expression {
     return { kind: 'ArraySubQuery', subquery }
   }
 
+  export type ScalarSubQuery = {
+    kind: 'ScalarSubQuery'
+    subquery: Select
+  }
+
+  export function createScalarSubQuery(subquery: Select): ScalarSubQuery {
+    return { kind: 'ScalarSubQuery', subquery }
+  }
   export type CaseBranch = {
     condition: Expression
     result: Expression
@@ -205,6 +214,7 @@ export namespace Expression {
       inOp?: (value: InOp) => T
       functionCall?: (value: FunctionCall) => T
       arraySubQuery?: (value: ArraySubQuery) => T
+      scalarSubQuery?: (value: ScalarSubQuery) => T
       case?: (value: Case) => T
       typeCast?: (value: TypeCast) => T
     }
@@ -238,6 +248,10 @@ export namespace Expression {
         return handlers.arraySubQuery == null
           ? elseVal
           : handlers.arraySubQuery(expr)
+      case 'ScalarSubQuery':
+        return handlers.scalarSubQuery == null
+          ? elseVal
+          : handlers.scalarSubQuery(expr)
       case 'Case':
         return handlers.case == null ? elseVal : handlers.case(expr)
       case 'TypeCast':
@@ -259,6 +273,7 @@ export namespace Expression {
       inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
       arraySubQuery: (value: ArraySubQuery) => T
+      scalarSubQuery: (value: ScalarSubQuery) => T
       case: (value: Case) => T
       typeCast: (value: TypeCast) => T
     }
@@ -286,6 +301,8 @@ export namespace Expression {
         return handlers.functionCall(expr)
       case 'ArraySubQuery':
         return handlers.arraySubQuery(expr)
+      case 'ScalarSubQuery':
+        return handlers.scalarSubQuery(expr)
       case 'Case':
         return handlers.case(expr)
       case 'TypeCast':
@@ -346,6 +363,9 @@ export namespace Expression {
           R.zip(a.argList, b.argList).every(([ap, bp]) => equals(ap, bp))
         )
       case 'ArraySubQuery':
+        if (a.kind !== b.kind) return false
+        return false // TODO
+      case 'ScalarSubQuery':
         if (a.kind !== b.kind) return false
         return false // TODO
       case 'Case':
