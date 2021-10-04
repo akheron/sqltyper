@@ -857,6 +857,13 @@ function inferExpressionNullability(
   })
 }
 
+// Given a condition (a boolean expression), return a list of expressions that
+// are certainly non-null.
+//
+// A row is present in the output only if the condition evaluates to true. So
+// here we can assume that the expression evaluates to true, and with that
+// information find a list of expressions that are certainly not null.
+//
 function getNonNullSubExpressionsFromRowCond(
   expression: ast.Expression | null,
   logicalNegation = false
@@ -946,13 +953,10 @@ function getNonNullSubExpressionsFromRowCond(
       }
       return [expression]
     },
-    inOp: () => {
-      // TODO For the IN operator (expr IN (subquery), expr IN (exprlist)) we could infer
-      // that expr is non-nullable if we could say something about the nullability of the
-      // sole column of the scalar subquery or the expressions in exprlist. Currently this
-      // function doesn't have enough info about the query to call getOutputColumns or
-      // inferExpressionNullability.
-      return []
+    inOp: ({ lhs }) => {
+      // For the IN operator (expr IN (subquery), expr IN (exprlist)) the
+      // left-hand side expr is non-null
+      return getNonNullSubExpressionsFromRowCond(lhs)
     },
   })
 }
