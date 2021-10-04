@@ -10,6 +10,8 @@
 -- * `WHERE func(expr1, expr2, ...)` should infer `expr1`, `expr2`,
 --   ... as not null if `func` is null-safe
 --
+-- * `WHERE expr IN (...)` should infer `expr` as not null
+--
 -- * If the top-level of the WHERE clause is an AND chain, the same
 --   applies to each AND operand.
 --
@@ -20,7 +22,8 @@ CREATE TABLE person (
   shoe_size integer,
   height integer,
   weight integer,
-  name text
+  name text,
+  arm_length integer
 );
 
 --- query -----------------------------------------------------------------
@@ -31,15 +34,16 @@ SELECT
   height,
   weight,
   concat(name, 'foo') AS name_foo,
-  name
+  name,
+  arm_length
 FROM person
-WHERE
-  age + 5 < 60 AND
-  shoe_size = 45 AND
-  bool(height) IS NOT NULL AND
-  weight IS NOT NULL AND
-  concat(name, 'foo') IS NOT NULL -- concat is neverNull, so this doesn't
-                                  -- mark name as non-null
+WHERE age + 5 < 60
+  AND shoe_size = 45
+  AND bool(height) IS NOT NULL
+  AND weight IS NOT NULL
+   -- concat is neverNull, so this doesn't mark name as non-null
+  AND concat(name, 'foo') IS NOT NULL
+  AND arm_length IN (1, 2, NULL)
 
 --- expected row count ----------------------------------------------------
 
@@ -53,5 +57,6 @@ height: number
 weight: number
 name_foo: string
 name: string | null
+arm_length: number
 
 --- expected param types --------------------------------------------------
