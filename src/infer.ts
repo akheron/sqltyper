@@ -467,6 +467,10 @@ function inferExpressionName(expression: ast.Expression): string {
   })
 }
 
+const anyTE = flow(FieldNullability.any, Warn.of, TaskEither.right)
+
+const arrayTE = flow(FieldNullability.array, Warn.of, TaskEither.right)
+
 function inferExpressionNullability(
   client: SchemaClient,
   outsideCTEs: VirtualTable[],
@@ -475,10 +479,6 @@ function inferExpressionNullability(
   nonNullExprs: ast.Expression[],
   expression: ast.Expression
 ): InferM.InferM<FieldNullability> {
-  const anyTE = flow(FieldNullability.any, Warn.of, TaskEither.right)
-
-  const arrayTE = flow(FieldNullability.array, Warn.of, TaskEither.right)
-
   if (
     nonNullExprs.some((nonNull) => ast.Expression.equals(expression, nonNull))
   ) {
@@ -639,6 +639,31 @@ function inferExpressionNullability(
       }
     },
 
+    anySomeAll: ({ lhs, subquery }) =>
+      // expr op ANY/SOME/ALL (subquery) returns NULL if expr is NULL, or if
+      // there's no match and any value produced by the subquery is NULL
+      pipe(
+        InferM.right(FieldNullability.disjunction),
+        InferM.ap(
+          inferExpressionNullability(
+            client,
+            outsideCTEs,
+            sourceColumns,
+            paramNullability,
+            nonNullExprs,
+            lhs
+          )
+        ),
+        InferM.ap(
+          inferScalarSubqueryNullability(
+            client,
+            outsideCTEs,
+            paramNullability,
+            subquery
+          )
+        )
+      ),
+
     // EXISTS (subquery) never returns NULL
     existsOp: () => anyTE(false),
 
@@ -739,20 +764,11 @@ function inferExpressionNullability(
               // expr IN (subquery) is nullable if the subquery can generate NULL
               // and there is no match
               case 'InSubquery':
-                return pipe(
-                  getOutputColumns(
-                    client,
-                    outsideCTEs,
-                    paramNullability,
-                    rhs.subquery
-                  ),
-                  InferM.chain((columns) => {
-                    if (columns.length != 1)
-                      return TaskEither.left(
-                        'subquery must return only one column'
-                      )
-                    return anyTE(columns[0].nullability.nullable)
-                  })
+                return inferScalarSubqueryNullability(
+                  client,
+                  outsideCTEs,
+                  paramNullability,
+                  rhs.subquery
                 )
             }
           })()
@@ -762,29 +778,22 @@ function inferExpressionNullability(
     // ARRAY(subquery) is never null as a whole. The nullability of
     // the inside depends on the inside select list expression
     arraySubQuery: ({ subquery }) =>
-      pipe(
-        getOutputColumns(client, outsideCTEs, paramNullability, subquery),
-        InferM.chain((columns) => {
-          if (columns.length != 1)
-            return TaskEither.left('subquery must return only one column')
-          return arrayTE(
-            // An array constructed from a subquery is never NULL itself
-            false,
-            // Element nullability depends on the subquery column nullability
-            columns[0].nullability.nullable
-          )
-        })
+      inferScalarSubqueryNullability(
+        client,
+        outsideCTEs,
+        paramNullability,
+        subquery,
+        // An array constructed from a subquery is never NULL itself
+        // Element nullability depends on the subquery column nullability
+        (nullability) => arrayTE(false, nullability)
       ),
-
     scalarSubQuery: ({ subquery }) =>
       // (subquery) is nullable if the single output column of the subquery is nullable
-      pipe(
-        getOutputColumns(client, outsideCTEs, paramNullability, subquery),
-        InferM.chain((columns) => {
-          if (columns.length != 1)
-            return TaskEither.left('subquery must return only one column')
-          return anyTE(columns[0].nullability.nullable)
-        })
+      inferScalarSubqueryNullability(
+        client,
+        outsideCTEs,
+        paramNullability,
+        subquery
       ),
 
     case: ({ branches, else_ }) => {
@@ -855,6 +864,23 @@ function inferExpressionNullability(
       return anyTE(false)
     },
   })
+}
+
+function inferScalarSubqueryNullability(
+  client: SchemaClient,
+  outsideCTEs: VirtualTable[],
+  paramNullability: ParamNullability[],
+  subquery: ast.AST,
+  fieldNullabilityConstructor = anyTE
+): InferM.InferM<FieldNullability> {
+  return pipe(
+    getOutputColumns(client, outsideCTEs, paramNullability, subquery),
+    InferM.chain((columns) => {
+      if (columns.length != 1)
+        return TaskEither.left('a scalar subquery must return only one column')
+      return fieldNullabilityConstructor(columns[0].nullability.nullable)
+    })
+  )
 }
 
 // Given a condition (a boolean expression), return a list of expressions that
@@ -953,11 +979,14 @@ function getNonNullSubExpressionsFromRowCond(
       }
       return [expression]
     },
-    inOp: ({ lhs }) => {
+    anySomeAll: ({ lhs }) =>
+      // For expr op ANY/SOME/ALL (subquery), the left hand side expr is non-null
+      getNonNullSubExpressionsFromRowCond(lhs),
+
+    inOp: ({ lhs }) =>
       // For the IN operator (expr IN (subquery), expr IN (exprlist)) the
       // left-hand side expr is non-null
-      return getNonNullSubExpressionsFromRowCond(lhs)
-    },
+      getNonNullSubExpressionsFromRowCond(lhs),
   })
 }
 

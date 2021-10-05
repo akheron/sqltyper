@@ -5,6 +5,7 @@ import { NullSafety, Operator, SqlFunction } from './types'
 export const sqlReservedWords: string[] = [
   'ALL',
   'AND',
+  'ANY',
   'ARRAY',
   'AS',
   'ASC',
@@ -61,6 +62,7 @@ export const sqlReservedWords: string[] = [
   'SELECT',
   'SET',
   'SIMILAR',
+  'SOME',
   'SYMMETRIC',
   'THEN',
   'TRUE',
@@ -238,6 +240,7 @@ export const builtinFunctions: SqlFunction[] = [
   // Not yet categorized
   func('avg', 'safe'),
   func('bool', 'safe'),
+  func('daterange', 'neverNull'),
   func('now', 'neverNull'),
   func('count', 'neverNull'),
   func('sum', 'safe'),

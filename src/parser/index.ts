@@ -272,10 +272,27 @@ const existsExpr = seq(
   parenthesized(lazy(() => subquerySelect))
 )((_exists, subquery) => Expression.createExistsOp(subquery))
 
+interface AnySomeAll {
+  kind: 'AnySomeAll'
+  comparison: 'ANY' | 'SOME' | 'ALL'
+  subquery: Select
+}
+export const anySomeAll: Parser<AnySomeAll> = seq(
+  oneOf(reservedWord('ANY'), reservedWord('SOME'), reservedWord('ALL')),
+  parenthesized(lazy(() => subquerySelect))
+)(
+  (comparison, subquery): AnySomeAll => ({
+    kind: 'AnySomeAll',
+    comparison,
+    subquery,
+  })
+)
+
 type OtherExprRhs =
   | OtherExprRhs.In
   | OtherExprRhs.Ternary
   | OtherExprRhs.UnarySuffix
+  | OtherExprRhs.AnySomeAll
   | OtherExprRhs.OtherOp
 
 namespace OtherExprRhs {
@@ -284,7 +301,7 @@ namespace OtherExprRhs {
     op: 'IN' | 'NOT IN'
     rhs: Expression.InRhs
   }
-  const in_: Parser<In> = seq(
+  export const in_: Parser<In> = seq(
     attempt(
       oneOf(
         reservedWord('IN'),
@@ -314,7 +331,7 @@ namespace OtherExprRhs {
     rhs1: Expression
     rhs2: Expression
   }
-  const ternary: Parser<Ternary> = seq(
+  export const ternary: Parser<Ternary> = seq(
     oneOf(
       attempt(sepReserveds('NOT BETWEEN SYMMETRIC')),
       attempt(sepReserveds('BETWEEN SYMMETRIC')),
@@ -330,18 +347,26 @@ namespace OtherExprRhs {
     kind: 'UnarySuffix'
     op: '!'
   }
-  const unarySuffix: Parser<UnarySuffix> = seqConst(
+  export const unarySuffix: Parser<UnarySuffix> = seqConst(
     { kind: 'UnarySuffix', op: '!' },
     operator('!')
   )
+
+  export interface AnySomeAll {
+    kind: 'AnySomeAllRhs'
+    op: string
+    comparison: 'ANY' | 'SOME' | 'ALL'
+    subquery: Select
+  }
 
   export type OtherOp = {
     kind: 'OtherOpExprRhs'
     op: string
     rhs: Expression
   }
-  const otherOp: Parser<OtherOp> = seq(
-    oneOf(
+
+  export const otherOp: Parser<OtherOp | AnySomeAll> = oneOf(
+    seq(
       anyOperatorExcept([
         '<',
         '>',
@@ -356,14 +381,26 @@ namespace OtherExprRhs {
         '%',
         '^',
       ]),
-      sepReserveds('IS DISTINCT FROM'),
-      sepReserveds('IS NOT DISTINCT FROM'),
-      reservedWord('LIKE')
+      oneOf(anySomeAll, addSubExpr)
+    )((op, rhs) =>
+      rhs.kind === 'AnySomeAll'
+        ? {
+            kind: 'AnySomeAllRhs',
+            op,
+            comparison: rhs.comparison,
+            subquery: rhs.subquery,
+          }
+        : { kind: 'OtherOpExprRhs', op, rhs }
     ),
-    addSubExpr
-  )((op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }))
-
-  export const parser = oneOf(in_, ternary, unarySuffix, otherOp)
+    seq(
+      oneOf(
+        sepReserveds('IS DISTINCT FROM'),
+        sepReserveds('IS NOT DISTINCT FROM'),
+        reservedWord('LIKE')
+      ),
+      addSubExpr
+    )((op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }))
+  )
 
   export function createExpression(
     lhs: Expression,
@@ -379,23 +416,56 @@ namespace OtherExprRhs {
       case 'UnarySuffix':
         return Expression.createUnaryOp(rhs.op, lhs)
 
+      case 'AnySomeAllRhs':
+        return Expression.createAnySomeAll(
+          lhs,
+          rhs.op,
+          rhs.comparison,
+          rhs.subquery
+        )
+
       case 'OtherOpExprRhs':
         return Expression.createBinaryOp(lhs, rhs.op, rhs.rhs)
     }
   }
 }
 
+export const otherExprRhs = oneOf(
+  OtherExprRhs.in_,
+  OtherExprRhs.ternary,
+  OtherExprRhs.unarySuffix,
+  OtherExprRhs.otherOp
+)
+
 const otherExpr = seq(
   addSubExpr,
-  many(OtherExprRhs.parser)
+  many(otherExprRhs)
 )((first, rest) =>
   rest.reduce((acc, val) => OtherExprRhs.createExpression(acc, val), first)
 )
 const existsOrOtherExpr = oneOf(existsExpr, otherExpr)
 
-const comparisonExpr = makeBinaryOp(
-  oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
-  existsOrOtherExpr
+const comparisonExpr = seq(
+  existsOrOtherExpr,
+  many(
+    seq(
+      oneOfOperators('<', '>', '=', '<=', '>=', '<>'),
+      oneOf(anySomeAll, existsOrOtherExpr)
+    )((op, next) => ({ op, next }))
+  )
+)((first, rest) =>
+  rest.reduce(
+    (acc, val) =>
+      val.next.kind === 'AnySomeAll'
+        ? Expression.createAnySomeAll(
+            acc,
+            val.op,
+            val.next.comparison,
+            val.next.subquery
+          )
+        : Expression.createBinaryOp(acc, val.op, val.next),
+    first
+  )
 )
 
 const isExpr = seq(
