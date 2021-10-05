@@ -10,6 +10,7 @@ export type Expression =
   | Expression.UnaryOp
   | Expression.BinaryOp
   | Expression.TernaryOp
+  | Expression.AnySomeAll
   | Expression.ExistsOp
   | Expression.InOp
   | Expression.FunctionCall
@@ -99,6 +100,23 @@ export namespace Expression {
     rhs2: Expression
   ): TernaryOp {
     return { kind: 'TernaryOp', lhs, op, rhs1, rhs2 }
+  }
+
+  export type AnySomeAll = {
+    kind: 'AnySomeAll'
+    lhs: Expression
+    op: string
+    comparison: 'ANY' | 'SOME' | 'ALL'
+    subquery: Select
+  }
+
+  export function createAnySomeAll(
+    lhs: Expression,
+    op: string,
+    comparison: 'ANY' | 'SOME' | 'ALL',
+    subquery: Select
+  ): AnySomeAll {
+    return { kind: 'AnySomeAll', lhs, op, comparison, subquery }
   }
 
   export type ExistsOp = {
@@ -223,6 +241,7 @@ export namespace Expression {
       unaryOp?: (value: UnaryOp) => T
       binaryOp?: (value: BinaryOp) => T
       ternaryOp?: (value: TernaryOp) => T
+      anySomeAll?: (value: AnySomeAll) => T
       existsOp?: (value: ExistsOp) => T
       inOp?: (value: InOp) => T
       functionCall?: (value: FunctionCall) => T
@@ -249,6 +268,8 @@ export namespace Expression {
         return handlers.binaryOp == null ? elseVal : handlers.binaryOp(expr)
       case 'TernaryOp':
         return handlers.ternaryOp == null ? elseVal : handlers.ternaryOp(expr)
+      case 'AnySomeAll':
+        return handlers.anySomeAll == null ? elseVal : handlers.anySomeAll(expr)
       case 'ExistsOp':
         return handlers.existsOp == null ? elseVal : handlers.existsOp(expr)
       case 'InOp':
@@ -282,6 +303,7 @@ export namespace Expression {
       unaryOp: (value: UnaryOp) => T
       binaryOp: (value: BinaryOp) => T
       ternaryOp: (value: TernaryOp) => T
+      anySomeAll: (value: AnySomeAll) => T
       existsOp: (value: ExistsOp) => T
       inOp: (value: InOp) => T
       functionCall: (value: FunctionCall) => T
@@ -306,6 +328,8 @@ export namespace Expression {
         return handlers.binaryOp(expr)
       case 'TernaryOp':
         return handlers.ternaryOp(expr)
+      case 'AnySomeAll':
+        return handlers.anySomeAll(expr)
       case 'ExistsOp':
         return handlers.existsOp(expr)
       case 'InOp':
@@ -363,6 +387,9 @@ export namespace Expression {
           equals(a.rhs1, b.rhs1) &&
           equals(a.rhs2, b.rhs2)
         )
+      case 'AnySomeAll':
+        if (a.kind !== b.kind) return false
+        return false // TODO
       case 'ExistsOp':
         if (a.kind !== b.kind) return false
         return false // TODO
