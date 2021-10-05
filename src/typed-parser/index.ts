@@ -371,6 +371,14 @@ export const end: Parser<null> = (source, context) => {
  * Note that no fallback will occur if any one of them consumes even a single character.
  * (See also `attempt()`)
  */
+export function oneOf<A, B>(...parsers: [Parser<A>, Parser<B>]): Parser<A | B>
+export function oneOf<A, B, C>(
+  ...parsers: [Parser<A>, Parser<B>, Parser<C>]
+): Parser<A | B | C>
+export function oneOf<A, B, C, D>(
+  ...parsers: [Parser<A>, Parser<B>, Parser<C>, Parser<D>]
+): Parser<A | B | C | D>
+export function oneOf<A>(...parsers: Parser<A>[]): Parser<A>
 export function oneOf<A>(...parsers: Parser<A>[]): Parser<A> {
   return (source, context) => {
     const errors = []
