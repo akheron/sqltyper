@@ -32,7 +32,6 @@ import {
   SelectBody,
   SelectOp,
   SelectListItem,
-  Statement,
   TableExpression,
   TableRef,
   UpdateAssignment,
@@ -117,7 +116,7 @@ const functionArguments: Parser<Expression[]> = parenthesized(
   )
 )
 
-const windowDefinition: Parser<WindowDefinition> = oneOf<WindowDefinition>(
+const windowDefinition: Parser<WindowDefinition> = oneOf(
   identifier,
   seq(
     optional(
@@ -287,13 +286,13 @@ namespace OtherExprRhs {
   }
   const in_: Parser<In> = seq(
     attempt(
-      oneOf<'IN' | 'NOT IN'>(
+      oneOf(
         reservedWord('IN'),
-        seqConst('NOT IN', reservedWord('NOT'), reservedWord('IN'))
+        seqConst('NOT IN' as const, reservedWord('NOT'), reservedWord('IN'))
       )
     ),
     parenthesized(
-      oneOf<Expression.InRhs>(
+      oneOf(
         map(
           Expression.createInSubquery,
           lazy(() => subquerySelect)
@@ -364,7 +363,7 @@ namespace OtherExprRhs {
     addSubExpr
   )((op, rhs) => ({ kind: 'OtherOpExprRhs', op, rhs }))
 
-  export const parser = oneOf<OtherExprRhs>(in_, ternary, unarySuffix, otherOp)
+  export const parser = oneOf(in_, ternary, unarySuffix, otherOp)
 
   export function createExpression(
     lhs: Expression,
@@ -600,7 +599,7 @@ const window: Parser<NamedWindowDefinition[]> = seq2(
 
 // ORDER BY
 
-const orderByOrder: Parser<OrderBy.Order> = oneOf<OrderBy.Order>(
+const orderByOrder: Parser<OrderBy.Order> = oneOf(
   reservedWord('ASC'),
   reservedWord('DESC'),
   seq(reservedWord('USING'), anyOperator)((_using, op) => ['USING', op])
@@ -633,7 +632,7 @@ const limit: Parser<Limit> = seq(
 
 // SELECT
 
-const distinct: Parser<Distinct> = oneOf<Distinct>(
+const distinct: Parser<Distinct> = oneOf(
   reservedWord('ALL'),
   seq(
     reservedWord('DISTINCT'),
@@ -780,7 +779,7 @@ const insert: Parser<(withQueries: WithQuery[]) => Insert> = seq(
   insertInto,
   optional(reqAs),
   optional(identifierList),
-  oneOf<Values | Select>(
+  oneOf(
     values,
     lazy(() => subquerySelect)
   ),
@@ -849,12 +848,7 @@ const delete_: Parser<(withQueries: WithQuery[]) => Delete> = seq(
 
 const statementParser: Parser<AST> = seq(
   optional(withQueries),
-  oneOf<(withQueries: WithQuery[]) => Statement>(
-    select,
-    insert,
-    update,
-    delete_
-  ),
+  oneOf(select, insert, update, delete_),
   optional(symbol(';'))
 )((withQueries, stmt) => stmt(withQueries ?? []))
 
