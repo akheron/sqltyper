@@ -1,6 +1,6 @@
 {
   "name": "sqltyper",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Typed SQL queries in PostgreSQL",
   "main": "dist/src/index.js",
   "repository": "https://github.com/akheron/sqltyper",
