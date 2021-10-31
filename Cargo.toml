@@ -1,0 +1,19 @@
+[package]
+name = "sqltyper"
+version = "1.4.0-alpha.0"
+edition = "2018"
+
+[lib]
+path = "src-rs/lib.rs"
+
+[[bin]]
+name = "sqltyper"
+path = "src-rs/main.rs"
+
+[dependencies]
+lazy_static = "1.4.0"
+log = "0.4.14"
+nom = "7.0.0"
+regex = "1"
+tokio = { version = "1", features = [ "full" ] }
+tokio-postgres = "0.7.3"
