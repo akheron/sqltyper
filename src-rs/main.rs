@@ -1,10 +1,7 @@
-use sqltyper::connect_to_database;
-use sqltyper::sql_to_statement_description;
+use sqltyper::{connect_to_database, sql_to_statement_description, Error};
 use std::{env, fs};
-use tokio_postgres::Error;
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn run() -> Result<(), Error> {
     let filename = env::args().nth(1).unwrap();
     let sql = fs::read_to_string(filename).unwrap();
 
@@ -14,4 +11,11 @@ async fn main() -> Result<(), Error> {
     println!("{:?}", statement);
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> () {
+    if let Err(err) = run().await {
+        println!("{}", err)
+    };
 }

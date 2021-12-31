@@ -1,9 +1,9 @@
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
-pub struct PreprocessedSql {
-    pub sql: String,
+pub struct PreprocessedSql<'a> {
+    pub sql: Cow<'a, str>,
     pub param_names: Vec<String>,
 }
 
@@ -14,20 +14,25 @@ lazy_static! {
     static ref NUMBERED_PARAM: Regex = Regex::new(r"\$\d+").unwrap();
 }
 
-pub fn preprocess_sql(sql: &str) -> Result<PreprocessedSql, &'static str> {
+#[derive(Debug)]
+pub enum Error {
+    MixedParamStyles,
+}
+
+pub fn preprocess_sql(sql: &str) -> Result<PreprocessedSql, Error> {
     let has_named_params = NAMED_PARAM.is_match(sql);
     let has_numbered_params = NUMBERED_PARAM.is_match(sql);
 
     if has_named_params && has_numbered_params {
-        Err("Cannot mix named parameters (e.g. ${foo}, :foo) and numbered parameters (e.g. $1) in the same statement")
+        Err(Error::MixedParamStyles)
     } else if has_named_params {
         Ok(handle_named_params(sql))
     } else if has_numbered_params {
         Ok(handle_numbered_params(sql))
     } else {
         Ok(PreprocessedSql {
-            sql: sql.to_owned(),
-            param_names: vec![],
+            sql: Cow::Borrowed(sql),
+            param_names: Vec::new(),
         })
     }
 }
@@ -60,7 +65,7 @@ fn handle_named_params(sql: &str) -> PreprocessedSql {
     params.sort_by(|a, b| a.1.cmp(&b.1));
 
     PreprocessedSql {
-        sql: String::from(processed_sql),
+        sql: processed_sql,
         param_names: params.iter().map(|(k, _)| k.into()).collect(),
     }
 }
@@ -73,7 +78,7 @@ fn handle_numbered_params(sql: &str) -> PreprocessedSql {
     param_names.sort();
 
     PreprocessedSql {
-        sql: sql.to_string(),
+        sql: Cow::Borrowed(sql),
         param_names,
     }
 }

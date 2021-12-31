@@ -1,9 +1,11 @@
+use std::borrow::Cow;
+
 pub use tokio_postgres::types::Type;
 use tokio_postgres::Column;
 
 #[derive(Debug)]
-pub struct StatementDescription {
-    pub sql: String,
+pub struct StatementDescription<'a> {
+    pub sql: Cow<'a, str>,
     pub params: Vec<NamedValue>,
     pub columns: Vec<NamedValue>,
     pub row_count: StatementRowCount,

@@ -25,7 +25,6 @@ pub fn infer_statement_nullability<C>(client: &C, sql: &str) -> Result<(), Error
 where
     C: GenericClient,
 {
-    let _statement = parse_sql(&sql);
     // let param_nullability = infer_param_nullability(statement);
     Ok(())
 }
