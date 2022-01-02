@@ -143,3 +143,6 @@ fn parse(input: &str) -> Result<ast::AST> {
 pub fn parse_sql(input: &str) -> std::result::Result<ast::AST, ErrorTree<&str>> {
     final_parser(parse)(input)
 }
+
+#[cfg(test)]
+mod tests;
