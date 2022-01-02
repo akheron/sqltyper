@@ -1,3 +1,4 @@
+mod keyword;
 mod result;
 mod token;
 mod utils;
@@ -5,9 +6,10 @@ mod utils;
 use nom::branch::alt;
 use nom::combinator::{eof, map, opt};
 use nom::sequence::preceded;
-use nom::Finish;
 use nom_supreme::error::ErrorTree;
+use nom_supreme::final_parser::final_parser;
 
+use self::keyword::Keyword;
 use self::result::Result;
 use self::token::*;
 use self::utils::*;
@@ -22,14 +24,14 @@ fn identifier_list(input: &str) -> Result<Vec<&str>> {
 // [ AS ] identifier
 fn as_opt(input: &str) -> Result<&str> {
     seq(
-        (opt(keyword(Reserved::As)), identifier),
+        (opt(keyword(Keyword::AS)), identifier),
         |(_, identifier)| identifier,
     )(input)
 }
 
 // AS identifier
 fn as_req(input: &str) -> Result<&str> {
-    preceded(keyword(Reserved::As), identifier)(input)
+    preceded(keyword(Keyword::AS), identifier)(input)
 }
 
 // [ schema . ] table
@@ -51,9 +53,9 @@ fn table_ref(input: &str) -> Result<ast::TableRef> {
 
 fn constant(input: &str) -> Result<ast::Constant> {
     alt((
-        map(keyword(Reserved::True), |_| ast::Constant::True),
-        map(keyword(Reserved::False), |_| ast::Constant::False),
-        map(keyword(Reserved::Null), |_| ast::Constant::Null),
+        map(keyword(Keyword::TRUE), |_| ast::Constant::True),
+        map(keyword(Keyword::FALSE), |_| ast::Constant::False),
+        map(keyword(Keyword::NULL), |_| ast::Constant::Null),
         map(number, ast::Constant::Number),
         map(string, ast::Constant::String),
     ))(input)
@@ -77,15 +79,14 @@ fn expression(input: &str) -> Result<ast::Expression> {
 // INSERT
 
 fn default_values(input: &str) -> Result<ast::Values> {
-    seq(
-        (keyword(Reserved::Default), keyword(Unreserved::Values)),
-        |_| ast::Values::DefaultValues,
-    )(input)
+    map(keywords(&[Keyword::DEFAULT, Keyword::VALUES]), |_| {
+        ast::Values::DefaultValues
+    })(input)
 }
 
 fn expression_values_list_item(input: &str) -> Result<ast::ValuesValue> {
     alt((
-        map(keyword(Reserved::Default), |_| ast::ValuesValue::Default),
+        map(keyword(Keyword::DEFAULT), |_| ast::ValuesValue::Default),
         map(expression, ast::ValuesValue::Value),
     ))(input)
 }
@@ -97,7 +98,7 @@ fn expression_values_list(input: &str) -> Result<Vec<ast::ValuesValue>> {
 fn expression_values(input: &str) -> Result<ast::Values> {
     map(
         preceded(
-            keyword(Unreserved::Values),
+            keyword(Keyword::VALUES),
             sep_by1(",", expression_values_list),
         ),
         ast::Values::Values,
@@ -113,11 +114,7 @@ fn values(input: &str) -> Result<ast::Values> {
 }
 
 fn insert_into(input: &str) -> Result<ast::TableRef> {
-    preceded2(
-        keyword(Unreserved::Insert),
-        keyword(Reserved::Into),
-        table_ref,
-    )(input)
+    preceded(keywords(&[Keyword::INSERT, Keyword::INTO]), table_ref)(input)
 }
 
 fn insert(input: &str) -> Result<ast::Insert> {
@@ -144,8 +141,5 @@ fn parse(input: &str) -> Result<ast::AST> {
 }
 
 pub fn parse_sql(input: &str) -> std::result::Result<ast::AST, ErrorTree<&str>> {
-    match parse(input).finish() {
-        Ok((_, value)) => Ok(value),
-        Err(err) => Err(err),
-    }
+    final_parser(parse)(input)
 }

@@ -1,13 +1,16 @@
 use nom::branch::alt;
 use nom::bytes::complete::{is_not, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, none_of, one_of};
-use nom::combinator::{opt, recognize, value, verify};
+use nom::combinator::{opt, recognize, value};
 use nom::multi::{many0, many0_count, many1_count};
 use nom::sequence::{pair, preceded, terminated, tuple};
+use nom::Err;
+use nom_supreme::error::ErrorTree;
 use nom_supreme::tag::complete::tag;
+use nom_supreme::tag::TagError;
 
+use super::keyword::Keyword;
 use super::result::Result;
-use super::utils::seq;
 
 // All token parser consume subsequent whitespace
 
@@ -32,110 +35,42 @@ fn __(input: &str) -> Result<()> {
     )(input)
 }
 
-#[test]
-fn test_ws() {
-    assert_eq!(
-        __("-- foo
-     -- foo foo
-  /* bar
-
-baz*/--quux
-  next"),
-        Ok(("next", ()))
-    );
-    assert_eq!(
-        __("-- foo
-     -- foo foo
-  /* bar
-
-baz*/--quux
-  next"),
-        Ok(("next", ()))
-    );
-}
-
 pub fn match_identifier(input: &str) -> Result<&str> {
-    seq(
-        (
-            recognize(pair(
-                alt((alpha1, tag("_"))),
-                many0(alt((alphanumeric1, tag("_")))),
-            )),
-            __,
-        ),
-        |(identifier, _)| identifier,
+    terminated(
+        recognize(pair(
+            alt((alpha1, tag("_"))),
+            many0(alt((alphanumeric1, tag("_")))),
+        )),
+        __,
     )(input)
 }
 
-pub trait Keyword {
-    fn check(&self, word: &str) -> bool;
-}
-
-// TODO: Use strum for enum-string mapping
-
-#[derive(Clone, Copy)]
-pub enum Reserved {
-    As,
-    Default,
-    False,
-    Into,
-    Null,
-    True,
-}
-
-impl Keyword for Reserved {
-    fn check(&self, word: &str) -> bool {
-        word.to_ascii_uppercase()
-            == match self {
-                Reserved::As => "AS",
-                Reserved::Default => "DEFAULT",
-                Reserved::False => "FALSE",
-                Reserved::Into => "INTO",
-                Reserved::Null => "NULL",
-                Reserved::True => "TRUE",
-            }
-    }
-}
-
-fn is_reserved_word(ident: &str) -> bool {
-    match ident.to_ascii_uppercase().as_str() {
-        "AS" => true,
-        "DEFAULT" => true,
-        "FALSE" => true,
-        "INTO" => true,
-        "NULL" => true,
-        "TRUE" => true,
-        _ => false,
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum Unreserved {
-    Insert,
-    Values,
-}
-
-impl Keyword for Unreserved {
-    fn check(&self, word: &str) -> bool {
-        word.to_ascii_uppercase()
-            == match self {
-                Unreserved::Insert => "INSERT",
-                Unreserved::Values => "VALUES",
-            }
-    }
-}
-
-pub fn keyword<'a, W: Keyword + Copy>(word: W) -> impl FnMut(&'a str) -> Result<()> {
+pub fn keyword<'a>(kw: Keyword) -> impl FnMut(&'a str) -> Result<()> {
+    let kw_str: &'static str = kw.into();
     move |input| {
-        value(
-            (),
-            verify(match_identifier, |identifier: &str| word.check(identifier)),
-        )(input)
+        let orig_input = input.clone();
+        let (input, ident) = match_identifier(input)?;
+        if ident == kw_str {
+            Ok((input, ()))
+        } else {
+            Err(Err::Error(ErrorTree::<&str>::from_tag(orig_input, kw_str)))
+        }
+    }
+}
+
+pub fn keywords<'a>(words: &'a [Keyword]) -> impl FnMut(&'a str) -> Result<()> {
+    move |i| {
+        let mut input = i;
+        for kw in words.iter() {
+            input = keyword(*kw)(input)?.0;
+        }
+        Ok((input, ()))
     }
 }
 
 fn unquoted_identifier(input: &str) -> Result<&str> {
-    verify(match_identifier, |identifier| !is_reserved_word(identifier))(input)
+    // TODO: Should we check for keywords? The SQL is parsed by Postgres anyway.
+    match_identifier(input)
 }
 
 pub fn identifier(input: &str) -> Result<&str> {
@@ -172,4 +107,33 @@ pub fn string(input: &str) -> Result<&str> {
 
 pub fn param(input: &str) -> Result<&str> {
     terminated(recognize(tuple((char('$'), digit1))), __)(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::__;
+
+    #[test]
+    fn test_ws() {
+        assert_eq!(
+            __("-- foo
+     -- foo foo
+  /* bar
+
+baz*/--quux
+  next")
+            .unwrap(),
+            ("next", ())
+        );
+        assert_eq!(
+            __("-- foo
+     -- foo foo
+  /* bar
+
+baz*/--quux
+  next")
+            .unwrap(),
+            ("next", ())
+        );
+    }
 }

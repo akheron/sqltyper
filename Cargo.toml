@@ -16,5 +16,7 @@ log = "0.4.14"
 nom = "7.0.0"
 nom-supreme = "0.6.0"
 regex = "1"
+strum = "0.23.0"
+strum_macros = "0.23.1"
 tokio = { version = "1", features = [ "full" ] }
 tokio-postgres = "0.7.3"
