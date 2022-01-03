@@ -61,8 +61,22 @@ fn constant(input: &str) -> Result<ast::Constant> {
     ))(input)
 }
 
+fn column_ref(input: &str) -> Result<ast::Expression> {
+    seq(
+        (identifier, opt(preceded(symbol("."), identifier))),
+        |(id1, id2)| {
+            if let Some(column) = id2 {
+                ast::Expression::TableColumnRef { table: id1, column }
+            } else {
+                ast::Expression::ColumnRef(id1)
+            }
+        },
+    )(input)
+}
+
 fn primary_expression(input: &str) -> Result<ast::Expression> {
     alt((
+        column_ref,
         map(constant, ast::Expression::Constant),
         map(param, ast::Expression::Param),
     ))(input)
@@ -72,8 +86,19 @@ fn exp_expression(input: &str) -> Result<ast::Expression> {
     binop(symbol("^"), primary_expression)(input)
 }
 
+fn mul_div_mod_expression(input: &str) -> Result<ast::Expression> {
+    binop(
+        alt((operator("*"), operator("/"), operator("%"))),
+        exp_expression,
+    )(input)
+}
+
+fn add_sub_expression(input: &str) -> Result<ast::Expression> {
+    binop(alt((operator("+"), operator("-"))), mul_div_mod_expression)(input)
+}
+
 fn expression(input: &str) -> Result<ast::Expression> {
-    exp_expression(input)
+    add_sub_expression(input)
 }
 
 // INSERT

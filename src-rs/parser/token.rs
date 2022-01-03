@@ -80,6 +80,22 @@ pub fn symbol<'a>(s: &'static str) -> impl FnMut(&'a str) -> Result<&'a str> {
     terminated(tag(s), __)
 }
 
+fn any_operator(input: &str) -> Result<&str> {
+    terminated(recognize(many1_count(one_of("-+*/<>=~!@#%^&|`?"))), __)(input)
+}
+
+pub fn operator<'a>(op: &'static str) -> impl FnMut(&'a str) -> Result<&'a str> {
+    move |input: &str| {
+        let orig_input = input.clone();
+        let (input, operator) = any_operator(input)?;
+        if operator == op {
+            Ok((input, operator))
+        } else {
+            Err(Err::Error(ErrorTree::<&str>::from_tag(orig_input, op)))
+        }
+    }
+}
+
 pub fn number(input: &str) -> Result<&str> {
     terminated(
         alt((

@@ -15,7 +15,8 @@ pub enum Constant<'a> {
 
 #[derive(Debug)]
 pub enum Expression<'a> {
-    Foo,
+    ColumnRef(&'a str),
+    TableColumnRef { table: &'a str, column: &'a str },
     Constant(Constant<'a>),
     Param(&'a str),
     BinaryOp(Box<Expression<'a>>, &'a str, Box<Expression<'a>>),
@@ -33,7 +34,7 @@ pub enum Values<'a> {
     Values(Vec<Vec<ValuesValue<'a>>>),
 }
 
-#[derive(Debug, Debug)]
+#[derive(Debug)]
 pub enum ConflictTarget<'a> {
     IndexColumns(Vec<&'a str>),
     Constraint(&'a str),
