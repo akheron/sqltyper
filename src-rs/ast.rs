@@ -53,6 +53,18 @@ pub struct OnConflict<'a> {
 }
 
 #[derive(Debug)]
+pub struct ExpressionAs<'a> {
+    pub expr: Expression<'a>,
+    pub as_: Option<&'a str>,
+}
+
+#[derive(Debug)]
+pub enum Returning<'a> {
+    AllColumns,
+    Expressions(Vec<ExpressionAs<'a>>),
+}
+
+#[derive(Debug)]
 pub struct Insert<'a> {
     // ctes: WithQuery[]
     pub table: TableRef<'a>,
@@ -60,9 +72,10 @@ pub struct Insert<'a> {
     pub columns: Option<Vec<&'a str>>,
     pub values: Values<'a>,
     pub on_conflict: Option<OnConflict<'a>>,
-    // returning: SelectListItem[]
+    pub returning: Option<Returning<'a>>,
 }
 
+#[derive(Debug)]
 pub struct UpdateAssignment<'a> {
     pub column: &'a str,
     pub value: Option<Expression<'a>>, // None means DEFAULT

@@ -181,6 +181,23 @@ fn on_conflict(input: &str) -> Result<ast::OnConflict> {
     )(input)
 }
 
+fn expression_as(input: &str) -> Result<ast::ExpressionAs> {
+    seq((expression, opt(as_opt)), |(expr, as_)| ast::ExpressionAs {
+        expr,
+        as_,
+    })(input)
+}
+
+fn returning(input: &str) -> Result<ast::Returning> {
+    preceded(
+        keyword(Keyword::RETURNING),
+        alt((
+            map(symbol("*"), |_| ast::Returning::AllColumns),
+            map(sep_by1(",", expression_as), ast::Returning::Expressions),
+        )),
+    )(input)
+}
+
 fn insert(input: &str) -> Result<ast::Insert> {
     seq(
         (
@@ -189,14 +206,15 @@ fn insert(input: &str) -> Result<ast::Insert> {
             opt(identifier_list),
             values,
             opt(on_conflict),
-            // TODO: RETURNING
+            opt(returning),
         ),
-        |(table, as_, columns, values, on_conflict)| ast::Insert {
+        |(table, as_, columns, values, on_conflict, returning)| ast::Insert {
             table,
             as_,
             columns,
             values,
             on_conflict,
+            returning,
         },
     )(input)
 }

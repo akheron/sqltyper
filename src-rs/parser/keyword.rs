@@ -14,6 +14,7 @@ pub enum Keyword {
     NOTHING,
     NULL,
     ON,
+    RETURNING,
     SET,
     TRUE,
     UPDATE,
