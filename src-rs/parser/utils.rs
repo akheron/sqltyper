@@ -1,4 +1,4 @@
-use nom::combinator::map;
+use nom::combinator::{map, value};
 use nom::error::ParseError;
 use nom::multi::many0;
 use nom::sequence::{delimited, preceded, terminated, tuple, Tuple};
@@ -8,6 +8,14 @@ use nom_supreme::error::ErrorTree;
 use super::ast;
 use super::result::Result;
 use super::token::symbol;
+
+pub fn unit<I, O, E, F>(parser: F) -> impl FnMut(I) -> IResult<I, (), E>
+where
+    E: ParseError<I>,
+    F: Parser<I, O, E>,
+{
+    value((), parser)
+}
 
 pub fn preceded2<I, O1, O2, O3, E, F, G, H>(
     first: F,

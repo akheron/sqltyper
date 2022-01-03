@@ -1,7 +1,7 @@
 use nom::branch::alt;
 use nom::bytes::complete::{is_not, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, none_of, one_of};
-use nom::combinator::{opt, recognize, value};
+use nom::combinator::{opt, recognize};
 use nom::multi::{many0, many0_count, many1_count};
 use nom::sequence::{pair, preceded, terminated, tuple};
 use nom::Err;
@@ -11,28 +11,26 @@ use nom_supreme::tag::TagError;
 
 use super::keyword::Keyword;
 use super::result::Result;
+use super::utils::unit;
 
 // All token parser consume subsequent whitespace
 
 fn comment_oneline(i: &str) -> Result<()> {
-    value((), pair(tag("--"), is_not("\n\r")))(i)
+    unit(pair(tag("--"), is_not("\n\r")))(i)
 }
 
 fn comment_multiline(i: &str) -> Result<()> {
-    value((), tuple((tag("/*"), take_until("*/"), tag("*/"))))(i)
+    unit(tuple((tag("/*"), take_until("*/"), tag("*/"))))(i)
 }
 
 fn __(input: &str) -> Result<()> {
-    value(
-        (),
-        tuple((
-            multispace0,
-            many0_count(alt((
-                tuple((comment_oneline, multispace0)),
-                tuple((comment_multiline, multispace0)),
-            ))),
-        )),
-    )(input)
+    unit(tuple((
+        multispace0,
+        many0_count(alt((
+            tuple((comment_oneline, multispace0)),
+            tuple((comment_multiline, multispace0)),
+        ))),
+    )))(input)
 }
 
 pub fn match_identifier(input: &str) -> Result<&str> {
@@ -50,7 +48,7 @@ pub fn keyword<'a>(kw: Keyword) -> impl FnMut(&'a str) -> Result<()> {
     move |input| {
         let orig_input = input.clone();
         let (input, ident) = match_identifier(input)?;
-        if ident == kw_str {
+        if ident.to_ascii_uppercase().as_str() == kw_str {
             Ok((input, ()))
         } else {
             Err(Err::Error(ErrorTree::<&str>::from_tag(orig_input, kw_str)))
