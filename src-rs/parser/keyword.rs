@@ -5,12 +5,17 @@ use strum_macros;
 pub enum Keyword {
     AS,
     CONFLICT,
+    CONSTRAINT,
     DEFAULT,
+    DO,
     FALSE,
     INSERT,
     INTO,
+    NOTHING,
     NULL,
     ON,
+    SET,
     TRUE,
+    UPDATE,
     VALUES,
 }

@@ -4,8 +4,8 @@ mod token;
 mod utils;
 
 use nom::branch::alt;
-use nom::combinator::{eof, map, opt};
-use nom::sequence::preceded;
+use nom::combinator::{eof, map, opt, value};
+use nom::sequence::{preceded, terminated};
 use nom_supreme::error::ErrorTree;
 use nom_supreme::final_parser::final_parser;
 
@@ -117,6 +117,45 @@ fn insert_into(input: &str) -> Result<ast::TableRef> {
     preceded(keywords(&[Keyword::INSERT, Keyword::INTO]), table_ref)(input)
 }
 
+fn conflict_target(input: &str) -> Result<ast::ConflictTarget> {
+    alt((
+        map(identifier_list, ast::ConflictTarget::IndexColumns),
+        map(
+            preceded(keywords(&[Keyword::ON, Keyword::CONSTRAINT]), identifier),
+            ast::ConflictTarget::Constraint,
+        ),
+    ))(input)
+}
+
+fn conflict_action(input: &str) -> Result<ast::ConflictAction> {
+    preceded(
+        keyword(Keyword::DO),
+        alt((
+            map(keyword(Keyword::NOTHING), |_| {
+                ast::ConflictAction::DoNothing
+            }),
+            map(
+                preceded(keyword(Keyword::UPDATE), update_assignments),
+                ast::ConflictAction::DoUpdate,
+            ),
+        )),
+    )(input)
+}
+
+fn on_conflict(input: &str) -> Result<ast::OnConflict> {
+    seq(
+        (
+            keywords(&[Keyword::ON, Keyword::CONFLICT]),
+            opt(conflict_target),
+            conflict_action,
+        ),
+        |(_, conflict_target, conflict_action)| ast::OnConflict {
+            conflict_target,
+            conflict_action,
+        },
+    )(input)
+}
+
 fn insert(input: &str) -> Result<ast::Insert> {
     seq(
         (
@@ -124,16 +163,33 @@ fn insert(input: &str) -> Result<ast::Insert> {
             opt(as_req),
             opt(identifier_list),
             values,
-            // TODO: ON CONFLICT
+            opt(on_conflict),
             // TODO: RETURNING
         ),
-        |(table, as_, columns, values)| ast::Insert {
+        |(table, as_, columns, values, on_conflict)| ast::Insert {
             table,
             as_,
             columns,
             values,
+            on_conflict,
         },
     )(input)
+}
+
+// UPDATE
+
+fn update_assignment(input: &str) -> Result<ast::UpdateAssignment> {
+    seq(
+        (identifier, symbol("="), expression),
+        |(column, _eq, value)| ast::UpdateAssignment {
+            column,
+            value: Some(value),
+        },
+    )(input)
+}
+
+fn update_assignments(input: &str) -> Result<Vec<ast::UpdateAssignment>> {
+    preceded(keyword(Keyword::SET), sep_by1(",", update_assignment))(input)
 }
 
 fn parse(input: &str) -> Result<ast::AST> {
