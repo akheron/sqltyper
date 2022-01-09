@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
+use std::fmt::{Display, Formatter};
 use std::{borrow::Cow, collections::HashMap};
 
 pub struct PreprocessedSql<'a> {
@@ -17,6 +18,17 @@ lazy_static! {
 #[derive(Debug)]
 pub enum Error {
     MixedParamStyles,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::MixedParamStyles => write!(
+                f,
+                "Mixing positional params (e.g. $1) and named params (e.g. ${{foo}}) is not supported"
+            ),
+        }
+    }
 }
 
 pub fn preprocess_sql(sql: &str) -> Result<PreprocessedSql, Error> {

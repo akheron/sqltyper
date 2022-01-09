@@ -20,8 +20,8 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Preprocess(_) => write!(f, "Preprocess error"),
-            Error::Postgres(err) => write!(f, "Postgres error: {}", err),
+            Error::Preprocess(err) => write!(f, "{}", err),
+            Error::Postgres(err) => write!(f, "{}", err),
         }
     }
 }
@@ -37,6 +37,8 @@ impl From<tokio_postgres::Error> for Error {
         Error::Postgres(err)
     }
 }
+
+impl std::error::Error for Error {}
 
 pub async fn describe_statement<'a, C: GenericClient>(
     client: &C,
@@ -79,13 +81,12 @@ where
     Ok(infer_statement_nullability(client, statement_description).await)
 }
 
-pub async fn connect_to_database() -> Result<Client, tokio_postgres::Error> {
-    let (client, connection) =
-        tokio_postgres::connect("host=localhost user=postgres", NoTls).await?;
+pub async fn connect_to_database(config: &str) -> Result<Client, tokio_postgres::Error> {
+    let (client, connection) = tokio_postgres::connect(config, NoTls).await?;
 
     tokio::spawn(async move {
         if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
+            eprintln!("PostgreSQL connection error: {}", e);
         }
     });
 

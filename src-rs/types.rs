@@ -11,7 +11,7 @@ pub struct StatementDescription<'a> {
     pub row_count: StatementRowCount,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StatementRowCount {
     Zero,      // no output rows ever
     One,       // exatly one output row
