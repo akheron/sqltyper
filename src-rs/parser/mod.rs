@@ -4,8 +4,8 @@ mod token;
 mod utils;
 
 use nom::branch::alt;
-use nom::combinator::{eof, map, opt, value};
-use nom::sequence::{preceded, terminated};
+use nom::combinator::{eof, map, opt};
+use nom::sequence::preceded;
 use nom_supreme::error::ErrorTree;
 use nom_supreme::final_parser::final_parser;
 
@@ -75,11 +75,7 @@ fn column_ref(input: &str) -> Result<ast::Expression> {
 }
 
 fn primary_expression(input: &str) -> Result<ast::Expression> {
-    alt((
-        column_ref,
-        map(constant, ast::Expression::Constant),
-        map(param, ast::Expression::Param),
-    ))(input)
+    alt((column_ref, map(constant, ast::Expression::Constant), param))(input)
 }
 
 fn exp_expression(input: &str) -> Result<ast::Expression> {
@@ -239,7 +235,7 @@ fn parse(input: &str) -> Result<ast::AST> {
     map(terminated2(insert, opt(symbol(";")), eof), ast::AST::Insert)(input)
 }
 
-pub fn parse_sql(input: &str) -> std::result::Result<ast::AST, ErrorTree<&str>> {
+pub fn parse_sql<'a>(input: &'a str) -> std::result::Result<ast::AST<'a>, ErrorTree<&'a str>> {
     final_parser(parse)(input)
 }
 

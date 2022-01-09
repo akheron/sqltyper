@@ -1,7 +1,7 @@
 use nom::combinator::{map, value};
 use nom::error::ParseError;
 use nom::multi::many0;
-use nom::sequence::{delimited, preceded, terminated, tuple, Tuple};
+use nom::sequence::{delimited, terminated, tuple, Tuple};
 use nom::{IResult, Parser};
 use nom_supreme::error::ErrorTree;
 
@@ -15,20 +15,6 @@ where
     F: Parser<I, O, E>,
 {
     value((), parser)
-}
-
-pub fn preceded2<I, O1, O2, O3, E, F, G, H>(
-    first: F,
-    second: G,
-    third: H,
-) -> impl FnMut(I) -> IResult<I, O3, E>
-where
-    E: ParseError<I>,
-    F: Parser<I, O1, E>,
-    G: Parser<I, O2, E>,
-    H: Parser<I, O3, E>,
-{
-    preceded(first, preceded(second, third))
 }
 
 pub fn terminated2<I, O1, O2, O3, E, F, G, H>(

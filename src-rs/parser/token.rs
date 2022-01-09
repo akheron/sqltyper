@@ -1,13 +1,15 @@
 use nom::branch::alt;
 use nom::bytes::complete::{is_not, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, none_of, one_of};
-use nom::combinator::{opt, recognize};
+use nom::combinator::{map, opt, recognize};
 use nom::multi::{many0, many0_count, many1_count};
-use nom::sequence::{pair, preceded, terminated, tuple};
+use nom::sequence::{delimited, pair, preceded, terminated, tuple};
 use nom::Err;
 use nom_supreme::error::ErrorTree;
 use nom_supreme::tag::complete::tag;
 use nom_supreme::tag::TagError;
+
+use crate::ast;
 
 use super::keyword::Keyword;
 use super::result::Result;
@@ -119,8 +121,15 @@ pub fn string(input: &str) -> Result<&str> {
     recognize(tuple((char('\''), many1_count(none_of("'")), char('\''))))(input)
 }
 
-pub fn param(input: &str) -> Result<&str> {
-    terminated(recognize(tuple((char('$'), digit1))), __)(input)
+pub fn param(input: &str) -> Result<ast::Expression> {
+    delimited(
+        char('$'),
+        map(digit1, |digits: &str| {
+            let param_number = digits.parse::<usize>().unwrap();
+            ast::Expression::Param(param_number)
+        }),
+        __,
+    )(input)
 }
 
 #[cfg(test)]

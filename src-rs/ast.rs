@@ -1,7 +1,19 @@
+use std::fmt::{Display, Formatter};
+
 #[derive(Debug)]
 pub struct TableRef<'a> {
     pub schema: Option<&'a str>,
     pub table: &'a str,
+}
+
+impl<'a> Display for TableRef<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(schema) = self.schema {
+            write!(f, "{}.{}", schema, self.table)
+        } else {
+            write!(f, "{}", self.table)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -18,7 +30,7 @@ pub enum Expression<'a> {
     ColumnRef(&'a str),
     TableColumnRef { table: &'a str, column: &'a str },
     Constant(Constant<'a>),
-    Param(&'a str),
+    Param(usize),
     BinaryOp(Box<Expression<'a>>, &'a str, Box<Expression<'a>>),
 }
 

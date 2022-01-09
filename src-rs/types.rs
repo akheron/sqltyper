@@ -21,9 +21,9 @@ pub enum StatementRowCount {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct NamedValue {
-    name: String,
-    type_: Type,
-    nullable: bool,
+    pub name: String,
+    pub type_: Type,
+    pub nullable: bool,
 }
 
 impl NamedValue {
@@ -35,10 +35,10 @@ impl NamedValue {
         };
     }
 
-    pub fn from_type(name: &str, type_: &Type) -> NamedValue {
+    pub fn from_type(name: &str, type_: Type) -> NamedValue {
         NamedValue {
             name: name.to_string(),
-            type_: type_.clone(),
+            type_,
             nullable: true,
         }
     }
@@ -49,5 +49,40 @@ impl NamedValue {
             type_: column.type_().clone(),
             nullable: true,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct Warning {
+    pub summary: String,
+    pub description: String,
+}
+
+#[derive(Debug)]
+pub struct Warn<T> {
+    pub payload: T,
+    pub warnings: Vec<Warning>,
+}
+
+impl<T> Warn<T> {
+    pub fn of(payload: T) -> Warn<T> {
+        return Warn {
+            payload,
+            warnings: vec![],
+        };
+    }
+
+    pub fn warn<S1: Into<String>, S2: Into<String>>(
+        payload: T,
+        summary: S1,
+        description: S2,
+    ) -> Warn<T> {
+        return Warn {
+            payload,
+            warnings: vec![Warning {
+                summary: summary.into(),
+                description: description.into(),
+            }],
+        };
     }
 }

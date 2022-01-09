@@ -7,15 +7,13 @@ pub mod types;
 use std::fmt;
 use tokio_postgres::{Client, GenericClient, NoTls};
 
-use crate::parser::parse_sql;
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
-use crate::types::{NamedValue, StatementDescription, StatementRowCount};
+use crate::types::{NamedValue, StatementDescription, StatementRowCount, Warn};
 use infer::infer_statement_nullability;
 
 #[derive(Debug)]
 pub enum Error {
     Preprocess(preprocess::Error),
-    Parse(String),
     Postgres(tokio_postgres::Error),
 }
 
@@ -23,7 +21,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Preprocess(_) => write!(f, "Preprocess error"),
-            Error::Parse(err) => write!(f, "Parse error: {}", err),
             Error::Postgres(err) => write!(f, "Postgres error: {}", err),
         }
     }
@@ -41,24 +38,11 @@ impl From<tokio_postgres::Error> for Error {
     }
 }
 
-impl From<nom_supreme::error::ErrorTree<&str>> for Error {
-    fn from(err: nom_supreme::error::ErrorTree<&str>) -> Self {
-        Error::Parse(format!("{}", err))
-    }
-}
-
-pub async fn sql_to_statement_description<'a, C>(
+pub async fn describe_statement<'a, C: GenericClient>(
     client: &C,
-    sql: &'a str,
-) -> Result<StatementDescription<'a>, Error>
-where
-    C: GenericClient,
-{
-    let preprocessed = preprocess_sql(&sql)?;
-    let statement = parse_sql(&preprocessed.sql)?;
-    println!("{:?}", statement);
+    preprocessed: PreprocessedSql<'a>,
+) -> Result<StatementDescription<'a>, Error> {
     let statement = client.prepare(&preprocessed.sql).await?;
-    // infer_statement_nullability(client, &preprocessed.sql);
 
     Ok(StatementDescription {
         sql: preprocessed.sql,
@@ -66,7 +50,13 @@ where
             .params()
             .iter()
             .zip(preprocessed.param_names.iter())
-            .map(|(param, name)| NamedValue::from_type(name, &param))
+            .map(|(param, name)| {
+                NamedValue::new(
+                    name,
+                    param.clone(),
+                    false, // params are non-nullable by default
+                )
+            })
             .collect(),
         columns: statement
             .columns()
@@ -75,6 +65,18 @@ where
             .collect(),
         row_count: StatementRowCount::Many,
     })
+}
+
+pub async fn sql_to_statement_description<'a, C>(
+    client: &C,
+    sql: &'a str,
+) -> Result<Warn<StatementDescription<'a>>, Error>
+where
+    C: GenericClient,
+{
+    let preprocessed = preprocess_sql(&sql)?;
+    let statement_description = describe_statement(client, preprocessed).await?;
+    Ok(infer_statement_nullability(client, statement_description).await)
 }
 
 pub async fn connect_to_database() -> Result<Client, tokio_postgres::Error> {
