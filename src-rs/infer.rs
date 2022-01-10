@@ -1,11 +1,13 @@
 mod db;
 mod error;
 mod param;
+mod rowcount;
 
 use tokio_postgres::GenericClient;
 
 use self::error::Error;
 use self::param::infer_param_nullability;
+use self::rowcount::infer_row_count;
 use crate::types::Warning;
 use crate::{
     parser::parse_sql,
@@ -31,6 +33,8 @@ pub async fn infer_statement_nullability<'a, C: GenericClient>(
     if let Err(err) = infer_param_nullability(client, &ast, &mut statement.params).await {
         warnings.push(err_to_warning(err));
     }
+
+    statement.row_count = infer_row_count(&ast);
 
     Warn {
         payload: statement,

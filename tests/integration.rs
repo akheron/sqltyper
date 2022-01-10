@@ -6,11 +6,11 @@ async fn test_insert() {
     utils::sql_test(
         "CREATE TABLE person (id SERIAL NOT NULL, name TEXT NOT NULL, age INT)",
         "INSERT INTO person (name, age) VALUES (${name}, ${age})",
-        StatementRowCount::Many, // TODO: Row count is not inferred correctly yet
+        StatementRowCount::Zero,
         &[("name", Type::TEXT, false), ("age", Type::INT4, true)],
         &[],
     )
-    .await;
+        .await;
 }
 
 mod utils {
