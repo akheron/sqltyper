@@ -82,7 +82,7 @@ pub fn symbol<'a>(s: &'static str) -> impl FnMut(&'a str) -> Result<&'a str> {
     terminated(tag(s), __)
 }
 
-fn any_operator(input: &str) -> Result<&str> {
+pub fn any_operator(input: &str) -> Result<&str> {
     terminated(recognize(many1_count(one_of("-+*/<>=~!@#%^&|`?"))), __)(input)
 }
 

@@ -11,6 +11,7 @@ pub async fn infer_param_nullability<C: GenericClient>(
     params: &mut Vec<NamedValue>,
 ) -> Result<(), Error> {
     match ast {
+        ast::AST::Select(_) => {}
         ast::AST::Insert(ast::Insert {
             table,
             columns,

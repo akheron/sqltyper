@@ -1,38 +1,4 @@
-use std::fmt::{Display, Formatter};
-
-#[derive(Debug)]
-pub struct TableRef<'a> {
-    pub schema: Option<&'a str>,
-    pub table: &'a str,
-}
-
-impl<'a> Display for TableRef<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(schema) = self.schema {
-            write!(f, "{}.{}", schema, self.table)
-        } else {
-            write!(f, "{}", self.table)
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Constant<'a> {
-    True,
-    False,
-    Null,
-    Number(&'a str),
-    String(&'a str),
-}
-
-#[derive(Debug)]
-pub enum Expression<'a> {
-    ColumnRef(&'a str),
-    TableColumnRef { table: &'a str, column: &'a str },
-    Constant(Constant<'a>),
-    Param(usize),
-    BinaryOp(Box<Expression<'a>>, &'a str, Box<Expression<'a>>),
-}
+use super::{Expression, TableRef, UpdateAssignment};
 
 #[derive(Debug)]
 pub enum ValuesValue<'a> {
@@ -78,22 +44,10 @@ pub enum Returning<'a> {
 
 #[derive(Debug)]
 pub struct Insert<'a> {
-    // ctes: WithQuery[]
     pub table: TableRef<'a>,
     pub as_: Option<&'a str>,
     pub columns: Option<Vec<&'a str>>,
     pub values: Values<'a>,
     pub on_conflict: Option<OnConflict<'a>>,
     pub returning: Option<Returning<'a>>,
-}
-
-#[derive(Debug)]
-pub struct UpdateAssignment<'a> {
-    pub column: &'a str,
-    pub value: Option<Expression<'a>>, // None means DEFAULT
-}
-
-#[derive(Debug)]
-pub enum AST<'a> {
-    Insert(Insert<'a>),
 }
