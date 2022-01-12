@@ -12,17 +12,14 @@ pub async fn infer_param_nullability<C: GenericClient>(
 ) -> Result<(), Error> {
     match ast {
         ast::AST::Select(_) => {}
-        ast::AST::Insert(ast::Insert {
-            table,
-            columns,
-            values,
-            ..
-        }) => {
-            if let Some(values_list_params) = find_params_from_values(values) {
+        ast::AST::Insert(ast::Insert { table, values, .. }) => match values {
+            ast::Values::DefaultValues => {}
+            ast::Values::Values { columns, values } => {
                 let target_columns = find_insert_columns(client, table, columns).await?;
+                let values_list_params = find_params_from_values(values);
                 combine_param_nullability(target_columns, values_list_params, params);
             }
-        }
+        },
     }
     Ok(())
 }
@@ -62,72 +59,19 @@ fn match_insert_columns(
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::infer::db::Column;
-    use crate::infer::param::match_insert_columns;
-
-    fn col(name: &str) -> Column {
-        Column {
-            nullable: false,
-            name: name.to_string(),
-            hidden: false,
-            type_: 5,
-        }
-    }
-
-    #[test]
-    fn test_match_query_columns() {
-        assert_eq!(
-            match_insert_columns(&None, vec![col("foo"), col("bar")]).unwrap(),
-            vec![col("foo"), col("bar")]
-        )
-    }
-}
-
-/// Returns None if DEFAULT VALUES was used
-fn find_params_from_values(values: &ast::Values) -> Option<Vec<Vec<Option<usize>>>> {
-    match values {
-        ast::Values::DefaultValues => None,
-        ast::Values::Values(vec) => Some(
-            vec.iter()
-                .map(|inner| {
-                    inner
-                        .iter()
-                        .map(|value| match value {
-                            ast::ValuesValue::Value(ast::Expression::Param(index)) => Some(*index),
-                            _ => None,
-                        })
-                        .collect()
+fn find_params_from_values(values: &Vec<Vec<ast::ValuesValue>>) -> Vec<Vec<Option<usize>>> {
+    values
+        .iter()
+        .map(|inner| {
+            inner
+                .iter()
+                .map(|value| match value {
+                    ast::ValuesValue::Value(ast::Expression::Param(index)) => Some(*index),
+                    _ => None,
                 })
-                .collect(),
-        ),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::ast;
-
-    use super::find_params_from_values;
-
-    #[test]
-    fn test_find_params_for_values() {
-        assert_eq!(find_params_from_values(&ast::Values::DefaultValues), None);
-        assert_eq!(
-            find_params_from_values(&ast::Values::Values(vec![
-                vec![
-                    ast::ValuesValue::Default,                          // => None
-                    ast::ValuesValue::Value(ast::Expression::Param(1)), // => Some(1)
-                    ast::ValuesValue::Value(ast::Expression::Constant(ast::Constant::True)) // => None
-                ],
-                vec![
-                    ast::ValuesValue::Default // => None
-                ]
-            ])),
-            Some(vec![vec![None, Some(1), None], vec![None]])
-        );
-    }
+                .collect()
+        })
+        .collect()
 }
 
 fn combine_param_nullability(
@@ -142,5 +86,57 @@ fn combine_param_nullability(
                 params[param_index - 1].nullable = target_column.nullable;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ast;
+    use crate::infer::db::Column;
+
+    use super::find_params_from_values;
+    use super::match_insert_columns;
+
+    fn col(name: &str) -> Column {
+        Column {
+            nullable: false,
+            name: name.to_string(),
+            hidden: false,
+            type_: 5,
+        }
+    }
+
+    #[test]
+    fn test_match_insert_columns() {
+        assert_eq!(
+            match_insert_columns(&None, vec![col("foo"), col("bar")]).unwrap(),
+            vec![col("foo"), col("bar")]
+        );
+        assert_eq!(
+            match_insert_columns(&Some(vec!["bar", "foo"]), vec![col("foo"), col("bar")]).unwrap(),
+            vec![col("bar"), col("foo")]
+        );
+        match_insert_columns(
+            &Some(vec!["baz", "bar", "foo"]),
+            vec![col("foo"), col("bar")],
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_find_params_for_values() {
+        assert_eq!(
+            find_params_from_values(&vec![
+                vec![
+                    ast::ValuesValue::Default,                          // => None
+                    ast::ValuesValue::Value(ast::Expression::Param(1)), // => Some(1)
+                    ast::ValuesValue::Value(ast::Expression::Constant(ast::Constant::True)) // => None
+                ],
+                vec![
+                    ast::ValuesValue::Default // => None
+                ]
+            ]),
+            vec![vec![None, Some(1), None], vec![None]]
+        );
     }
 }

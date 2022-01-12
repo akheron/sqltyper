@@ -29,9 +29,9 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
                 Some(_) => match values {
                     // INSERT INTO ... DEFAULT VALUES always creates a single row
                     ast::Values::DefaultValues => StatementRowCount::One,
-                    ast::Values::Values(expr_values) => {
+                    ast::Values::Values { values, .. } => {
                         // Check the length of the VALUES expression list
-                        if expr_values.len() == 1 {
+                        if values.len() == 1 {
                             StatementRowCount::One
                         } else {
                             StatementRowCount::Many

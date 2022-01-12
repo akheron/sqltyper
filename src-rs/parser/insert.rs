@@ -27,22 +27,15 @@ fn expression_values_list(input: &str) -> Result<Vec<ast::ValuesValue>> {
     list_of1(expression_values_list_item)(input)
 }
 
-fn expression_values(input: &str) -> Result<ast::Values> {
-    map(
-        preceded(
+fn values(input: &str) -> Result<ast::Values> {
+    seq(
+        (
+            opt(identifier_list),
             keyword(Keyword::VALUES),
             sep_by1(",", expression_values_list),
         ),
-        ast::Values::Values,
+        |(columns, _, values)| ast::Values::Values { columns, values },
     )(input)
-}
-
-fn values(input: &str) -> Result<ast::Values> {
-    alt((
-        default_values,
-        expression_values,
-        // TODO: subquery select
-    ))(input)
 }
 
 fn insert_into(input: &str) -> Result<ast::TableRef> {
@@ -110,15 +103,13 @@ pub fn insert(input: &str) -> Result<ast::Insert> {
         (
             insert_into,
             opt(as_req),
-            opt(identifier_list),
-            values,
+            alt((default_values, values)),
             opt(on_conflict),
             opt(returning),
         ),
-        |(table, as_, columns, values, on_conflict, returning)| ast::Insert {
+        |(table, as_, values, on_conflict, returning)| ast::Insert {
             table,
             as_,
-            columns,
             values,
             on_conflict,
             returning,

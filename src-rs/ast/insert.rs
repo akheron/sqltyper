@@ -9,7 +9,10 @@ pub enum ValuesValue<'a> {
 #[derive(Debug)]
 pub enum Values<'a> {
     DefaultValues,
-    Values(Vec<Vec<ValuesValue<'a>>>),
+    Values {
+        columns: Option<Vec<&'a str>>,
+        values: Vec<Vec<ValuesValue<'a>>>,
+    },
 }
 
 #[derive(Debug)]
@@ -46,7 +49,6 @@ pub enum Returning<'a> {
 pub struct Insert<'a> {
     pub table: TableRef<'a>,
     pub as_: Option<&'a str>,
-    pub columns: Option<Vec<&'a str>>,
     pub values: Values<'a>,
     pub on_conflict: Option<OnConflict<'a>>,
     pub returning: Option<Returning<'a>>,
