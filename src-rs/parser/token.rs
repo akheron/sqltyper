@@ -2,12 +2,14 @@ use nom::branch::alt;
 use nom::bytes::complete::{is_not, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, none_of, one_of};
 use nom::combinator::{map, opt, recognize};
+use nom::error::{ErrorKind, ParseError};
 use nom::multi::{many0, many0_count, many1_count};
 use nom::sequence::{delimited, pair, preceded, terminated, tuple};
 use nom::Err;
 use nom_supreme::error::ErrorTree;
 use nom_supreme::tag::complete::tag;
 use nom_supreme::tag::TagError;
+use std::str::FromStr;
 
 use crate::ast;
 
@@ -73,9 +75,17 @@ fn unquoted_identifier(input: &str) -> Result<&str> {
     match_identifier(input)
 }
 
-pub fn identifier(input: &str) -> Result<&str> {
+pub fn identifier(i: &str) -> Result<&str> {
     // TODO: quoted identifier
-    unquoted_identifier(input)
+    let (input, ident) = unquoted_identifier(i)?;
+    if Keyword::from_str(ident.to_ascii_uppercase().as_str()).is_ok() {
+        Err(Err::Error(ErrorTree::<&str>::from_error_kind(
+            i,
+            ErrorKind::Verify,
+        )))
+    } else {
+        Ok((input, ident))
+    }
 }
 
 pub fn symbol<'a>(s: &'static str) -> impl FnMut(&'a str) -> Result<&'a str> {

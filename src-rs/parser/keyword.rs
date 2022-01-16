@@ -1,6 +1,8 @@
 use strum_macros;
 
-#[derive(Clone, Copy, strum_macros::Display, strum_macros::IntoStaticStr)]
+#[derive(
+    Clone, Copy, strum_macros::Display, strum_macros::EnumString, strum_macros::IntoStaticStr,
+)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum Keyword {
     ALL,

@@ -26,7 +26,7 @@ pub struct UpdateAssignment<'a> {
 #[derive(Debug)]
 pub struct WindowDefinition<'a> {
     pub existing_window_name: Option<&'a str>,
-    pub partition_by: Option<Expression<'a>>,
+    pub partition_by: Option<Vec<Expression<'a>>>,
     pub order_by: Option<Vec<OrderBy<'a>>>,
 }
 

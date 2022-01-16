@@ -38,8 +38,8 @@ fn cross_join(input: &str) -> Result<JoinSpec> {
 }
 
 fn qualified_join_type(input: &str) -> Result<ast::JoinType> {
-    map(
-        terminated(
+    seq(
+        (
             opt(alt((
                 map(keyword(Keyword::INNER), |_| ast::JoinType::Inner),
                 terminated(
@@ -53,7 +53,7 @@ fn qualified_join_type(input: &str) -> Result<ast::JoinType> {
             ))),
             keyword(Keyword::JOIN),
         ),
-        |join_type| join_type.unwrap_or(ast::JoinType::Inner),
+        |(join_type, _)| join_type.unwrap_or(ast::JoinType::Inner),
     )(input)
 }
 

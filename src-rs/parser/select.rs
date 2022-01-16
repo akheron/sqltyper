@@ -113,7 +113,7 @@ fn window_definition(input: &str) -> Result<ast::WindowDefinition> {
             opt(identifier),
             opt(preceded(
                 keywords(&[Keyword::PARTITION, Keyword::BY]),
-                expression,
+                sep_by1(",", expression),
             )),
             opt(order_by),
         ),
