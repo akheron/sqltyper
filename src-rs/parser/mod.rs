@@ -1,3 +1,4 @@
+mod cte;
 mod expression;
 mod insert;
 mod join;
@@ -9,6 +10,7 @@ mod token;
 mod update;
 mod utils;
 
+use crate::parser::cte::with_queries;
 use nom::branch::alt;
 use nom::combinator::{eof, map, opt};
 use nom_supreme::error::ErrorTree;
@@ -22,7 +24,16 @@ use self::utils::*;
 use super::ast;
 
 fn statement(input: &str) -> Result<ast::AST> {
-    alt((map(select, ast::AST::Select), map(insert, ast::AST::Insert)))(input)
+    seq(
+        (
+            opt(with_queries),
+            alt((
+                map(select, ast::Query::Select),
+                map(insert, ast::Query::Insert),
+            )),
+        ),
+        |(ctes, query)| ast::AST { ctes, query },
+    )(input)
 }
 
 pub fn parse_sql(input: &str) -> std::result::Result<ast::AST, ErrorTree<&str>> {

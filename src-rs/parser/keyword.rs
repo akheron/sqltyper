@@ -51,4 +51,5 @@ pub enum Keyword {
     VALUES,
     WHERE,
     WINDOW,
+    WITH,
 }

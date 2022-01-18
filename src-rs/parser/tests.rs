@@ -1,6 +1,19 @@
 use utils::test;
 
 #[tokio::test]
+async fn test_cte() {
+    test(
+        &["CREATE TABLE person (id int, age int, flag bool)"],
+        &[
+            "WITH foo AS (SELECT id FROM person) SELECT * FROM foo",
+            "WITH foo (bar, baz) AS (SELECT id, age FROM person) SELECT baz, bar FROM foo",
+            "WITH foo AS (SELECT id, age FROM person), bar AS (SELECT id FROM foo) SELECT * FROM bar",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_insert() {
     test(
         &["CREATE TABLE person (id int, age int, flag bool, CONSTRAINT unique_id UNIQUE (id))"],

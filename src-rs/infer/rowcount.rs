@@ -1,8 +1,8 @@
 use crate::{ast, StatementRowCount};
 
 pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
-    match ast {
-        ast::AST::Select(ast::Select {
+    match &ast.query {
+        ast::Query::Select(ast::Select {
             body,
             set_ops,
             limit,
@@ -22,7 +22,7 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
                 StatementRowCount::Many
             }
         }
-        ast::AST::Insert(ast::Insert {
+        ast::Query::Insert(ast::Insert {
             values, returning, ..
         }) => {
             match returning {
