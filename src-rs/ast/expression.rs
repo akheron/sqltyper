@@ -39,4 +39,8 @@ pub enum Expression<'a> {
         table: &'a str,
         column: &'a str,
     },
+    TypeCast {
+        lhs: Box<Expression<'a>>,
+        target_type: &'a str,
+    }
 }

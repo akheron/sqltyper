@@ -8,6 +8,7 @@ use crate::parser::keyword::Keyword;
 use crate::parser::select::{subquery_select, window_definition};
 use crate::parser::special_function::special_function_call;
 use crate::parser::token::{identifier, keyword, number, operator, param, string, symbol};
+use crate::parser::typecasts::{prefix_typecast, psql_type_cast};
 use crate::parser::utils::{binop, keyword_to, parenthesized, prefixed, sep_by0, seq};
 
 use super::Result;
@@ -126,16 +127,29 @@ fn scalar_subquery(input: &str) -> Result<ast::Expression> {
 }
 
 pub fn primary_expression(input: &str) -> Result<ast::Expression> {
-    alt((
-        array_subquery,
-        case,
-        special_function_call,
-        column_ref_or_function_call,
-        map(constant, ast::Expression::Constant),
-        param,
-        scalar_subquery,
-        parenthesized(expression),
-    ))(input)
+    seq(
+        (
+            alt((
+                array_subquery,
+                case,
+                special_function_call,
+                prefix_typecast,
+                column_ref_or_function_call,
+                map(constant, ast::Expression::Constant),
+                param,
+                scalar_subquery,
+                parenthesized(expression),
+            )),
+            opt(psql_type_cast),
+        ),
+        |(expr, typecast_opt)| match typecast_opt {
+            None => expr,
+            Some(target_type) => ast::Expression::TypeCast {
+                lhs: Box::new(expr),
+                target_type,
+            },
+        },
+    )(input)
 }
 
 fn exp_expression(input: &str) -> Result<ast::Expression> {

@@ -33,7 +33,7 @@ where
     terminated(first, terminated(second, third))
 }
 
-pub fn prefixed<'a, O, F>(kw: Keyword, parser: F) -> impl FnMut(&'a str) -> Result<O>
+pub fn prefixed<'a, O, F>(kw: Keyword, parser: F) -> impl FnMut(&'a str) -> Result<'a, O>
 where
     F: Parser<&'a str, O, ErrorTree<&'a str>>,
 {

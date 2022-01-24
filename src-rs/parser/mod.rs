@@ -8,6 +8,7 @@ mod result;
 mod select;
 mod special_function;
 mod token;
+mod typecasts;
 mod update;
 mod utils;
 

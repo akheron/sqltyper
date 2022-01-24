@@ -2,8 +2,8 @@ use super::Result;
 use crate::ast;
 use crate::parser::expression::primary_expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::token::{keyword, symbol};
-use crate::parser::utils::{parenthesized, prefixed, seq};
+use crate::parser::token::symbol;
+use crate::parser::utils::{keyword_to, parenthesized, prefixed, seq};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
 use nom::sequence::preceded;
@@ -88,14 +88,11 @@ fn trim(input: &str) -> Result<ast::Expression> {
         Keyword::TRIM,
         seq(
             (
-                opt(map(
-                    alt((
-                        keyword(Keyword::LEADING),
-                        keyword(Keyword::TRAILING),
-                        keyword(Keyword::BOTH),
-                    )),
-                    |kw| kw.into(),
-                )),
+                opt(alt((
+                    keyword_to(Keyword::LEADING, "LEADING"),
+                    keyword_to(Keyword::TRAILING, "TRAILING"),
+                    keyword_to(Keyword::BOTH, "BOTH"),
+                ))),
                 alt((
                     seq(
                         (

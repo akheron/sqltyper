@@ -65,6 +65,32 @@ async fn test_expression_function_call() {
 }
 
 #[tokio::test]
+async fn test_expression_typecast() {
+    test(
+        &[],
+        &[
+            // special type casts
+            "SELECT '10011'::bit(5)",
+            "SELECT 'foo bar baz'::character varying (200)",
+            "SELECT '1.23'::double precision",
+            "SELECT '20:20:20.123456'::time (6) without time zone",
+            "SELECT '2020-02-02T20:20:20.123456'::timestamp with time zone",
+            "SELECT '1'::interval minute to second",
+            // prefix type casts
+            "SELECT bigint '123'",
+            "SELECT bit(5) '10011'",
+            "SELECT character varying (200) 'foo bar baz'",
+            "SELECT double precision '1.23'",
+            "SELECT int4 '1'",
+            "SELECT time (6) without time zone '20:20:20.123456'",
+            "SELECT timestamp with time zone '2020-02-02T20:20:20.123456'",
+            "SELECT interval (1) '1'",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_cte() {
     test(
         &["CREATE TABLE person (id int, age int, flag bool)"],

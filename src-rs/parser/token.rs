@@ -47,13 +47,13 @@ pub fn match_identifier(input: &str) -> Result<&str> {
     )(input)
 }
 
-pub fn keyword<'a>(kw: Keyword) -> impl FnMut(&'a str) -> Result<Keyword> {
+pub fn keyword<'a>(kw: Keyword) -> impl FnMut(&'a str) -> Result<()> {
     let kw_str: &'static str = kw.into();
     move |input| {
         let orig_input = <&str>::clone(&input);
         let (input, ident) = match_identifier(input)?;
         if ident.to_ascii_uppercase().as_str() == kw_str {
-            Ok((input, kw))
+            Ok((input, ()))
         } else {
             Err(Err::Error(ErrorTree::<&str>::from_tag(orig_input, kw_str)))
         }
