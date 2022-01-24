@@ -6,6 +6,7 @@ mod keyword;
 mod misc;
 mod result;
 mod select;
+mod special_function;
 mod token;
 mod update;
 mod utils;

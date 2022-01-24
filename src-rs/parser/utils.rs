@@ -1,4 +1,5 @@
-use nom::combinator::{map, value};
+use crate::parser::token::__;
+use nom::combinator::{map, opt, value};
 use nom::error::ParseError;
 use nom::multi::many0;
 use nom::sequence::{delimited, terminated, tuple, Tuple};
@@ -58,11 +59,20 @@ where
     )
 }
 
+pub fn sep_by0<'a, O, F>(sep: &'static str, parser: F) -> impl FnMut(&'a str) -> Result<Vec<O>>
+where
+    F: Parser<&'a str, O, ErrorTree<&'a str>> + Copy,
+{
+    map(opt(sep_by1(sep, parser)), |result| {
+        result.unwrap_or_else(|| vec![])
+    })
+}
+
 pub fn parenthesized<'a, O, F>(parser: F) -> impl FnMut(&'a str) -> Result<O>
 where
     F: Parser<&'a str, O, ErrorTree<&'a str>>,
 {
-    delimited(symbol("("), parser, symbol(")"))
+    terminated(delimited(symbol("("), parser, symbol(")")), __)
 }
 
 pub fn list_of1<'a, O, F>(parser: F) -> impl FnMut(&'a str) -> Result<Vec<O>>

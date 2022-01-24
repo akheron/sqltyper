@@ -40,17 +40,3 @@ pub fn table_ref(input: &str) -> Result<ast::TableRef> {
         },
     )(input)
 }
-
-// [ table ] . column
-pub fn column_ref(input: &str) -> Result<ast::Expression> {
-    seq(
-        (identifier, opt(preceded(symbol("."), identifier))),
-        |(id1, id2)| {
-            if let Some(column) = id2 {
-                ast::Expression::TableColumnRef { table: id1, column }
-            } else {
-                ast::Expression::ColumnRef(id1)
-            }
-        },
-    )(input)
-}

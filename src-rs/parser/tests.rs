@@ -1,6 +1,70 @@
 use utils::test;
 
 #[tokio::test]
+async fn test_expression_subqueres() {
+    test(
+        &["CREATE TABLE person (age integer)"],
+        &[
+            "SELECT array(SELECT age FROM person)",
+            "SELECT (SELECT age FROM PERSON)",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_expression_case() {
+    test(
+        &[],
+        &[
+            "SELECT CASE WHEN true THEN 1 ELSE 0 END",
+            "SELECT CASE WHEN true THEN 1 END",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_expression_special_function_call() {
+    test(
+        &[],
+        &[
+            "SELECT overlay('Txxxxas' placing 'hom' from 2)",
+            "SELECT overlay('Txxxxas' placing 'hom' from 2 for 4)",
+            "SELECT position('om' IN 'Thomas')",
+            "SELECT substring('Thomas' from 2 for 3)",
+            "SELECT substring('Thomas' from 3)",
+            "SELECT substring('Thomas' for 2)",
+            "SELECT trim(both 'xyz' from 'yxTomxx')",
+            "SELECT trim(leading from 'yxTomxx', 'xyz')",
+            "SELECT trim(both 'yxTomxx', 'xyz')",
+            "SELECT trim(trailing from 'abc   ')",
+            "SELECT trim('  abc  ')",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_expression_function_call() {
+    test(
+        &["CREATE TABLE person (age integer)"],
+        &[
+            "SELECT count(*) FROM person",
+            "SELECT now()",
+            "SELECT sqrt(2)",
+            "SELECT make_date(1999, 1, 2)",
+            "SELECT age, count(*) OVER () FROM person",
+            "SELECT count(*) FILTER (WHERE age > 0) OVER () FROM person",
+            "SELECT count(*) OVER (PARTITION BY age) FROM person",
+            "SELECT count(*) OVER (ORDER BY age) FROM person",
+            "SELECT count(*) FILTER (WHERE age > 0) OVER (PARTITION BY age ORDER BY age) FROM person",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_cte() {
     test(
         &["CREATE TABLE person (id int, age int, flag bool)"],

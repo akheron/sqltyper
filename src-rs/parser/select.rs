@@ -1,5 +1,6 @@
 use super::Result;
 use crate::ast;
+use crate::parser::cte::with_queries;
 use crate::parser::expression::expression;
 use crate::parser::join::table_expression;
 use crate::parser::keyword::Keyword;
@@ -107,7 +108,7 @@ fn select_body(input: &str) -> Result<ast::SelectBody> {
     )(input)
 }
 
-fn window_definition(input: &str) -> Result<ast::WindowDefinition> {
+pub fn window_definition(input: &str) -> Result<ast::WindowDefinition> {
     seq(
         (
             opt(identifier),
@@ -221,6 +222,12 @@ fn limit(input: &str) -> Result<ast::Limit> {
         ),
         |(_, count, offset)| ast::Limit { count, offset },
     )(input)
+}
+
+pub fn subquery_select(input: &str) -> Result<ast::SubquerySelect> {
+    seq((opt(with_queries), select), |(ctes, query)| {
+        ast::SubquerySelect { ctes, query }
+    })(input)
 }
 
 pub fn select(input: &str) -> Result<ast::Select> {

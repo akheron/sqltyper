@@ -1,4 +1,5 @@
 use super::{Expression, NamedWindowDefinition, OrderBy, TableExpression};
+use crate::ast::WithQuery;
 
 #[derive(Debug)]
 pub enum Distinct<'a> {
@@ -67,4 +68,10 @@ pub struct Select<'a> {
     pub set_ops: Vec<SelectOp<'a>>,
     pub order_by: Vec<OrderBy<'a>>,
     pub limit: Option<Limit<'a>>,
+}
+
+#[derive(Debug)]
+pub struct SubquerySelect<'a> {
+    pub ctes: Option<Vec<WithQuery<'a>>>,
+    pub query: Select<'a>,
 }
