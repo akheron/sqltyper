@@ -4,12 +4,12 @@ use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
 use crate::parser::misc::{as_opt, identifier_list, table_ref};
 use crate::parser::statement;
-use crate::parser::token::{keyword, keywords};
-use crate::parser::utils::{parenthesized, seq};
+use crate::parser::token::keyword;
+use crate::parser::utils::{keyword_to, parenthesized, prefixed, prefixed_, seq};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
 use nom::multi::many0;
-use nom::sequence::{preceded, terminated};
+use nom::sequence::terminated;
 
 enum Join<'a> {
     Cross,
@@ -28,8 +28,8 @@ struct JoinSpec<'a> {
 }
 
 fn cross_join(input: &str) -> Result<JoinSpec> {
-    preceded(
-        keywords(&[Keyword::CROSS, Keyword::JOIN]),
+    prefixed_(
+        &[Keyword::CROSS, Keyword::JOIN],
         map(table_expression, |table_expression| JoinSpec {
             join: Join::Cross,
             table_expression,
@@ -41,12 +41,12 @@ fn qualified_join_type(input: &str) -> Result<ast::JoinType> {
     seq(
         (
             opt(alt((
-                map(keyword(Keyword::INNER), |_| ast::JoinType::Inner),
+                keyword_to(Keyword::INNER, ast::JoinType::Inner),
                 terminated(
                     alt((
-                        map(keyword(Keyword::LEFT), |_| ast::JoinType::Left),
-                        map(keyword(Keyword::RIGHT), |_| ast::JoinType::Right),
-                        map(keyword(Keyword::FULL), |_| ast::JoinType::Full),
+                        keyword_to(Keyword::LEFT, ast::JoinType::Left),
+                        keyword_to(Keyword::RIGHT, ast::JoinType::Right),
+                        keyword_to(Keyword::FULL, ast::JoinType::Full),
                     )),
                     opt(keyword(Keyword::OUTER)),
                 ),
@@ -63,12 +63,9 @@ fn qualified_join(input: &str) -> Result<JoinSpec> {
             qualified_join_type,
             table_expression,
             alt((
+                map(prefixed(Keyword::ON, expression), ast::JoinCondition::On),
                 map(
-                    preceded(keyword(Keyword::ON), expression),
-                    ast::JoinCondition::On,
-                ),
-                map(
-                    preceded(keyword(Keyword::USING), identifier_list),
+                    prefixed(Keyword::USING, identifier_list),
                     ast::JoinCondition::Using,
                 ),
             )),
@@ -84,7 +81,7 @@ fn qualified_join(input: &str) -> Result<JoinSpec> {
 }
 
 fn natural_join_type(input: &str) -> Result<ast::JoinType> {
-    preceded(keyword(Keyword::NATURAL), qualified_join_type)(input)
+    prefixed(Keyword::NATURAL, qualified_join_type)(input)
 }
 
 fn natural_join(input: &str) -> Result<JoinSpec> {

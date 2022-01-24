@@ -36,14 +36,14 @@ pub struct SelectBody<'a> {
     pub window: Vec<NamedWindowDefinition<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SelectOpType {
     Union,
     Intersect,
     Except,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DuplicatesType {
     Distinct,
     All,

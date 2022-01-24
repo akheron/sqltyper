@@ -1,5 +1,5 @@
 use nom::branch::alt;
-use nom::combinator::{cut, map, opt};
+use nom::combinator::{map, opt};
 use nom::multi::many1;
 use nom::sequence::{preceded, tuple};
 
@@ -8,13 +8,13 @@ use crate::parser::keyword::Keyword;
 use crate::parser::select::{subquery_select, window_definition};
 use crate::parser::special_function::special_function_call;
 use crate::parser::token::{identifier, keyword, number, operator, param, string, symbol};
-use crate::parser::utils::{binop, parenthesized, sep_by0, seq};
+use crate::parser::utils::{binop, keyword_to, parenthesized, prefixed, sep_by0, seq};
 
 use super::Result;
 
 fn array_subquery(input: &str) -> Result<ast::Expression> {
     map(
-        preceded(keyword(Keyword::ARRAY), parenthesized(subquery_select)),
+        prefixed(Keyword::ARRAY, parenthesized(subquery_select)),
         |select| ast::Expression::ArraySubquery(Box::new(select)),
     )(input)
 }
@@ -22,26 +22,22 @@ fn array_subquery(input: &str) -> Result<ast::Expression> {
 fn case_branch(input: &str) -> Result<ast::CaseBranch> {
     seq(
         (
-            preceded(keyword(Keyword::WHEN), cut(expression)),
-            preceded(keyword(Keyword::THEN), cut(expression)),
+            prefixed(Keyword::WHEN, expression),
+            prefixed(Keyword::THEN, expression),
         ),
         |(condition, result)| ast::CaseBranch { condition, result },
     )(input)
 }
 
 fn case_else(input: &str) -> Result<ast::Expression> {
-    preceded(keyword(Keyword::ELSE), cut(expression))(input)
+    prefixed(Keyword::ELSE, expression)(input)
 }
 
 fn case(input: &str) -> Result<ast::Expression> {
     map(
-        preceded(
-            keyword(Keyword::CASE),
-            cut(tuple((
-                many1(case_branch),
-                opt(case_else),
-                keyword(Keyword::END),
-            ))),
+        prefixed(
+            Keyword::CASE,
+            tuple((many1(case_branch), opt(case_else), keyword(Keyword::END))),
         ),
         |(branches, else_, _)| ast::Expression::Case {
             branches,
@@ -52,9 +48,9 @@ fn case(input: &str) -> Result<ast::Expression> {
 
 fn constant(input: &str) -> Result<ast::Constant> {
     alt((
-        map(keyword(Keyword::TRUE), |_| ast::Constant::True),
-        map(keyword(Keyword::FALSE), |_| ast::Constant::False),
-        map(keyword(Keyword::NULL), |_| ast::Constant::Null),
+        keyword_to(Keyword::TRUE, ast::Constant::True),
+        keyword_to(Keyword::FALSE, ast::Constant::False),
+        keyword_to(Keyword::NULL, ast::Constant::Null),
         map(number, ast::Constant::Number),
         map(string, ast::Constant::String),
     ))(input)
@@ -69,23 +65,23 @@ fn function_arguments(input: &str) -> Result<Vec<ast::Expression>> {
 }
 
 fn window_filter(input: &str) -> Result<ast::Expression> {
-    preceded(
-        keyword(Keyword::FILTER),
-        cut(parenthesized(preceded(keyword(Keyword::WHERE), expression))),
+    prefixed(
+        Keyword::FILTER,
+        parenthesized(preceded(keyword(Keyword::WHERE), expression)),
     )(input)
 }
 
 fn window_over(input: &str) -> Result<ast::WindowDefinition> {
-    preceded(
-        keyword(Keyword::OVER),
-        cut(alt((
+    prefixed(
+        Keyword::OVER,
+        alt((
             map(identifier, |existing_window_name| ast::WindowDefinition {
                 existing_window_name: Some(existing_window_name),
                 partition_by: None,
                 order_by: None,
             }),
             parenthesized(window_definition),
-        ))),
+        )),
     )(input)
 }
 

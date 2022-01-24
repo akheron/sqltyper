@@ -5,10 +5,9 @@ use crate::parser::keyword::Keyword;
 use crate::parser::misc::{as_opt, as_req, identifier_list, table_ref};
 use crate::parser::token::{identifier, keyword, keywords, symbol};
 use crate::parser::update::update_assignments;
-use crate::parser::utils::{list_of1, sep_by1, seq};
+use crate::parser::utils::{list_of1, prefixed, prefixed_, sep_by1, seq};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
-use nom::sequence::preceded;
 
 fn default_values(input: &str) -> Result<ast::Values> {
     map(keywords(&[Keyword::DEFAULT, Keyword::VALUES]), |_| {
@@ -31,36 +30,35 @@ fn values(input: &str) -> Result<ast::Values> {
     seq(
         (
             opt(identifier_list),
-            keyword(Keyword::VALUES),
-            sep_by1(",", expression_values_list),
+            prefixed(Keyword::VALUES, sep_by1(",", expression_values_list)),
         ),
-        |(columns, _, values)| ast::Values::Values { columns, values },
+        |(columns, values)| ast::Values::Values { columns, values },
     )(input)
 }
 
 fn insert_into(input: &str) -> Result<ast::TableRef> {
-    preceded(keywords(&[Keyword::INSERT, Keyword::INTO]), table_ref)(input)
+    prefixed_(&[Keyword::INSERT, Keyword::INTO], table_ref)(input)
 }
 
 fn conflict_target(input: &str) -> Result<ast::ConflictTarget> {
     alt((
         map(identifier_list, ast::ConflictTarget::IndexColumns),
         map(
-            preceded(keywords(&[Keyword::ON, Keyword::CONSTRAINT]), identifier),
+            prefixed_(&[Keyword::ON, Keyword::CONSTRAINT], identifier),
             ast::ConflictTarget::Constraint,
         ),
     ))(input)
 }
 
 fn conflict_action(input: &str) -> Result<ast::ConflictAction> {
-    preceded(
-        keyword(Keyword::DO),
+    prefixed(
+        Keyword::DO,
         alt((
             map(keyword(Keyword::NOTHING), |_| {
                 ast::ConflictAction::DoNothing
             }),
             map(
-                preceded(keyword(Keyword::UPDATE), update_assignments),
+                prefixed(Keyword::UPDATE, update_assignments),
                 ast::ConflictAction::DoUpdate,
             ),
         )),
@@ -68,16 +66,15 @@ fn conflict_action(input: &str) -> Result<ast::ConflictAction> {
 }
 
 fn on_conflict(input: &str) -> Result<ast::OnConflict> {
-    seq(
-        (
-            keywords(&[Keyword::ON, Keyword::CONFLICT]),
-            opt(conflict_target),
-            conflict_action,
+    prefixed_(
+        &[Keyword::ON, Keyword::CONFLICT],
+        seq(
+            (opt(conflict_target), conflict_action),
+            |(conflict_target, conflict_action)| ast::OnConflict {
+                conflict_target,
+                conflict_action,
+            },
         ),
-        |(_, conflict_target, conflict_action)| ast::OnConflict {
-            conflict_target,
-            conflict_action,
-        },
     )(input)
 }
 
@@ -89,8 +86,8 @@ fn expression_as(input: &str) -> Result<ast::ExpressionAs> {
 }
 
 fn returning(input: &str) -> Result<ast::Returning> {
-    preceded(
-        keyword(Keyword::RETURNING),
+    prefixed(
+        Keyword::RETURNING,
         alt((
             map(symbol("*"), |_| ast::Returning::AllColumns),
             map(sep_by1(",", expression_as), ast::Returning::Expressions),

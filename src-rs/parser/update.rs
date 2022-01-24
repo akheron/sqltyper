@@ -2,9 +2,8 @@ use super::Result;
 use crate::ast;
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::token::{identifier, keyword, symbol};
-use crate::parser::utils::{sep_by1, seq};
-use nom::sequence::preceded;
+use crate::parser::token::{identifier, symbol};
+use crate::parser::utils::{prefixed, sep_by1, seq};
 
 fn update_assignment(input: &str) -> Result<ast::UpdateAssignment> {
     seq(
@@ -17,5 +16,5 @@ fn update_assignment(input: &str) -> Result<ast::UpdateAssignment> {
 }
 
 pub fn update_assignments(input: &str) -> Result<Vec<ast::UpdateAssignment>> {
-    preceded(keyword(Keyword::SET), sep_by1(",", update_assignment))(input)
+    prefixed(Keyword::SET, sep_by1(",", update_assignment))(input)
 }

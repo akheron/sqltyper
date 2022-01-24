@@ -2,7 +2,7 @@ use super::Result;
 use crate::ast;
 use crate::parser::keyword::Keyword;
 use crate::parser::token::{identifier, keyword, symbol};
-use crate::parser::utils::{list_of1, seq};
+use crate::parser::utils::{list_of1, prefixed, seq};
 use nom::combinator::opt;
 use nom::sequence::preceded;
 
@@ -21,7 +21,7 @@ pub fn as_opt(input: &str) -> Result<&str> {
 
 // AS identifier
 pub fn as_req(input: &str) -> Result<&str> {
-    preceded(keyword(Keyword::AS), identifier)(input)
+    prefixed(Keyword::AS, identifier)(input)
 }
 
 // [ schema . ] table

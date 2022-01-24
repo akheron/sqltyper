@@ -1,6 +1,6 @@
 use super::{Expression, TableRef, AST};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum JoinType {
     Inner,
     Left,

@@ -1,7 +1,7 @@
 use crate::ast;
 use crate::ast::{SubquerySelect, WindowDefinition};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Constant<'a> {
     True,
     False,

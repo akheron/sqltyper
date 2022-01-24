@@ -71,13 +71,14 @@ pub fn keywords<'a>(words: &'a [Keyword]) -> impl FnMut(&'a str) -> Result<()> {
 }
 
 fn unquoted_identifier(input: &str) -> Result<&str> {
-    // TODO: Should we check for keywords? The SQL is parsed by Postgres anyway.
     match_identifier(input)
 }
 
 pub fn identifier(i: &str) -> Result<&str> {
     // TODO: quoted identifier
     let (input, ident) = unquoted_identifier(i)?;
+
+    // TODO: only reject reserved keywords unconditionally
     if Keyword::from_str(ident.to_ascii_uppercase().as_str()).is_ok() {
         Err(Err::Error(ErrorTree::<&str>::from_error_kind(
             i,

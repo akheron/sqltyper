@@ -36,14 +36,14 @@ pub struct NamedWindowDefinition<'a> {
     pub window: WindowDefinition<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Order<'a> {
     Asc,
     Desc,
     Using(&'a str),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Nulls {
     First,
     Last,

@@ -3,9 +3,9 @@ use crate::ast;
 use crate::parser::expression::primary_expression;
 use crate::parser::keyword::Keyword;
 use crate::parser::token::{keyword, symbol};
-use crate::parser::utils::{parenthesized, seq};
+use crate::parser::utils::{parenthesized, prefixed, seq};
 use nom::branch::alt;
-use nom::combinator::{cut, map, opt};
+use nom::combinator::{map, opt};
 use nom::sequence::preceded;
 use nom::Parser;
 use nom_supreme::error::ErrorTree;
@@ -17,9 +17,9 @@ fn special_function<'a, F>(
 where
     F: Parser<&'a str, Vec<ast::Expression<'a>>, ErrorTree<&'a str>>,
 {
-    seq(
-        (keyword(func_name), cut(parenthesized(args_parser))),
-        move |(_, arg_list)| ast::Expression::FunctionCall {
+    map(
+        prefixed(func_name, parenthesized(args_parser)),
+        move |arg_list| ast::Expression::FunctionCall {
             schema: None,
             function_name: func_name.into(),
             arg_list,
@@ -35,9 +35,9 @@ fn overlay(input: &str) -> Result<ast::Expression> {
         seq(
             (
                 primary_expression,
-                preceded(keyword(Keyword::PLACING), primary_expression),
-                preceded(keyword(Keyword::FROM), primary_expression),
-                opt(preceded(keyword(Keyword::FOR), primary_expression)),
+                prefixed(Keyword::PLACING, primary_expression),
+                prefixed(Keyword::FROM, primary_expression),
+                opt(prefixed(Keyword::FOR, primary_expression)),
             ),
             |(str, placing, from, for_opt)| match for_opt {
                 None => vec![str, placing, from],
@@ -53,7 +53,7 @@ fn position(input: &str) -> Result<ast::Expression> {
         seq(
             (
                 primary_expression,
-                preceded(keyword(Keyword::IN), primary_expression),
+                prefixed(Keyword::IN, primary_expression),
             ),
             |(substring, string)| vec![substring, string],
         ),
@@ -66,8 +66,8 @@ fn substring(input: &str) -> Result<ast::Expression> {
         seq(
             (
                 primary_expression,
-                opt(preceded(keyword(Keyword::FROM), cut(primary_expression))),
-                opt(preceded(keyword(Keyword::FOR), cut(primary_expression))),
+                opt(prefixed(Keyword::FROM, primary_expression)),
+                opt(prefixed(Keyword::FOR, primary_expression)),
             ),
             |(string, start_opt, count_opt)| {
                 vec![
@@ -99,7 +99,7 @@ fn trim(input: &str) -> Result<ast::Expression> {
                 alt((
                     seq(
                         (
-                            preceded(keyword(Keyword::FROM), primary_expression),
+                            prefixed(Keyword::FROM, primary_expression),
                             opt(preceded(symbol(","), primary_expression)),
                         ),
                         |(str, chars)| (str, chars),
@@ -107,7 +107,7 @@ fn trim(input: &str) -> Result<ast::Expression> {
                     seq(
                         (
                             primary_expression,
-                            preceded(keyword(Keyword::FROM), primary_expression),
+                            prefixed(Keyword::FROM, primary_expression),
                         ),
                         |(chars, str)| (str, Some(chars)),
                     ),

@@ -1,8 +1,9 @@
-use crate::parser::token::__;
-use nom::combinator::{map, opt, value};
+use crate::parser::keyword::Keyword;
+use crate::parser::token::{keyword, keywords, __};
+use nom::combinator::{cut, map, opt, value};
 use nom::error::ParseError;
 use nom::multi::many0;
-use nom::sequence::{delimited, terminated, tuple, Tuple};
+use nom::sequence::{delimited, preceded, terminated, tuple, Tuple};
 use nom::{IResult, Parser};
 use nom_supreme::error::ErrorTree;
 
@@ -30,6 +31,24 @@ where
     H: Parser<I, O3, E>,
 {
     terminated(first, terminated(second, third))
+}
+
+pub fn prefixed<'a, O, F>(kw: Keyword, parser: F) -> impl FnMut(&'a str) -> Result<O>
+where
+    F: Parser<&'a str, O, ErrorTree<&'a str>>,
+{
+    preceded(keyword(kw), cut(parser))
+}
+
+pub fn prefixed_<'a, O, F>(kws: &'static [Keyword], parser: F) -> impl FnMut(&'a str) -> Result<O>
+where
+    F: Parser<&'a str, O, ErrorTree<&'a str>>,
+{
+    preceded(keywords(kws), cut(parser))
+}
+
+pub fn keyword_to<'a, O: Clone>(kw: Keyword, val: O) -> impl FnMut(&'a str) -> Result<O> {
+    value(val, keyword(kw))
 }
 
 pub fn seq<I, Os, O, E, Parsers, F>(parsers: Parsers, f: F) -> impl FnMut(I) -> IResult<I, O, E>
