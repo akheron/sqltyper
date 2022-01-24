@@ -24,9 +24,9 @@ pub async fn infer_param_nullability<C: GenericClient>(
     Ok(())
 }
 
-async fn find_insert_columns<'a, C: GenericClient>(
+async fn find_insert_columns<C: GenericClient>(
     client: &C,
-    table: &ast::TableRef<'a>,
+    table: &ast::TableRef<'_>,
     target_columns: &Option<Vec<&str>>,
 ) -> Result<Vec<Column>, Error> {
     let table_columns = get_table_columns(client, table).await?;
@@ -59,7 +59,7 @@ fn match_insert_columns(
     }
 }
 
-fn find_params_from_values(values: &Vec<Vec<ast::ValuesValue>>) -> Vec<Vec<Option<usize>>> {
+fn find_params_from_values(values: &[Vec<ast::ValuesValue>]) -> Vec<Vec<Option<usize>>> {
     values
         .iter()
         .map(|inner| {

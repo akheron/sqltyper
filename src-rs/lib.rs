@@ -63,7 +63,7 @@ pub async fn describe_statement<'a, C: GenericClient>(
         columns: statement
             .columns()
             .iter()
-            .map(|col| NamedValue::from_column(&col))
+            .map(|col| NamedValue::from_column(col))
             .collect(),
         row_count: StatementRowCount::Many,
     })
@@ -76,7 +76,7 @@ pub async fn sql_to_statement_description<'a, C>(
 where
     C: GenericClient,
 {
-    let preprocessed = preprocess_sql(&sql)?;
+    let preprocessed = preprocess_sql(sql)?;
     let statement_description = describe_statement(client, preprocessed).await?;
     Ok(infer_statement_nullability(client, statement_description).await)
 }

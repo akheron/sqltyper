@@ -72,8 +72,8 @@ fn substring(input: &str) -> Result<ast::Expression> {
             |(string, start_opt, count_opt)| {
                 vec![
                     string,
-                    start_opt.unwrap_or_else(|| ast::Expression::Constant(ast::Constant::Null)),
-                    count_opt.unwrap_or_else(|| ast::Expression::Constant(ast::Constant::Null)),
+                    start_opt.unwrap_or(ast::Expression::Constant(ast::Constant::Null)),
+                    count_opt.unwrap_or(ast::Expression::Constant(ast::Constant::Null)),
                 ]
             },
         ),
@@ -123,7 +123,7 @@ fn trim(input: &str) -> Result<ast::Expression> {
             |(direction, (string, characters))| {
                 vec![
                     ast::Expression::Constant(ast::Constant::String(direction.unwrap_or("BOTH"))),
-                    characters.unwrap_or_else(|| ast::Expression::Constant(ast::Constant::Null)),
+                    characters.unwrap_or(ast::Expression::Constant(ast::Constant::Null)),
                     string,
                 ]
             },

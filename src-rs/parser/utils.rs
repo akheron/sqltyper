@@ -64,7 +64,7 @@ where
     F: Parser<&'a str, O, ErrorTree<&'a str>> + Copy,
 {
     map(opt(sep_by1(sep, parser)), |result| {
-        result.unwrap_or_else(|| vec![])
+        result.unwrap_or_else(Vec::new)
     })
 }
 

@@ -18,7 +18,7 @@ async fn run() -> Result<(), Error> {
 }
 
 #[tokio::main]
-async fn main() -> () {
+async fn main() {
     if let Err(err) = run().await {
         println!("{}", err)
     };

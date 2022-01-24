@@ -50,7 +50,7 @@ pub fn match_identifier(input: &str) -> Result<&str> {
 pub fn keyword<'a>(kw: Keyword) -> impl FnMut(&'a str) -> Result<Keyword> {
     let kw_str: &'static str = kw.into();
     move |input| {
-        let orig_input = input.clone();
+        let orig_input = <&str>::clone(&input);
         let (input, ident) = match_identifier(input)?;
         if ident.to_ascii_uppercase().as_str() == kw_str {
             Ok((input, kw))
@@ -98,7 +98,7 @@ pub fn any_operator(input: &str) -> Result<&str> {
 
 pub fn operator<'a>(op: &'static str) -> impl FnMut(&'a str) -> Result<&'a str> {
     move |input: &str| {
-        let orig_input = input.clone();
+        let orig_input = <&str>::clone(&input);
         let (input, operator) = any_operator(input)?;
         if operator == op {
             Ok((input, operator))

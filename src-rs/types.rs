@@ -14,7 +14,7 @@ pub struct StatementDescription<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StatementRowCount {
     Zero,      // no output rows ever
-    One,       // exatly one output row
+    One,       // exactly one output row
     ZeroOrOne, // zero or one output row
     Many,      // zero or more output rows
 }
@@ -28,11 +28,11 @@ pub struct NamedValue {
 
 impl NamedValue {
     pub fn new(name: &str, type_: Type, nullable: bool) -> NamedValue {
-        return NamedValue {
+        NamedValue {
             name: String::from(name),
             type_,
             nullable,
-        };
+        }
     }
 
     pub fn from_type(name: &str, type_: Type) -> NamedValue {
@@ -66,10 +66,10 @@ pub struct Warn<T> {
 
 impl<T> Warn<T> {
     pub fn of(payload: T) -> Warn<T> {
-        return Warn {
+        Warn {
             payload,
             warnings: vec![],
-        };
+        }
     }
 
     pub fn warn<S1: Into<String>, S2: Into<String>>(
@@ -77,12 +77,12 @@ impl<T> Warn<T> {
         summary: S1,
         description: S2,
     ) -> Warn<T> {
-        return Warn {
+        Warn {
             payload,
             warnings: vec![Warning {
                 summary: summary.into(),
                 description: description.into(),
             }],
-        };
+        }
     }
 }
