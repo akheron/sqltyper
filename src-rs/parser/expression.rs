@@ -1,16 +1,24 @@
+mod op_utils;
+
 use nom::branch::alt;
 use nom::combinator::{map, opt};
-use nom::multi::many1;
-use nom::sequence::{preceded, tuple};
+use nom::multi::{many0, many1};
+use nom::sequence::{delimited, preceded, tuple};
 
 use crate::ast;
+use crate::ast::Expression;
 use crate::parser::keyword::Keyword;
 use crate::parser::select::{subquery_select, window_definition};
 use crate::parser::special_function::special_function_call;
-use crate::parser::token::{identifier, keyword, number, operator, param, string, symbol};
+use crate::parser::token::{
+    any_operator_except, identifier, keyword, number, operator, param, string, symbol,
+};
 use crate::parser::typecasts::{prefix_typecast, psql_type_cast};
-use crate::parser::utils::{binop, keyword_to, parenthesized, prefixed, sep_by0, seq};
+use crate::parser::utils::{
+    keyword_to, keywords_to, list_of1, parenthesized, prefixed, sep_by0, seq,
+};
 
+use self::op_utils::{binop, unop};
 use super::Result;
 
 fn array_subquery(input: &str) -> Result<ast::Expression> {
@@ -152,22 +160,157 @@ pub fn primary_expression(input: &str) -> Result<ast::Expression> {
     )(input)
 }
 
-fn exp_expression(input: &str) -> Result<ast::Expression> {
-    binop(symbol("^"), primary_expression)(input)
-}
-
-fn mul_div_mod_expression(input: &str) -> Result<ast::Expression> {
-    binop(
-        alt((operator("*"), operator("/"), operator("%"))),
-        exp_expression,
+fn subscript(input: &str) -> Result<ast::Expression> {
+    seq(
+        (
+            primary_expression,
+            many0(delimited(symbol("["), expression, symbol("]"))),
+        ),
+        |(next, subs)| {
+            subs.into_iter().fold(next, |acc, idx| {
+                ast::Expression::BinaryOp(Box::new(acc), "[]", Box::new(idx))
+            })
+        },
     )(input)
 }
 
-fn add_sub_expression(input: &str) -> Result<ast::Expression> {
-    binop(alt((operator("+"), operator("-"))), mul_div_mod_expression)(input)
+fn unary_plus_minus(input: &str) -> Result<ast::Expression> {
+    unop(alt((operator("+"), operator("-"))), subscript)(input)
 }
 
-fn comparison_expression(input: &str) -> Result<ast::Expression> {
+fn exp(input: &str) -> Result<ast::Expression> {
+    binop(symbol("^"), unary_plus_minus)(input)
+}
+
+fn mul_div_mod(input: &str) -> Result<ast::Expression> {
+    binop(alt((operator("*"), operator("/"), operator("%"))), exp)(input)
+}
+
+fn add_sub(input: &str) -> Result<ast::Expression> {
+    binop(alt((operator("+"), operator("-"))), mul_div_mod)(input)
+}
+
+fn other_op(input: &str) -> Result<Expression> {
+    binop(
+        any_operator_except(&[
+            "<", ">", "=", "<=", ">=", "<>", "+", "-", "*", "/", "%", "^",
+        ]),
+        add_sub,
+    )(input)
+}
+
+enum OtherRhs<'a> {
+    InSubquery {
+        op: &'a str,
+        subquery: Box<ast::SubquerySelect<'a>>,
+    },
+    InExprList {
+        op: &'a str,
+        expr_list: Vec<ast::Expression<'a>>,
+    },
+    Ternary {
+        op: &'a str,
+        rhs1: Box<ast::Expression<'a>>,
+        rhs2: Box<ast::Expression<'a>>,
+    },
+    UnarySuffix(&'a str),
+}
+
+impl<'a> OtherRhs<'a> {
+    pub fn into_expression(self, lhs: Box<Expression<'a>>) -> Expression<'a> {
+        match self {
+            OtherRhs::InSubquery { op, subquery } => {
+                ast::Expression::InSubquery { lhs, op, subquery }
+            }
+            OtherRhs::InExprList { op, expr_list } => {
+                ast::Expression::InExprList { lhs, op, expr_list }
+            }
+            OtherRhs::Ternary { op, rhs1, rhs2 } => ast::Expression::TernaryOp {
+                lhs,
+                op,
+                rhs1,
+                rhs2,
+            },
+            OtherRhs::UnarySuffix(op) => ast::Expression::UnaryOp { op, expr: lhs },
+        }
+    }
+}
+
+fn in_op(input: &str) -> Result<&str> {
+    alt((
+        keyword_to(Keyword::IN, "IN"),
+        keywords_to(&[Keyword::NOT, Keyword::IN], "NOT IN"),
+    ))(input)
+}
+
+fn in_subquery(input: &str) -> Result<OtherRhs> {
+    seq((in_op, parenthesized(subquery_select)), |(op, subquery)| {
+        OtherRhs::InSubquery {
+            op,
+            subquery: Box::new(subquery),
+        }
+    })(input)
+}
+
+fn in_expr_list(input: &str) -> Result<OtherRhs> {
+    seq((in_op, list_of1(expression)), |(op, expr_list)| {
+        OtherRhs::InExprList { op, expr_list }
+    })(input)
+}
+
+fn ternary(input: &str) -> Result<OtherRhs> {
+    seq(
+        (
+            alt((
+                keywords_to(
+                    &[Keyword::NOT, Keyword::BETWEEN, Keyword::SYMMETRIC],
+                    "NOT BETWEEN SYMMETRIC",
+                ),
+                keywords_to(&[Keyword::BETWEEN, Keyword::SYMMETRIC], "BETWEEN SYMMETRIC"),
+                keywords_to(&[Keyword::NOT, Keyword::BETWEEN], "NOT BETWEEN"),
+                keyword_to(Keyword::BETWEEN, "BETWEEN"),
+            )),
+            other_op,
+            keyword(Keyword::AND),
+            other_op,
+        ),
+        |(op, rhs1, _, rhs2)| OtherRhs::Ternary {
+            op,
+            rhs1: Box::new(rhs1),
+            rhs2: Box::new(rhs2),
+        },
+    )(input)
+}
+
+fn unary_suffix(input: &str) -> Result<OtherRhs> {
+    map(operator("!"), |_| OtherRhs::UnarySuffix("!"))(input)
+}
+
+fn other(input: &str) -> Result<ast::Expression> {
+    seq(
+        (
+            other_op,
+            opt(alt((in_subquery, in_expr_list, ternary, unary_suffix))),
+        ),
+        |(lhs, rhs_opt)| match rhs_opt {
+            None => lhs,
+            Some(rhs) => rhs.into_expression(Box::new(lhs)),
+        },
+    )(input)
+}
+
+fn exists(input: &str) -> Result<ast::Expression> {
+    map(
+        prefixed(Keyword::EXISTS, parenthesized(subquery_select)),
+        |query| ast::Expression::Exists(Box::new(query)),
+    )(input)
+}
+
+fn exists_or_other(input: &str) -> Result<ast::Expression> {
+    alt((exists, other))(input)
+}
+
+fn comparison(input: &str) -> Result<ast::Expression> {
     binop(
         alt((
             operator("<"),
@@ -177,10 +320,52 @@ fn comparison_expression(input: &str) -> Result<ast::Expression> {
             operator(">="),
             operator(">"),
         )),
-        add_sub_expression,
+        exists_or_other,
     )(input)
 }
 
+fn is(input: &str) -> Result<ast::Expression> {
+    seq(
+        (
+            comparison,
+            opt(alt((
+                keywords_to(&[Keyword::IS, Keyword::NULL], "IS NULL"),
+                keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::NULL], "IS NOT NULL"),
+                keyword_to(Keyword::ISNULL, "ISNULL"),
+                keyword_to(Keyword::NOTNULL, "NOTNULL"),
+                keywords_to(&[Keyword::IS, Keyword::TRUE], "IS TRUE"),
+                keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::TRUE], "IS NOT TRUE"),
+                keywords_to(&[Keyword::IS, Keyword::FALSE], "IS FALSE"),
+                keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::FALSE], "IS NOT FALSE"),
+                keywords_to(&[Keyword::IS, Keyword::UNKNOWN], "IS UNKNOWN"),
+                keywords_to(
+                    &[Keyword::IS, Keyword::NOT, Keyword::UNKNOWN],
+                    "IS NOT UNKNOWN",
+                ),
+            ))),
+        ),
+        |(expr, op_opt)| match op_opt {
+            None => expr,
+            Some(op) => Expression::UnaryOp {
+                op,
+                expr: Box::new(expr),
+            },
+        },
+    )(input)
+}
+
+fn not(input: &str) -> Result<ast::Expression> {
+    unop(keyword_to(Keyword::NOT, "NOT"), is)(input)
+}
+
+fn and(input: &str) -> Result<ast::Expression> {
+    binop(keyword_to(Keyword::AND, "AND"), not)(input)
+}
+
+fn or(input: &str) -> Result<ast::Expression> {
+    binop(keyword_to(Keyword::OR, "OR"), and)(input)
+}
+
 pub fn expression(input: &str) -> Result<ast::Expression> {
-    comparison_expression(input)
+    or(input)
 }

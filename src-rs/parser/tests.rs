@@ -91,6 +91,25 @@ async fn test_expression_typecast() {
 }
 
 #[tokio::test]
+async fn test_expression_operators() {
+    test(
+        &["CREATE TABLE person (id int, friends text[])"],
+        &[
+            "SELECT friends[id - 1] FROM person",
+            "SELECT - + -5 ^ (-8) + (7 * 5 % 2 / 1) - 77",
+            "SELECT friends[0] || friends[1] = ANY ('{foo, bar}'::text[]) FROM person",
+            "SELECT '1999-12-31'::date <@ ALL ('{}'::daterange[])",
+            "SELECT 1 IN (1, 2, 3), 2 NOT IN (SELECT id FROM person)",
+            "SELECT 0 BETWEEN -5 AND 5, 99 NOT BETWEEN SYMMETRIC -5 AND 5",
+            "SELECT EXISTS (SELECT * FROM person) IS TRUE",
+            "SELECT id IS NULL, friends IS NOT NULL FROM person",
+            "SELECT NOT true AND true OR 123 <= id FROM person",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn test_cte() {
     test(
         &["CREATE TABLE person (id int, age int, flag bool)"],

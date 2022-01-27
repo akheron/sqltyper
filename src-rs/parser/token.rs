@@ -1,11 +1,12 @@
 use nom::branch::alt;
 use nom::bytes::complete::{is_not, take_until};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, multispace0, none_of, one_of};
-use nom::combinator::{cut, map, opt, recognize};
+use nom::combinator::{cut, map, opt, recognize, verify};
 use nom::error::{ErrorKind, ParseError};
 use nom::multi::{many0, many0_count, many1_count};
 use nom::sequence::{delimited, pair, preceded, terminated, tuple};
 use nom::Err;
+use nom::Parser;
 use nom_supreme::error::ErrorTree;
 use nom_supreme::tag::complete::tag;
 use nom_supreme::tag::TagError;
@@ -100,13 +101,21 @@ pub fn any_operator(input: &str) -> Result<&str> {
 pub fn operator<'a>(op: &'static str) -> impl FnMut(&'a str) -> Result<&'a str> {
     move |input: &str| {
         let orig_input = <&str>::clone(&input);
-        let (input, operator) = any_operator(input)?;
+        let (input, operator) = any_operator.parse(input)?;
         if operator == op {
             Ok((input, operator))
         } else {
             Err(Err::Error(ErrorTree::<&str>::from_tag(orig_input, op)))
         }
     }
+}
+
+pub fn any_operator_except<'a>(
+    exclude: &'static [&'static str],
+) -> impl FnMut(&'a str) -> Result<&'a str> {
+    verify(any_operator, move |op: &str| {
+        exclude.iter().all(|e| op != *e)
+    })
 }
 
 pub fn number(input: &str) -> Result<&str> {
