@@ -38,6 +38,7 @@ pub async fn infer_param_nullability<C: GenericClient>(
             let table_columns = get_table_columns(client, table).await?;
             return Ok(find_param_nullability_from_updates(&table_columns, updates));
         }
+        ast::Query::Delete(_) => {}
     }
     Ok(NullableParams(HashSet::new()))
 }

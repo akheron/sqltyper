@@ -246,6 +246,21 @@ async fn test_update() {
     .await;
 }
 
+#[tokio::test]
+async fn test_delete() {
+    test(
+        &["CREATE TABLE person (id int, age int, flag bool)"],
+        &[
+            "DELETE FROM person",
+            "DELETE FROM person AS p",
+            "DELETE FROM person WHERE id = $1",
+            "DELETE FROM person RETURNING *",
+            "DELETE FROM person WHERE id = $1 RETURNING id",
+        ],
+    )
+    .await;
+}
+
 mod utils {
     use crate::connect_to_database;
     use crate::parser::parse_sql;

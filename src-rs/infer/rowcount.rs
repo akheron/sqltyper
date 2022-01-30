@@ -28,6 +28,10 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
             Some(_) => StatementRowCount::Many,
             None => StatementRowCount::Zero,
         },
+        ast::Query::Delete(ast::Delete { returning, .. }) => match returning {
+            Some(_) => StatementRowCount::Many,
+            None => StatementRowCount::Zero,
+        },
     }
 }
 
@@ -97,6 +101,12 @@ mod tests {
             "INSERT INTO person SELECT * FROM other RETURNING *",
             StatementRowCount::Many,
         );
+    }
+
+    #[test]
+    fn test_delete() {
+        test("DELETE FROM person", StatementRowCount::Zero);
+        test("DELETE FROM person RETURNING id", StatementRowCount::Many);
     }
 
     mod utils {

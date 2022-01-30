@@ -1,5 +1,6 @@
 mod common;
 mod cte;
+mod delete;
 mod expression;
 mod insert;
 mod join;
@@ -19,6 +20,7 @@ use nom::combinator::{eof, map, opt};
 use nom_supreme::error::ErrorTree;
 use nom_supreme::final_parser::final_parser;
 
+use self::delete::delete;
 use self::insert::insert;
 use self::result::Result;
 use self::select::select;
@@ -34,6 +36,7 @@ fn statement(input: &str) -> Result<ast::AST> {
                 map(select, ast::Query::Select),
                 map(insert, ast::Query::Insert),
                 map(update, ast::Query::Update),
+                map(delete, ast::Query::Delete),
             )),
         ),
         |(ctes, query)| ast::AST { ctes, query },

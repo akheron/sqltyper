@@ -1,12 +1,14 @@
 mod common;
 mod cte;
 mod expression;
+mod delete;
 mod insert;
 mod join;
 mod select;
 mod update;
 
 pub use self::common::*;
+pub use self::delete::*;
 pub use self::cte::*;
 pub use self::expression::*;
 pub use self::insert::*;
@@ -19,6 +21,7 @@ pub enum Query<'a> {
     Select(Select<'a>),
     Insert(Insert<'a>),
     Update(Update<'a>),
+    Delete(Delete<'a>),
 }
 
 #[derive(Debug)]

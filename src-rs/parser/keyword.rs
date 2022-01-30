@@ -22,6 +22,7 @@ pub enum Keyword {
     DECIMAL,
     DEFAULT,
     DESC,
+    DELETE,
     DISTINCT,
     DO,
     DOUBLE,
