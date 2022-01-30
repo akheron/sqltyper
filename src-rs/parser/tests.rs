@@ -117,6 +117,7 @@ async fn test_cte() {
             "WITH foo AS (SELECT id FROM person) SELECT * FROM foo",
             "WITH foo (bar, baz) AS (SELECT id, age FROM person) SELECT baz, bar FROM foo",
             "WITH foo AS (SELECT id, age FROM person), bar AS (SELECT id FROM foo) SELECT * FROM bar",
+            "WITH foo AS (SELECT id, age FROM person), bar AS (SELECT id FROM foo) SELECT * FROM bar",
         ],
     )
     .await;
@@ -132,7 +133,7 @@ async fn test_insert() {
             "INSERT INTO person AS p VALUES (1, 2) ON CONFLICT DO NOTHING",
             "INSERT INTO person VALUES (1, 2) ON CONFLICT ON CONSTRAINT unique_id DO NOTHING",
             "INSERT INTO person VALUES (1, 2) ON CONFLICT DO NOTHING",
-            "INSERT INTO person VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET age = 1, flag = true",
+            "INSERT INTO person VALUES (1, 2) ON CONFLICT (id) DO UPDATE SET age = 1, flag = DEFAULT",
             "INSERT INTO person VALUES (1, 2) ON CONFLICT ON CONSTRAINT unique_id DO UPDATE SET age = 1, flag = true",
             "INSERT INTO person VALUES (1, 2) RETURNING *",
             "INSERT INTO person VALUES (1, 2) RETURNING id AS a, age - 1 b, flag",
@@ -225,6 +226,20 @@ async fn select_set_ops() {
             "SELECT id FROM person UNION ALL SELECT age FROM person",
             "SELECT id FROM person INTERSECT DISTINCT SELECT age FROM person",
             "SELECT id FROM person EXCEPT SELECT age FROM person",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_update() {
+    test(
+        &["CREATE TABLE person (id int, age int, flag bool)"],
+        &[
+            "UPDATE person AS p SET id = $1, age = DEFAULT",
+            "WITH foo AS (SELECT id FROM person) UPDATE person SET age = f.id FROM foo f",
+            "UPDATE person AS p SET id = $1, age = DEFAULT RETURNING *",
+            "UPDATE person AS p SET id = $1, age = DEFAULT RETURNING age, flag",
         ],
     )
     .await;

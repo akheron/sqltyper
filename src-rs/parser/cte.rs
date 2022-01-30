@@ -1,7 +1,7 @@
 use super::Result;
 use crate::ast::WithQuery;
+use crate::parser::common::identifier_list;
 use crate::parser::keyword::Keyword;
-use crate::parser::misc::identifier_list;
 use crate::parser::statement;
 use crate::parser::token::identifier;
 use crate::parser::utils::{parenthesized, prefixed, sep_by1, seq};

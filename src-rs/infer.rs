@@ -30,9 +30,14 @@ pub async fn infer_statement_nullability<'a, C: GenericClient>(
     let ast = parse_result.unwrap();
 
     let mut warnings: Vec<Warning> = vec![];
-    if let Err(err) = infer_param_nullability(client, &ast, &mut statement.params).await {
-        warnings.push(err_to_warning(err));
-    }
+    match infer_param_nullability(client, &ast).await {
+        Err(error) => warnings.push(err_to_warning(error)),
+        Ok(param_nullability) => {
+            for (i, mut param) in statement.params.iter_mut().enumerate() {
+                param.nullable = param_nullability.is_nullable(i + 1);
+            }
+        }
+    };
 
     statement.row_count = infer_row_count(&ast);
 

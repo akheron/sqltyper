@@ -1,11 +1,11 @@
 use super::Result;
 use crate::ast;
+use crate::parser::common::{as_opt, identifier_list, table_ref};
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::misc::{as_opt, identifier_list, table_ref};
 use crate::parser::statement;
 use crate::parser::token::keyword;
-use crate::parser::utils::{keyword_to, parenthesized, prefixed, prefixed_, seq};
+use crate::parser::utils::{keyword_to, parenthesized, prefixed, prefixed_, sep_by1, seq};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
 use nom::multi::many0;
@@ -121,7 +121,7 @@ fn table_expr_reducer<'a>(
     }
 }
 
-pub fn table_expression(input: &str) -> Result<ast::TableExpression> {
+fn table_expression(input: &str) -> Result<ast::TableExpression> {
     seq(
         (
             alt((
@@ -139,5 +139,21 @@ pub fn table_expression(input: &str) -> Result<ast::TableExpression> {
             many0(alt((cross_join, qualified_join, natural_join))),
         ),
         |(lhs, joins)| joins.into_iter().fold(lhs, table_expr_reducer),
+    )(input)
+}
+
+pub fn from(input: &str) -> Result<ast::TableExpression> {
+    map(
+        prefixed(Keyword::FROM, sep_by1(",", table_expression)),
+        |table_exprs| {
+            // Implicit join equals to CROSS JOIN
+            table_exprs
+                .into_iter()
+                .reduce(|left, right| ast::TableExpression::CrossJoin {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
+                .unwrap()
+        },
     )(input)
 }

@@ -1,14 +1,14 @@
 use super::Result;
 use crate::ast;
+use crate::parser::common::as_opt;
 use crate::parser::cte::with_queries;
 use crate::parser::expression::expression;
-use crate::parser::join::table_expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::misc::as_opt;
 use crate::parser::token::{any_operator, identifier, keyword, symbol};
 use crate::parser::utils::{
     keyword_to, list_of1, parenthesized, prefixed, prefixed_, sep_by1, seq, terminated2,
 };
+use crate::parser::{common, join};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
 use nom::multi::many0;
@@ -54,26 +54,6 @@ fn select_list(input: &str) -> Result<Vec<ast::SelectListItem>> {
     sep_by1(",", select_list_item)(input)
 }
 
-fn from(input: &str) -> Result<ast::TableExpression> {
-    map(
-        prefixed(Keyword::FROM, sep_by1(",", table_expression)),
-        |table_exprs| {
-            // Implicit join equals to CROSS JOIN
-            table_exprs
-                .into_iter()
-                .reduce(|left, right| ast::TableExpression::CrossJoin {
-                    left: Box::new(left),
-                    right: Box::new(right),
-                })
-                .unwrap()
-        },
-    )(input)
-}
-
-fn where_(input: &str) -> Result<ast::Expression> {
-    prefixed(Keyword::WHERE, expression)(input)
-}
-
 fn group_by(input: &str) -> Result<Vec<ast::Expression>> {
     prefixed_(&[Keyword::GROUP, Keyword::BY], sep_by1(",", expression))(input)
 }
@@ -89,8 +69,8 @@ fn select_body(input: &str) -> Result<ast::SelectBody> {
             (
                 opt(distinct),
                 select_list,
-                opt(from),
-                opt(where_),
+                opt(join::from),
+                opt(common::where_),
                 opt(group_by),
                 opt(having),
                 opt(window),

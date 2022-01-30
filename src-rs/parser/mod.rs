@@ -1,9 +1,9 @@
+mod common;
 mod cte;
 mod expression;
 mod insert;
 mod join;
 mod keyword;
-mod misc;
 mod result;
 mod select;
 mod special_function;
@@ -13,6 +13,7 @@ mod update;
 mod utils;
 
 use crate::parser::cte::with_queries;
+use crate::parser::update::update;
 use nom::branch::alt;
 use nom::combinator::{eof, map, opt};
 use nom_supreme::error::ErrorTree;
@@ -32,6 +33,7 @@ fn statement(input: &str) -> Result<ast::AST> {
             alt((
                 map(select, ast::Query::Select),
                 map(insert, ast::Query::Insert),
+                map(update, ast::Query::Update),
             )),
         ),
         |(ctes, query)| ast::AST { ctes, query },

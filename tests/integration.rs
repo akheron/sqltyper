@@ -1,16 +1,28 @@
+use self::utils::test;
 use sqltyper::types::StatementRowCount;
 use tokio_postgres::types::Type;
 
 #[tokio::test]
 async fn test_insert() {
-    utils::sql_test(
+    test(
         "CREATE TABLE person (id SERIAL NOT NULL, name TEXT NOT NULL, age INT)",
         "INSERT INTO person (name, age) VALUES (${name}, ${age})",
         StatementRowCount::Zero,
         &[("name", Type::TEXT, false), ("age", Type::INT4, true)],
         &[],
     )
-        .await;
+    .await;
+}
+
+#[tokio::test]
+async fn test_update() {
+    test(
+        "CREATE TABLE person (id serial PRIMARY KEY, constant integer, age integer, name varchar(255) NOT NULL, height_doubled integer)",
+        "UPDATE person SET constant = 42, age = ${age}, name = ${name}, height_doubled = ${height} * 2 WHERE id = ${id}",
+        StatementRowCount::Zero,
+        &[("age", Type::INT4, true), ("name", Type::VARCHAR, false), ("height", Type::INT4, false), ("id", Type::INT4, false)],
+        &[],
+    ).await;
 }
 
 mod utils {
@@ -73,7 +85,7 @@ mod utils {
         Ok(statement)
     }
 
-    pub async fn sql_test(
+    pub async fn test(
         init_sql: &str,
         sql: &str,
         row_count: StatementRowCount,

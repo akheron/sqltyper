@@ -1,0 +1,84 @@
+use super::Result;
+use crate::ast;
+use crate::ast::UpdateValue;
+use crate::parser::expression::expression;
+use crate::parser::keyword::Keyword;
+use crate::parser::token::{identifier, keyword, symbol};
+use crate::parser::utils::{list_of1, prefixed, sep_by1, seq};
+use nom::branch::alt;
+use nom::combinator::{map, opt};
+use nom::sequence::preceded;
+
+// (name1, name2, ...)
+pub fn identifier_list(input: &str) -> Result<Vec<&str>> {
+    list_of1(identifier)(input)
+}
+
+// [ AS ] identifier
+pub fn as_opt(input: &str) -> Result<&str> {
+    seq(
+        (opt(keyword(Keyword::AS)), identifier),
+        |(_, identifier)| identifier,
+    )(input)
+}
+
+// AS identifier
+pub fn as_req(input: &str) -> Result<&str> {
+    prefixed(Keyword::AS, identifier)(input)
+}
+
+// [ schema . ] table
+pub fn table_ref(input: &str) -> Result<ast::TableRef> {
+    seq(
+        (identifier, opt(preceded(symbol("."), identifier))),
+        |(id1, id2)| match id2 {
+            Some(table) => ast::TableRef {
+                schema: Some(id1),
+                table,
+            },
+            None => ast::TableRef {
+                schema: None,
+                table: id1,
+            },
+        },
+    )(input)
+}
+
+fn update_assignment(input: &str) -> Result<ast::UpdateAssignment> {
+    seq(
+        (
+            identifier,
+            symbol("="),
+            alt((
+                map(expression, UpdateValue::Value),
+                map(keyword(Keyword::DEFAULT), |_| UpdateValue::Default),
+            )),
+        ),
+        |(column, _eq, value)| ast::UpdateAssignment { column, value },
+    )(input)
+}
+
+pub fn update_assignments(input: &str) -> Result<Vec<ast::UpdateAssignment>> {
+    prefixed(Keyword::SET, sep_by1(",", update_assignment))(input)
+}
+
+pub fn where_(input: &str) -> Result<ast::Expression> {
+    prefixed(Keyword::WHERE, expression)(input)
+}
+
+fn expression_as(input: &str) -> Result<ast::ExpressionAs> {
+    seq((expression, opt(as_opt)), |(expr, as_)| ast::ExpressionAs {
+        expr,
+        as_,
+    })(input)
+}
+
+pub fn returning(input: &str) -> Result<ast::Returning> {
+    prefixed(
+        Keyword::RETURNING,
+        alt((
+            map(symbol("*"), |_| ast::Returning::AllColumns),
+            map(sep_by1(",", expression_as), ast::Returning::Expressions),
+        )),
+    )(input)
+}

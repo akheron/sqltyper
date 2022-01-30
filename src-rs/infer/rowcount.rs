@@ -42,6 +42,10 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
                 None => StatementRowCount::Zero,
             }
         }
+        ast::Query::Update(ast::Update { returning, .. }) => match returning {
+            Some(_) => StatementRowCount::Many,
+            None => StatementRowCount::Zero,
+        },
     }
 }
 

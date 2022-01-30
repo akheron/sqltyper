@@ -18,9 +18,15 @@ impl<'a> Display for TableRef<'a> {
 }
 
 #[derive(Debug)]
+pub enum UpdateValue<'a> {
+    Default,
+    Value(Expression<'a>),
+}
+
+#[derive(Debug)]
 pub struct UpdateAssignment<'a> {
     pub column: &'a str,
-    pub value: Option<Expression<'a>>, // None means DEFAULT
+    pub value: UpdateValue<'a>,
 }
 
 #[derive(Debug)]

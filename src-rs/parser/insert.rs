@@ -1,10 +1,9 @@
 use super::Result;
 use crate::ast;
+use crate::parser::common::{as_req, identifier_list, returning, table_ref, update_assignments};
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::misc::{as_opt, as_req, identifier_list, table_ref};
-use crate::parser::token::{identifier, keyword, keywords, symbol};
-use crate::parser::update::update_assignments;
+use crate::parser::token::{identifier, keyword, keywords};
 use crate::parser::utils::{list_of1, prefixed, prefixed_, sep_by1, seq};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
@@ -75,23 +74,6 @@ fn on_conflict(input: &str) -> Result<ast::OnConflict> {
                 conflict_action,
             },
         ),
-    )(input)
-}
-
-fn expression_as(input: &str) -> Result<ast::ExpressionAs> {
-    seq((expression, opt(as_opt)), |(expr, as_)| ast::ExpressionAs {
-        expr,
-        as_,
-    })(input)
-}
-
-fn returning(input: &str) -> Result<ast::Returning> {
-    prefixed(
-        Keyword::RETURNING,
-        alt((
-            map(symbol("*"), |_| ast::Returning::AllColumns),
-            map(sep_by1(",", expression_as), ast::Returning::Expressions),
-        )),
     )(input)
 }
 

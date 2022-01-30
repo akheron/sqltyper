@@ -1,21 +1,24 @@
+mod common;
 mod cte;
 mod expression;
 mod insert;
 mod join;
-mod misc;
 mod select;
+mod update;
 
+pub use self::common::*;
 pub use self::cte::*;
 pub use self::expression::*;
 pub use self::insert::*;
 pub use self::join::*;
-pub use self::misc::*;
 pub use self::select::*;
+pub use self::update::*;
 
 #[derive(Debug)]
 pub enum Query<'a> {
     Select(Select<'a>),
     Insert(Insert<'a>),
+    Update(Update<'a>),
 }
 
 #[derive(Debug)]
