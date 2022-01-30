@@ -138,6 +138,7 @@ async fn test_insert() {
             "INSERT INTO person VALUES (1, 2) RETURNING *",
             "INSERT INTO person VALUES (1, 2) RETURNING id AS a, age - 1 b, flag",
             "INSERT INTO person VALUES (1) ON CONFLICT DO NOTHING RETURNING *",
+            "INSERT INTO person SELECT 1, 2, true"
         ],
     ).await;
 }

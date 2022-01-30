@@ -3,6 +3,7 @@ use crate::ast;
 use crate::parser::common::{as_req, identifier_list, returning, table_ref, update_assignments};
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
+use crate::parser::select::subquery_select;
 use crate::parser::token::{identifier, keyword, keywords};
 use crate::parser::utils::{list_of1, prefixed, prefixed_, sep_by1, seq};
 use nom::branch::alt;
@@ -82,7 +83,11 @@ pub fn insert(input: &str) -> Result<ast::Insert> {
         (
             insert_into,
             opt(as_req),
-            alt((default_values, values)),
+            alt((
+                default_values,
+                values,
+                map(subquery_select, ast::Values::Query),
+            )),
             opt(on_conflict),
             opt(returning),
         ),

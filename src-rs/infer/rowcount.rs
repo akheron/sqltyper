@@ -2,26 +2,7 @@ use crate::{ast, StatementRowCount};
 
 pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
     match &ast.query {
-        ast::Query::Select(ast::Select {
-            body,
-            set_ops,
-            limit,
-            ..
-        }) => {
-            if set_ops.is_empty() && body.from.is_none() {
-                // No UNION/INTERSECT/EXCEPT, no FROM clause => one row
-                StatementRowCount::One
-            } else if let Some(ast::Limit {
-                count: Some(ast::Expression::Constant(ast::Constant::Number("1"))),
-                ..
-            }) = limit
-            {
-                // LIMIT 1 => zero or one row
-                StatementRowCount::ZeroOrOne
-            } else {
-                StatementRowCount::Many
-            }
-        }
+        ast::Query::Select(select) => infer_select_row_count(select),
         ast::Query::Insert(ast::Insert {
             values, returning, ..
         }) => {
@@ -37,6 +18,7 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
                             StatementRowCount::Many
                         }
                     }
+                    ast::Values::Query(select) => infer_select_row_count(&select.query),
                 },
                 // No RETURNING, no output
                 None => StatementRowCount::Zero,
@@ -46,6 +28,28 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
             Some(_) => StatementRowCount::Many,
             None => StatementRowCount::Zero,
         },
+    }
+}
+
+fn infer_select_row_count(select: &ast::Select<'_>) -> StatementRowCount {
+    let ast::Select {
+        body,
+        set_ops,
+        limit,
+        ..
+    } = select;
+    if set_ops.is_empty() && body.from.is_none() {
+        // No UNION/INTERSECT/EXCEPT, no FROM clause => one row
+        StatementRowCount::One
+    } else if let Some(ast::Limit {
+        count: Some(ast::Expression::Constant(ast::Constant::Number("1"))),
+        ..
+    }) = limit
+    {
+        // LIMIT 1 => zero or one row
+        StatementRowCount::ZeroOrOne
+    } else {
+        StatementRowCount::Many
     }
 }
 
@@ -79,6 +83,18 @@ mod tests {
         );
         test(
             "INSERT INTO person VALUES (1, 2), (3, 4), (5, 6) RETURNING id",
+            StatementRowCount::Many,
+        );
+        test(
+            "INSERT INTO person SELECT 1, 2 RETURNING *",
+            StatementRowCount::One,
+        );
+        test(
+            "INSERT INTO person SELECT * FROM other LIMIT 1 RETURNING *",
+            StatementRowCount::ZeroOrOne,
+        );
+        test(
+            "INSERT INTO person SELECT * FROM other RETURNING *",
             StatementRowCount::Many,
         );
     }

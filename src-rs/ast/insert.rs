@@ -1,4 +1,5 @@
 use super::{Expression, TableRef, UpdateAssignment};
+use crate::ast::SubquerySelect;
 
 #[derive(Debug)]
 pub enum ValuesValue<'a> {
@@ -13,6 +14,7 @@ pub enum Values<'a> {
         columns: Option<Vec<&'a str>>,
         values: Vec<Vec<ValuesValue<'a>>>,
     },
+    Query(SubquerySelect<'a>),
 }
 
 #[derive(Debug)]

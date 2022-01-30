@@ -32,6 +32,7 @@ pub async fn infer_param_nullability<C: GenericClient>(
                     values_list_params,
                 ));
             }
+            ast::Values::Query(_) => {}
         },
         ast::Query::Update(ast::Update { table, updates, .. }) => {
             let table_columns = get_table_columns(client, table).await?;
