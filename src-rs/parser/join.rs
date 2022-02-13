@@ -3,7 +3,7 @@ use crate::ast;
 use crate::parser::common::{as_opt, identifier_list, table_ref};
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::statement;
+use crate::parser::select::subquery_select;
 use crate::parser::token::keyword;
 use crate::parser::utils::{keyword_to, parenthesized, prefixed, prefixed_, sep_by1, seq};
 use nom::branch::alt;
@@ -126,7 +126,7 @@ fn table_expression(input: &str) -> Result<ast::TableExpression> {
         (
             alt((
                 parenthesized(table_expression),
-                seq((parenthesized(statement), as_opt), |(query, as_)| {
+                seq((parenthesized(subquery_select), as_opt), |(query, as_)| {
                     ast::TableExpression::SubQuery {
                         query: Box::new(query),
                         as_,

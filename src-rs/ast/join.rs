@@ -1,6 +1,7 @@
-use super::{Expression, TableRef, AST};
+use super::{Expression, TableRef};
+use crate::ast::SubquerySelect;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum JoinType {
     Inner,
     Left,
@@ -22,7 +23,7 @@ pub enum TableExpression<'a> {
         as_: Option<&'a str>,
     },
     SubQuery {
-        query: Box<AST<'a>>,
+        query: Box<SubquerySelect<'a>>,
         as_: &'a str,
     },
     CrossJoin {

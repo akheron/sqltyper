@@ -19,10 +19,37 @@ pub enum StatementRowCount {
     Many,      // zero or more output rows
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+pub enum ValueType {
+    Any(Type),
+    Array { type_: Type, elem_nullable: bool },
+}
+
+impl ValueType {
+    pub fn to_array_type(&self, elem_nullable: bool) -> ValueType {
+        match self {
+            ValueType::Any(type_) => ValueType::Array {
+                type_: type_.clone(),
+                elem_nullable,
+            },
+            x => x.clone(),
+        }
+    }
+}
+
+impl AsRef<Type> for ValueType {
+    fn as_ref(&self) -> &Type {
+        match self {
+            ValueType::Any(type_) => type_,
+            ValueType::Array { type_, .. } => type_,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct NamedValue {
     pub name: String,
-    pub type_: Type,
+    pub type_: ValueType,
     pub nullable: bool,
 }
 
@@ -30,7 +57,7 @@ impl NamedValue {
     pub fn new(name: &str, type_: Type, nullable: bool) -> NamedValue {
         NamedValue {
             name: String::from(name),
-            type_,
+            type_: ValueType::Any(type_),
             nullable,
         }
     }
@@ -38,7 +65,7 @@ impl NamedValue {
     pub fn from_type(name: &str, type_: Type) -> NamedValue {
         NamedValue {
             name: name.to_string(),
-            type_,
+            type_: ValueType::Any(type_),
             nullable: true,
         }
     }
@@ -46,13 +73,13 @@ impl NamedValue {
     pub fn from_column(column: &Column) -> NamedValue {
         NamedValue {
             name: column.name().to_string(),
-            type_: column.type_().clone(),
+            type_: ValueType::Any(column.type_().clone()),
             nullable: true,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Warning {
     pub summary: String,
     pub description: String,

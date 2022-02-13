@@ -69,16 +69,20 @@ pub async fn describe_statement<'a, C: GenericClient>(
     })
 }
 
-pub async fn sql_to_statement_description<'a, C>(
-    client: &C,
+pub async fn sql_to_statement_description<'a>(
+    client: &Client,
     sql: &'a str,
-) -> Result<Warn<StatementDescription<'a>>, Error>
-where
-    C: GenericClient,
-{
+) -> Result<Warn<StatementDescription<'a>>, Error> {
     let preprocessed = preprocess_sql(sql)?;
-    let statement_description = describe_statement(client, preprocessed).await?;
-    Ok(infer_statement_nullability(client, statement_description).await)
+    let mut statement_description = describe_statement(client, preprocessed).await?;
+    match infer_statement_nullability(client, &mut statement_description).await {
+        Err(err) => Ok(Warn::warn(
+            statement_description,
+            "The internal SQL parser failed to parse the SQL statement.",
+            format!("{}", err),
+        )),
+        Ok(_) => Ok(Warn::of(statement_description)),
+    }
 }
 
 pub async fn connect_to_database(config: &str) -> Result<Client, tokio_postgres::Error> {
