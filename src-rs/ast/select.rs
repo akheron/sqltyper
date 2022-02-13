@@ -1,5 +1,4 @@
-use super::{Expression, NamedWindowDefinition, OrderBy, TableExpression};
-use crate::ast::WithQuery;
+use super::{Expression, NamedWindowDefinition, OrderBy, TableExpression, WithQuery};
 
 #[derive(Debug)]
 pub enum Distinct<'a> {

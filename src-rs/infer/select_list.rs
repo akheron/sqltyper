@@ -37,10 +37,10 @@ pub async fn infer_select_list_output(
 }
 
 async fn infer_select_list_item_output(
-    client: &Client,
-    context: &Context<'_>,
+    _client: &Client,
+    _context: &Context<'_>,
     source_columns: &[SourceColumn],
-    param_nullability: &NullableParams,
+    _param_nullability: &NullableParams,
     non_null_expressions: &NonNullExpressions<'_>,
     select_list_item: &ast::SelectListItem<'_>,
 ) -> Result<Vec<Column>, Error> {

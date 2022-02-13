@@ -1,20 +1,20 @@
-mod common;
-mod cte;
-mod expression;
-mod delete;
-mod insert;
-mod join;
-mod select;
-mod update;
-
 pub use self::common::*;
-pub use self::delete::*;
 pub use self::cte::*;
+pub use self::delete::*;
 pub use self::expression::*;
 pub use self::insert::*;
 pub use self::join::*;
 pub use self::select::*;
 pub use self::update::*;
+
+mod common;
+mod cte;
+mod delete;
+mod expression;
+mod insert;
+mod join;
+mod select;
+mod update;
 
 #[derive(Debug)]
 pub enum Query<'a> {

@@ -1,5 +1,6 @@
-use super::{Expression, TableRef, UpdateAssignment};
 use crate::ast::SubquerySelect;
+
+use super::{Expression, TableRef, UpdateAssignment};
 
 #[derive(Debug)]
 pub enum ValuesValue<'a> {

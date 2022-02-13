@@ -1,4 +1,4 @@
-use crate::ast::{Expression, Returning, TableRef};
+use super::{Expression, Returning, TableRef};
 
 #[derive(Debug)]
 pub struct Delete<'a> {

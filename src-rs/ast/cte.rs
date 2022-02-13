@@ -1,4 +1,4 @@
-use crate::ast::AST;
+use super::AST;
 
 #[derive(Debug)]
 pub struct WithQuery<'a> {

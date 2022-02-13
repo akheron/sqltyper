@@ -1,12 +1,12 @@
 use tokio_postgres::Client;
 
-use crate::infer::columns::infer_column_nullability;
-use crate::infer::source_columns::ValueNullability;
 use crate::{parser::parse_sql, types::StatementDescription};
 
+use self::columns::infer_column_nullability;
 use self::error::Error;
 use self::param::infer_param_nullability;
 use self::rowcount::infer_row_count;
+use self::source_columns::ValueNullability;
 
 mod columns;
 mod context;

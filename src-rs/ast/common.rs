@@ -1,5 +1,6 @@
-use super::Expression;
 use std::fmt::{Display, Formatter};
+
+use super::Expression;
 
 #[derive(Debug)]
 pub struct TableRef<'a> {

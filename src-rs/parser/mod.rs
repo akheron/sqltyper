@@ -1,3 +1,19 @@
+use nom::branch::alt;
+use nom::combinator::{eof, map, opt};
+use nom_supreme::error::ErrorTree;
+use nom_supreme::final_parser::final_parser;
+
+use super::ast;
+
+use self::cte::with_queries;
+use self::delete::delete;
+use self::insert::insert;
+use self::result::Result;
+use self::select::select;
+use self::token::*;
+use self::update::update;
+use self::utils::*;
+
 mod common;
 mod cte;
 mod delete;
@@ -12,21 +28,6 @@ mod token;
 mod typecasts;
 mod update;
 mod utils;
-
-use crate::parser::cte::with_queries;
-use crate::parser::update::update;
-use nom::branch::alt;
-use nom::combinator::{eof, map, opt};
-use nom_supreme::error::ErrorTree;
-use nom_supreme::final_parser::final_parser;
-
-use self::delete::delete;
-use self::insert::insert;
-use self::result::Result;
-use self::select::select;
-use self::token::*;
-use self::utils::*;
-use super::ast;
 
 fn statement(input: &str) -> Result<ast::AST> {
     seq(

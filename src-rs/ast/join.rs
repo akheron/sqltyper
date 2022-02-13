@@ -1,5 +1,6 @@
-use super::{Expression, TableRef};
 use crate::ast::SubquerySelect;
+
+use super::{Expression, TableRef};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum JoinType {
