@@ -228,7 +228,7 @@ async fn get_source_columns_for_subquery(
         .collect())
 }
 
-fn combine_source_columns(
+pub fn combine_source_columns(
     a: &mut Vec<SourceColumn>,
     b: &mut Vec<SourceColumn>,
 ) -> Vec<SourceColumn> {

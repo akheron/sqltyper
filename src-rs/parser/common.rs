@@ -4,7 +4,7 @@ use crate::ast::UpdateValue;
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
 use crate::parser::token::{identifier, keyword, symbol};
-use crate::parser::utils::{list_of1, prefixed, sep_by1, seq};
+use crate::parser::utils::{list_of1, prefixed, sep_by1, seq, terminated2};
 use nom::branch::alt;
 use nom::combinator::{map, opt};
 use nom::sequence::preceded;
@@ -66,19 +66,31 @@ pub fn where_(input: &str) -> Result<ast::Expression> {
     prefixed(Keyword::WHERE, expression)(input)
 }
 
-fn expression_as(input: &str) -> Result<ast::ExpressionAs> {
-    seq((expression, opt(as_opt)), |(expr, as_)| ast::ExpressionAs {
-        expr,
-        as_,
+fn all_fields(input: &str) -> Result<ast::SelectListItem> {
+    map(symbol("*"), |_| ast::SelectListItem::AllFields)(input)
+}
+
+fn all_table_fields(input: &str) -> Result<ast::SelectListItem> {
+    map(
+        terminated2(identifier, symbol("."), symbol("*")),
+        |table_name| ast::SelectListItem::AllTableFields { table_name },
+    )(input)
+}
+
+fn select_list_expression(input: &str) -> Result<ast::SelectListItem> {
+    seq((expression, opt(as_opt)), |(expression, as_)| {
+        ast::SelectListItem::SelectListExpression { expression, as_ }
     })(input)
 }
 
-pub fn returning(input: &str) -> Result<ast::Returning> {
-    prefixed(
-        Keyword::RETURNING,
-        alt((
-            map(symbol("*"), |_| ast::Returning::AllColumns),
-            map(sep_by1(",", expression_as), ast::Returning::Expressions),
-        )),
-    )(input)
+fn select_list_item(input: &str) -> Result<ast::SelectListItem> {
+    alt((all_fields, all_table_fields, select_list_expression))(input)
+}
+
+pub fn select_list(input: &str) -> Result<Vec<ast::SelectListItem>> {
+    sep_by1(",", select_list_item)(input)
+}
+
+pub fn returning(input: &str) -> Result<Vec<ast::SelectListItem>> {
+    prefixed(Keyword::RETURNING, select_list)(input)
 }

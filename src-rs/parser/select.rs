@@ -1,12 +1,12 @@
 use super::Result;
 use crate::ast;
-use crate::parser::common::as_opt;
+use crate::parser::common::select_list;
 use crate::parser::cte::with_queries;
 use crate::parser::expression::expression;
 use crate::parser::keyword::Keyword;
-use crate::parser::token::{any_operator, identifier, keyword, symbol};
+use crate::parser::token::{any_operator, identifier, keyword};
 use crate::parser::utils::{
-    keyword_to, list_of1, parenthesized, prefixed, prefixed_, sep_by1, seq, terminated2,
+    keyword_to, list_of1, parenthesized, prefixed, prefixed_, sep_by1, seq,
 };
 use crate::parser::{common, join};
 use nom::branch::alt;
@@ -27,31 +27,6 @@ fn distinct(input: &str) -> Result<ast::Distinct> {
             },
         ),
     ))(input)
-}
-
-fn all_fields(input: &str) -> Result<ast::SelectListItem> {
-    map(symbol("*"), |_| ast::SelectListItem::AllFields)(input)
-}
-
-fn all_table_fields(input: &str) -> Result<ast::SelectListItem> {
-    map(
-        terminated2(identifier, symbol("."), symbol("*")),
-        |table_name| ast::SelectListItem::AllTableFields { table_name },
-    )(input)
-}
-
-fn select_list_expression(input: &str) -> Result<ast::SelectListItem> {
-    seq((expression, opt(as_opt)), |(expression, as_)| {
-        ast::SelectListItem::SelectListExpression { expression, as_ }
-    })(input)
-}
-
-fn select_list_item(input: &str) -> Result<ast::SelectListItem> {
-    alt((all_fields, all_table_fields, select_list_expression))(input)
-}
-
-fn select_list(input: &str) -> Result<Vec<ast::SelectListItem>> {
-    sep_by1(",", select_list_item)(input)
 }
 
 fn group_by(input: &str) -> Result<Vec<ast::Expression>> {

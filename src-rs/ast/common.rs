@@ -19,6 +19,23 @@ impl<'a> Display for TableRef<'a> {
 }
 
 #[derive(Debug)]
+pub enum SelectListItem<'a> {
+    // SELECT expr [ AS name ]
+    SelectListExpression {
+        expression: Expression<'a>,
+        as_: Option<&'a str>,
+    },
+
+    // SELECT tbl.*
+    AllTableFields {
+        table_name: &'a str,
+    },
+
+    // SELECT *
+    AllFields,
+}
+
+#[derive(Debug)]
 pub enum UpdateValue<'a> {
     Default,
     Value(Expression<'a>),

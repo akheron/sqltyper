@@ -7,7 +7,7 @@ use self::utils::test;
 #[tokio::test]
 async fn test_select_cte() {
     test(
-        "CREATE TEMPORARY TABLE person (id serial, name varchar(255) NOT NULL, age integer)",
+        &["CREATE TEMPORARY TABLE person (id serial, name varchar(255) NOT NULL, age integer)"],
         "WITH youngsters AS (SELECT * FROM person WHERE age < ${maximumAge}) SELECT * FROM youngsters",
         StatementRowCount::Many,
         &[("maximumAge", Type::INT4, false)],
@@ -19,7 +19,7 @@ async fn test_select_cte() {
 #[tokio::test]
 async fn test_insert() {
     test(
-        "CREATE TEMPORARY TABLE person (id SERIAL NOT NULL, name TEXT NOT NULL, age INT)",
+        &["CREATE TEMPORARY TABLE person (id SERIAL NOT NULL, name TEXT NOT NULL, age INT)"],
         "INSERT INTO person (name, age) VALUES (${name}, ${age})",
         StatementRowCount::Zero,
         &[("name", Type::TEXT, false), ("age", Type::INT4, true)],
@@ -29,9 +29,23 @@ async fn test_insert() {
 }
 
 #[tokio::test]
+async fn test_insert_select() {
+    test(
+        &[
+            "CREATE TEMPORARY TABLE person (name varchar(255) NOT NULL, age integer, shoe_size integer)",
+            "CREATE TEMPORARY TABLE other (text varchar(255) NOT NULL, number integer NOT NULL, other_number integer)",
+        ],
+        "INSERT INTO person (name, age, shoe_size) SELECT text, number, other_number FROM other RETURNING *",
+        StatementRowCount::Many,
+        &[],
+        &[("name", Type::VARCHAR, false), ("age", Type::INT4, true), ("shoe_size", Type::INT4, true)],
+    ).await;
+}
+
+#[tokio::test]
 async fn test_update() {
     test(
-        "CREATE TEMPORARY TABLE person (id serial PRIMARY KEY, constant integer, age integer, name varchar(255) NOT NULL, height_doubled integer)",
+        &["CREATE TEMPORARY TABLE person (id serial PRIMARY KEY, constant integer, age integer, name varchar(255) NOT NULL, height_doubled integer)"],
         "UPDATE person SET constant = 42, age = ${age}, name = ${name}, height_doubled = ${height} * 2 WHERE id = ${id}",
         StatementRowCount::Zero,
         &[("age", Type::INT4, true), ("name", Type::VARCHAR, false), ("height", Type::INT4, false), ("id", Type::INT4, false)],
@@ -95,25 +109,25 @@ mod utils {
     }
 
     async fn get_statement<'a>(
-        init_sql: &str,
+        init_sqls: &[&str],
         sql: &'a str,
     ) -> Result<Warn<StatementDescription<'a>>, Box<dyn std::error::Error>> {
         let client = connect().await?;
-        if !init_sql.is_empty() {
-            client.execute(init_sql, &[]).await?;
+        for init_sql in init_sqls {
+            client.execute(*init_sql, &[]).await?;
         }
         let result = sql_to_statement_description(&client, sql).await?;
         Ok(result)
     }
 
     pub async fn test(
-        init_sql: &str,
+        init_sqls: &[&str],
         sql: &str,
         row_count: StatementRowCount,
         params: &[NamedValueTuple<'_>],
         columns: &[NamedValueTuple<'_>],
     ) {
-        let statement = get_statement(init_sql, sql).await.unwrap();
+        let statement = get_statement(init_sqls, sql).await.unwrap();
         assert_statement(&statement, row_count, params, columns);
     }
 }

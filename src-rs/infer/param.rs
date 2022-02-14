@@ -21,9 +21,14 @@ pub async fn infer_param_nullability<C: GenericClient>(
 ) -> Result<NullableParams, Error> {
     match &ast.query {
         ast::Query::Select(_) => {}
-        ast::Query::Insert(ast::Insert { table, values, .. }) => match values {
+        ast::Query::Insert(ast::Insert {
+            table,
+            columns,
+            values,
+            ..
+        }) => match values {
             ast::Values::DefaultValues => {}
-            ast::Values::Values { columns, values } => {
+            ast::Values::ExpressionValues(values) => {
                 let table_columns = get_table_columns(client, table).await?;
                 let target_columns = find_insert_columns(columns, table_columns)?;
                 let values_list_params = find_params_from_values(values);

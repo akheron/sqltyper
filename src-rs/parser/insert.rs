@@ -1,4 +1,6 @@
-use super::Result;
+use nom::branch::alt;
+use nom::combinator::{map, opt};
+
 use crate::ast;
 use crate::parser::common::{as_req, identifier_list, returning, table_ref, update_assignments};
 use crate::parser::expression::expression;
@@ -6,8 +8,8 @@ use crate::parser::keyword::Keyword;
 use crate::parser::select::subquery_select;
 use crate::parser::token::{identifier, keyword, keywords};
 use crate::parser::utils::{list_of1, prefixed, prefixed_, sep_by1, seq};
-use nom::branch::alt;
-use nom::combinator::{map, opt};
+
+use super::Result;
 
 fn default_values(input: &str) -> Result<ast::Values> {
     map(keywords(&[Keyword::DEFAULT, Keyword::VALUES]), |_| {
@@ -27,12 +29,9 @@ fn expression_values_list(input: &str) -> Result<Vec<ast::ValuesValue>> {
 }
 
 fn values(input: &str) -> Result<ast::Values> {
-    seq(
-        (
-            opt(identifier_list),
-            prefixed(Keyword::VALUES, sep_by1(",", expression_values_list)),
-        ),
-        |(columns, values)| ast::Values::Values { columns, values },
+    map(
+        prefixed(Keyword::VALUES, sep_by1(",", expression_values_list)),
+        ast::Values::ExpressionValues,
     )(input)
 }
 
@@ -83,6 +82,7 @@ pub fn insert(input: &str) -> Result<ast::Insert> {
         (
             insert_into,
             opt(as_req),
+            opt(identifier_list),
             alt((
                 default_values,
                 values,
@@ -91,9 +91,10 @@ pub fn insert(input: &str) -> Result<ast::Insert> {
             opt(on_conflict),
             opt(returning),
         ),
-        |(table, as_, values, on_conflict, returning)| ast::Insert {
+        |(table, as_, columns, values, on_conflict, returning)| ast::Insert {
             table,
             as_,
+            columns,
             values,
             on_conflict,
             returning,

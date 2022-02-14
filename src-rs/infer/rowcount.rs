@@ -10,7 +10,7 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
                 Some(_) => match values {
                     // INSERT INTO ... DEFAULT VALUES always creates a single row
                     ast::Values::DefaultValues => StatementRowCount::One,
-                    ast::Values::Values { values, .. } => {
+                    ast::Values::ExpressionValues(values) => {
                         // Check the length of the VALUES expression list
                         if values.len() == 1 {
                             StatementRowCount::One
@@ -59,8 +59,9 @@ fn infer_select_row_count(select: &ast::Select<'_>) -> StatementRowCount {
 
 #[cfg(test)]
 mod tests {
-    use self::utils::test;
     use crate::StatementRowCount;
+
+    use self::utils::test;
 
     #[test]
     fn test_insert() {

@@ -118,6 +118,7 @@ async fn test_cte() {
             "WITH foo (bar, baz) AS (SELECT id, age FROM person) SELECT baz, bar FROM foo",
             "WITH foo AS (SELECT id, age FROM person), bar AS (SELECT id FROM foo) SELECT * FROM bar",
             "WITH foo AS (SELECT id, age FROM person), bar AS (SELECT id FROM foo) SELECT * FROM bar",
+            "WITH foo AS (SELECT id, age FROM person) INSERT INTO person WITH bar AS (SELECT id, age FROM foo) SELECT * FROM bar"
         ],
     )
     .await;
@@ -138,7 +139,9 @@ async fn test_insert() {
             "INSERT INTO person VALUES (1, 2) RETURNING *",
             "INSERT INTO person VALUES (1, 2) RETURNING id AS a, age - 1 b, flag",
             "INSERT INTO person VALUES (1) ON CONFLICT DO NOTHING RETURNING *",
-            "INSERT INTO person SELECT 1, 2, true"
+            "INSERT INTO person VALUES (1) ON CONFLICT DO NOTHING RETURNING person.*",
+            "INSERT INTO person SELECT 1, 2, true",
+            "INSERT INTO person (id, age, flag) SELECT 1, 2, true",
         ],
     ).await;
 }

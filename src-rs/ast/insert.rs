@@ -1,6 +1,4 @@
-use crate::ast::SubquerySelect;
-
-use super::{Expression, TableRef, UpdateAssignment};
+use super::{Expression, SelectListItem, SubquerySelect, TableRef, UpdateAssignment};
 
 #[derive(Debug)]
 pub enum ValuesValue<'a> {
@@ -11,10 +9,7 @@ pub enum ValuesValue<'a> {
 #[derive(Debug)]
 pub enum Values<'a> {
     DefaultValues,
-    Values {
-        columns: Option<Vec<&'a str>>,
-        values: Vec<Vec<ValuesValue<'a>>>,
-    },
+    ExpressionValues(Vec<Vec<ValuesValue<'a>>>),
     Query(SubquerySelect<'a>),
 }
 
@@ -43,16 +38,11 @@ pub struct ExpressionAs<'a> {
 }
 
 #[derive(Debug)]
-pub enum Returning<'a> {
-    AllColumns,
-    Expressions(Vec<ExpressionAs<'a>>),
-}
-
-#[derive(Debug)]
 pub struct Insert<'a> {
     pub table: TableRef<'a>,
     pub as_: Option<&'a str>,
+    pub columns: Option<Vec<&'a str>>,
     pub values: Values<'a>,
     pub on_conflict: Option<OnConflict<'a>>,
-    pub returning: Option<Returning<'a>>,
+    pub returning: Option<Vec<SelectListItem<'a>>>,
 }

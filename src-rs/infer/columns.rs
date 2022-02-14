@@ -7,7 +7,10 @@ use crate::infer::context::{get_context_for_ctes, Context};
 use crate::infer::error::Error;
 use crate::infer::param::NullableParams;
 use crate::infer::select_list::infer_select_list_output;
-use crate::infer::source_columns::{get_source_columns_for_table_expr, Column, ValueNullability};
+use crate::infer::source_columns::{
+    combine_source_columns, get_source_columns_for_table, get_source_columns_for_table_expr,
+    Column, ValueNullability,
+};
 
 pub async fn infer_column_nullability(
     client: &Client,
@@ -39,9 +42,76 @@ pub async fn get_output_columns(
             )
             .await
         }
-        ast::Query::Insert(_) => Ok(Vec::new()),
-        ast::Query::Update(_) => Ok(Vec::new()),
-        ast::Query::Delete(_) => Ok(Vec::new()),
+        ast::Query::Insert(insert) => {
+            if let Some(returning) = &insert.returning {
+                let source_columns =
+                    get_source_columns_for_table(client, context, &insert.table, &insert.as_)
+                        .await?;
+
+                // TODO: This fails to catch non-nullability of `col` in
+                //
+                //     INSERT INTO tbl (col)
+                //     SELECT 1
+                //
+                infer_select_list_output(
+                    client,
+                    context,
+                    &source_columns,
+                    param_nullability,
+                    &[],
+                    returning,
+                )
+                .await
+            } else {
+                Ok(Vec::new())
+            }
+        }
+        ast::Query::Update(update) => {
+            if let Some(returning) = &update.returning {
+                let source_columns = combine_source_columns(
+                    &mut get_source_columns_for_table(client, context, &update.table, &update.as_)
+                        .await?,
+                    &mut get_source_columns_for_table_expr(
+                        client,
+                        context,
+                        param_nullability,
+                        update.from.as_ref(),
+                        false,
+                    )
+                    .await?,
+                );
+
+                infer_select_list_output(
+                    client,
+                    context,
+                    &source_columns,
+                    param_nullability,
+                    &[&update.where_],
+                    returning,
+                )
+                .await
+            } else {
+                Ok(Vec::new())
+            }
+        }
+        ast::Query::Delete(delete) => {
+            if let Some(returning) = &delete.returning {
+                let source_columns =
+                    get_source_columns_for_table(client, context, &delete.table, &delete.as_)
+                        .await?;
+                infer_select_list_output(
+                    client,
+                    context,
+                    &source_columns,
+                    param_nullability,
+                    &[&delete.where_],
+                    returning,
+                )
+                .await
+            } else {
+                Ok(Vec::new())
+            }
+        }
     }
 }
 
