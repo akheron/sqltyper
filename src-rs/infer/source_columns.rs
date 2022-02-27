@@ -1,5 +1,7 @@
-use async_recursion::async_recursion;
 use std::borrow::Borrow;
+use std::slice::Iter;
+
+use async_recursion::async_recursion;
 use tokio_postgres::Client;
 
 use crate::ast;
@@ -16,6 +18,14 @@ pub enum ValueNullability {
 }
 
 impl ValueNullability {
+    pub fn is_nullable(&self) -> bool {
+        match self {
+            ValueNullability::Scalar { nullable } => nullable,
+            ValueNullability::Array { nullable, .. } => nullable,
+        }
+        .to_owned()
+    }
+
     pub fn to_non_nullable(&self) -> ValueNullability {
         match self {
             ValueNullability::Scalar { .. } => ValueNullability::Scalar { nullable: false },
@@ -81,6 +91,14 @@ impl ValueNullability {
             },
         }
     }
+
+    pub fn disjunction3(
+        a: &ValueNullability,
+        b: &ValueNullability,
+        c: &ValueNullability,
+    ) -> ValueNullability {
+        ValueNullability::disjunction(&ValueNullability::disjunction(a, b), c)
+    }
 }
 
 pub struct Column {
@@ -95,38 +113,68 @@ pub struct SourceColumn {
     pub hidden: bool,
 }
 
-pub async fn get_source_columns_for_table<'a>(
+pub struct SourceColumns(Vec<SourceColumn>);
+
+impl SourceColumns {
+    pub fn iter(&self) -> Iter<SourceColumn> {
+        return self.0.iter();
+    }
+
+    pub fn find_table_column(&self, table: &str, column: &str) -> Option<&SourceColumn> {
+        self.iter()
+            .find(|col| col.table_alias == table && col.column_name == column)
+    }
+
+    pub fn find_column(&self, column: &str) -> Option<&SourceColumn> {
+        let mut result: Option<&SourceColumn> = None;
+        for col in &self.0 {
+            if col.column_name == column {
+                if result.is_some() {
+                    // Multiple columns with the same name
+                    return None;
+                }
+                result = Some(col);
+            }
+        }
+        result
+    }
+}
+
+pub async fn get_source_columns_for_table(
     client: &Client,
     context: &Context<'_>,
     table: &ast::TableRef<'_>,
     as_: &Option<&str>,
-) -> Result<Vec<SourceColumn>, Error> {
+) -> Result<SourceColumns, Error> {
     // Try to find a matching CTE
     if let Some(tbl) = context.get_table(table) {
-        return Ok(tbl
-            .iter()
-            .map(|col| SourceColumn {
-                table_alias: as_.unwrap_or(table.table).to_string(),
-                column_name: col.name.to_string(),
-                nullability: col.nullability,
-                hidden: false,
-            })
-            .collect());
+        return Ok(SourceColumns(
+            tbl.iter()
+                .map(|col| SourceColumn {
+                    table_alias: as_.unwrap_or(table.table).to_string(),
+                    column_name: col.name.to_string(),
+                    nullability: col.nullability,
+                    hidden: false,
+                })
+                .collect(),
+        ));
     }
 
     // No matching CTE, try to find a database table
     let db_columns = get_table_columns(client, table).await?;
-    Ok(db_columns
-        .into_iter()
-        .map(|col| SourceColumn {
-            table_alias: as_.unwrap_or(table.table).to_string(),
-            column_name: col.name,
-            nullability: ValueNullability::Scalar {
-                nullable: col.nullable,
-            },
-            hidden: col.hidden,
-        })
-        .collect())
+    Ok(SourceColumns(
+        db_columns
+            .into_iter()
+            .map(|col| SourceColumn {
+                table_alias: as_.unwrap_or(table.table).to_string(),
+                column_name: col.name,
+                nullability: ValueNullability::Scalar {
+                    nullable: col.nullable,
+                },
+                hidden: col.hidden,
+            })
+            .collect(),
+    ))
 }
 
 #[async_recursion]
@@ -136,9 +184,9 @@ pub async fn get_source_columns_for_table_expr(
     param_nullability: &NullableParams,
     table_expr_opt: Option<&'async_recursion ast::TableExpression<'async_recursion>>,
     set_nullable: bool,
-) -> Result<Vec<SourceColumn>, Error> {
+) -> Result<SourceColumns, Error> {
     let mut result = match table_expr_opt {
-        None => Vec::new(),
+        None => SourceColumns(Vec::new()),
         Some(table_expr) => match table_expr {
             ast::TableExpression::Table { table, as_ } => {
                 get_source_columns_for_table(client, context, &table, as_).await?
@@ -201,7 +249,7 @@ pub async fn get_source_columns_for_table_expr(
         },
     };
     if set_nullable {
-        for col in &mut result {
+        for col in &mut result.0 {
             col.nullability = col.nullability.to_nullable();
         }
     }
@@ -214,26 +262,25 @@ async fn get_source_columns_for_subquery(
     param_nullability: &NullableParams,
     query: &ast::SubquerySelect<'_>,
     as_: &str,
-) -> Result<Vec<SourceColumn>, Error> {
+) -> Result<SourceColumns, Error> {
     let columns =
         get_subquery_select_output_columns(client, context, param_nullability, &query).await?;
-    Ok(columns
-        .into_iter()
-        .map(|col| SourceColumn {
-            table_alias: as_.to_string(),
-            column_name: col.name.to_string(),
-            nullability: col.nullability,
-            hidden: false,
-        })
-        .collect())
+    Ok(SourceColumns(
+        columns
+            .into_iter()
+            .map(|col| SourceColumn {
+                table_alias: as_.to_string(),
+                column_name: col.name.to_string(),
+                nullability: col.nullability,
+                hidden: false,
+            })
+            .collect(),
+    ))
 }
 
-pub fn combine_source_columns(
-    a: &mut Vec<SourceColumn>,
-    b: &mut Vec<SourceColumn>,
-) -> Vec<SourceColumn> {
-    let mut result = Vec::<SourceColumn>::with_capacity(a.len() + b.len());
-    result.append(a);
-    result.append(b);
-    result
+pub fn combine_source_columns(a: &mut SourceColumns, b: &mut SourceColumns) -> SourceColumns {
+    let mut result = Vec::<SourceColumn>::with_capacity(a.0.len() + b.0.len());
+    result.append(&mut a.0);
+    result.append(&mut b.0);
+    SourceColumns(result)
 }

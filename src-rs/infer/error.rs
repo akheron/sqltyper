@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 pub enum Error {
     Postgres(tokio_postgres::Error),
     TableNotFound(String),
+    TableColumnNotFound { table: String, column: String },
     ColumnNotFound(String),
     ParseError(String),
     UnexpectedNumberOfColumns(String),
@@ -25,11 +26,14 @@ impl From<ErrorTree<&str>> for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Postgres(err) => write!(f, "{}", err),
-            Error::TableNotFound(table) => write!(f, "Table not found: {}", table),
-            Error::ColumnNotFound(column) => write!(f, "Column not found: {}", column),
-            Error::ParseError(err) => write!(f, "{}", err),
-            Error::UnexpectedNumberOfColumns(err) => write!(f, "{}", err),
+            Error::Postgres(err) => write!(f, "{err}"),
+            Error::TableNotFound(table) => write!(f, "Table not found: {table}"),
+            Error::TableColumnNotFound { table, column } => {
+                write!(f, "Column not found: {table}.{column}")
+            }
+            Error::ColumnNotFound(column) => write!(f, "Column not found: {column}"),
+            Error::ParseError(err) => write!(f, "{err}"),
+            Error::UnexpectedNumberOfColumns(err) => write!(f, "{err}"),
         }
     }
 }

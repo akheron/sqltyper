@@ -2,6 +2,7 @@ mod ast;
 mod infer;
 mod parser;
 mod preprocess;
+mod utils;
 pub mod types;
 
 use std::fmt;

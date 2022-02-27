@@ -86,7 +86,7 @@ pub async fn get_output_columns(
                     context,
                     &source_columns,
                     param_nullability,
-                    &[&update.where_],
+                    &[update.where_.as_ref()],
                     returning,
                 )
                 .await
@@ -104,7 +104,7 @@ pub async fn get_output_columns(
                     context,
                     &source_columns,
                     param_nullability,
-                    &[&delete.where_],
+                    &[delete.where_.as_ref()],
                     returning,
                 )
                 .await
@@ -173,7 +173,7 @@ async fn infer_select_body_output(
         context,
         &source_columns,
         param_nullability,
-        &[&body.where_, &body.having],
+        &[body.where_.as_ref(), body.having.as_ref()],
         &body.select_list,
     )
     .await

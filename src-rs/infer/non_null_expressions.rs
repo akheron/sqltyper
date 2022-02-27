@@ -1,23 +1,40 @@
 use crate::ast;
-use crate::infer::null_safety::{builtin_function_null_safety, operator_null_safety, NullSafety};
 use crate::infer::source_columns::SourceColumn;
-use std::slice::Iter;
+use crate::utils::builtin_properties::{
+    builtin_function_null_safety, operator_null_safety, NullSafety,
+};
 
-pub struct NonNullExpressions<'a>(Vec<&'a ast::Expression<'a>>);
+pub enum NonNullExpressions<'a> {
+    Root,
+    Derived {
+        parent: &'a NonNullExpressions<'a>,
+        exprs: Vec<&'a ast::Expression<'a>>,
+    },
+}
 
 impl<'a> NonNullExpressions<'a> {
-    pub fn source_column(&self, source_column: &SourceColumn) -> bool {
-        self.iter().any(|expr| match expr {
-            ast::Expression::TableColumnRef { table, column } => {
-                source_column.table_alias == *table && source_column.column_name == *column
+    pub fn has(&self, expression: &ast::Expression<'_>) -> bool {
+        match self {
+            NonNullExpressions::Root => false,
+            NonNullExpressions::Derived { parent, exprs } => {
+                exprs.iter().any(|non_null| *non_null == expression) || parent.has(expression)
             }
-            ast::Expression::ColumnRef(column) => source_column.column_name == *column,
-            _ => false,
-        })
+        }
     }
 
-    fn iter(&self) -> Iter<&ast::Expression> {
-        self.0.iter()
+    pub fn has_source_column(&self, source_column: &SourceColumn) -> bool {
+        match self {
+            NonNullExpressions::Root => false,
+            NonNullExpressions::Derived { parent, exprs } => {
+                exprs.iter().any(|expr| match expr {
+                    ast::Expression::TableColumnRef { table, column } => {
+                        source_column.table_alias == *table && source_column.column_name == *column
+                    }
+                    ast::Expression::ColumnRef(column) => source_column.column_name == *column,
+                    _ => false,
+                }) || parent.has_source_column(source_column)
+            }
+        }
     }
 }
 
@@ -29,15 +46,17 @@ impl<'a> NonNullExpressions<'a> {
 // information find a list of expressions that are certainly not null.
 //
 pub fn non_null_expressions_from_row_conditions<'a>(
-    row_conditions: &[&'a Option<ast::Expression<'a>>],
+    parent: &'a NonNullExpressions<'a>,
+    row_conditions: &[Option<&'a ast::Expression<'a>>],
 ) -> NonNullExpressions<'a> {
-    NonNullExpressions(
-        row_conditions
+    NonNullExpressions::Derived {
+        parent,
+        exprs: row_conditions
             .iter()
-            .filter_map(|expr_opt| expr_opt.as_ref())
+            .filter_map(|expr_opt| *expr_opt)
             .flat_map(|expr| get_non_null_sub_expressions_from_row_cond(expr, false))
             .collect(),
-    )
+    }
 }
 
 fn get_non_null_sub_expressions_from_row_cond<'a>(
