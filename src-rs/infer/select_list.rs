@@ -1,4 +1,4 @@
-use tokio_postgres::Client;
+use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::infer::context::Context;
@@ -11,8 +11,8 @@ use crate::infer::param::NullableParams;
 use crate::infer::source_columns::SourceColumn;
 use crate::infer::source_columns::{Column, SourceColumns};
 
-pub async fn infer_select_list_output(
-    client: &Client,
+pub async fn infer_select_list_output<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     source_columns: &SourceColumns,
     param_nullability: &NullableParams,
@@ -39,8 +39,8 @@ pub async fn infer_select_list_output(
     Ok(result)
 }
 
-async fn infer_select_list_item_output(
-    client: &Client,
+async fn infer_select_list_item_output<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     source_columns: &SourceColumns,
     param_nullability: &NullableParams,

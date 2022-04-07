@@ -1,5 +1,5 @@
 use async_recursion::async_recursion;
-use tokio_postgres::Client;
+use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::ast::SelectOpType;
@@ -12,8 +12,8 @@ use crate::infer::source_columns::{
     Column, ValueNullability,
 };
 
-pub async fn infer_column_nullability(
-    client: &Client,
+pub async fn infer_column_nullability<C: GenericClient + Sync>(
+    client: &C,
     param_nullability: &NullableParams,
     tree: &ast::AST<'_>,
 ) -> Result<Vec<Column>, Error> {
@@ -21,8 +21,8 @@ pub async fn infer_column_nullability(
 }
 
 #[async_recursion]
-pub async fn get_output_columns(
-    client: &Client,
+pub async fn get_output_columns<C: GenericClient + Sync>(
+    client: &C,
     parent_context: &Context<'_>,
     param_nullability: &NullableParams,
     tree: &ast::AST<'_>,
@@ -115,8 +115,8 @@ pub async fn get_output_columns(
     }
 }
 
-async fn infer_set_ops_output(
-    client: &Client,
+async fn infer_set_ops_output<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     param_nullability: &NullableParams,
     first: &ast::SelectBody<'_>,
@@ -154,8 +154,8 @@ async fn infer_set_ops_output(
     Ok(result)
 }
 
-async fn infer_select_body_output(
-    client: &Client,
+async fn infer_select_body_output<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     param_nullability: &NullableParams,
     body: &ast::SelectBody<'_>,
@@ -179,8 +179,8 @@ async fn infer_select_body_output(
     .await
 }
 
-pub async fn get_subquery_select_output_columns(
-    client: &Client,
+pub async fn get_subquery_select_output_columns<C: GenericClient + Sync>(
+    client: &C,
     parent_context: &Context<'_>,
     param_nullability: &NullableParams,
     select: &ast::SubquerySelect<'_>,

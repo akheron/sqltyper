@@ -1,6 +1,5 @@
-use tokio_postgres::Client;
-
 use crate::{parser::parse_sql, types::StatementDescription};
+use tokio_postgres::GenericClient;
 
 use self::columns::infer_column_nullability;
 use self::error::Error;
@@ -19,8 +18,8 @@ mod rowcount;
 mod select_list;
 mod source_columns;
 
-pub async fn infer_statement_nullability<'a>(
-    client: &Client,
+pub async fn infer_statement_nullability<'a, C: GenericClient + Sync>(
+    client: &C,
     statement: &mut StatementDescription<'a>,
 ) -> Result<(), Error> {
     let ast = parse_sql(&statement.sql)?;

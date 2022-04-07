@@ -3,7 +3,7 @@ use utils::test;
 #[tokio::test]
 async fn test_expression_subqueres() {
     test(
-        &["CREATE TEMPORARY TABLE person (age integer)"],
+        &["CREATE TABLE person (age integer)"],
         &[
             "SELECT array(SELECT age FROM person)",
             "SELECT (SELECT age FROM PERSON)",
@@ -48,7 +48,7 @@ async fn test_expression_special_function_call() {
 #[tokio::test]
 async fn test_expression_function_call() {
     test(
-        &["CREATE TEMPORARY TABLE person (age integer)"],
+        &["CREATE TABLE person (age integer)"],
         &[
             "SELECT count(*) FROM person",
             "SELECT now()",
@@ -93,7 +93,7 @@ async fn test_expression_typecast() {
 #[tokio::test]
 async fn test_expression_operators() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, friends text[])"],
+        &["CREATE TABLE person (id int, friends text[])"],
         &[
             "SELECT friends[id - 1] FROM person",
             "SELECT - + -5 ^ (-8) + (7 * 5 % 2 / 1) - 77",
@@ -112,7 +112,7 @@ async fn test_expression_operators() {
 #[tokio::test]
 async fn test_cte() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "WITH foo AS (SELECT id FROM person) SELECT * FROM foo",
             "WITH foo (bar, baz) AS (SELECT id, age FROM person) SELECT baz, bar FROM foo",
@@ -127,7 +127,7 @@ async fn test_cte() {
 #[tokio::test]
 async fn test_insert() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool, CONSTRAINT unique_id UNIQUE (id))"],
+        &["CREATE TABLE person (id int, age int, flag bool, CONSTRAINT unique_id UNIQUE (id))"],
         &[
             "INSERT INTO person DEFAULT VALUES",
             "INSERT INTO person (id, age) VALUES (1, 2), (3, 4)",
@@ -149,7 +149,7 @@ async fn test_insert() {
 #[tokio::test]
 async fn test_select_basic() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "SELECT 1",
             "SELECT * FROM person",
@@ -170,7 +170,7 @@ async fn test_select_basic() {
 #[tokio::test]
 async fn test_select_distinct() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "SELECT ALL age FROM person",
             "SELECT DISTINCT age FROM person",
@@ -185,9 +185,9 @@ async fn test_select_distinct() {
 async fn test_select_from() {
     test(
         &[
-            "CREATE TEMPORARY TABLE person (id int, age int, flag bool)",
-            "CREATE TEMPORARY TABLE book (id int, title text)",
-            "CREATE TEMPORARY TABLE food (id int, name text)",
+            "CREATE TABLE person (id int, age int, flag bool)",
+            "CREATE TABLE book (id int, title text)",
+            "CREATE TABLE food (id int, name text)",
         ],
         &[
             "SELECT * FROM pg_catalog.pg_class",
@@ -212,7 +212,7 @@ async fn test_select_from() {
 #[tokio::test]
 async fn select_window() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "SELECT * FROM person WINDOW w1 AS (PARTITION BY id, age)",
             "SELECT * FROM person WINDOW w1 AS (ORDER BY id DESC, age USING < NULLS FIRST)",
@@ -225,7 +225,7 @@ async fn select_window() {
 #[tokio::test]
 async fn select_set_ops() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "SELECT id FROM person UNION ALL SELECT age FROM person",
             "SELECT id FROM person INTERSECT DISTINCT SELECT age FROM person",
@@ -238,7 +238,7 @@ async fn select_set_ops() {
 #[tokio::test]
 async fn test_update() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "UPDATE person AS p SET id = $1, age = DEFAULT",
             "WITH foo AS (SELECT id FROM person) UPDATE person SET age = f.id FROM foo f",
@@ -252,7 +252,7 @@ async fn test_update() {
 #[tokio::test]
 async fn test_delete() {
     test(
-        &["CREATE TEMPORARY TABLE person (id int, age int, flag bool)"],
+        &["CREATE TABLE person (id int, age int, flag bool)"],
         &[
             "DELETE FROM person",
             "DELETE FROM person AS p",
@@ -267,27 +267,20 @@ async fn test_delete() {
 mod utils {
     use crate::connect_to_database;
     use crate::parser::parse_sql;
-    use tokio_postgres::{Client, Transaction};
+    use tokio_postgres::Transaction;
 
     pub async fn test(init_sqls: &[&str], tests: &[&str]) {
+        // Run in transaction to rollback all changes automatically
         let mut client = connect().await.unwrap();
-        let tx = init(&mut client, init_sqls).await.unwrap();
+        let tx = client.transaction().await.unwrap();
+
+        for init_sql in init_sqls {
+            tx.execute(*init_sql, &[]).await.unwrap();
+        }
         for test in tests {
             assert_prepare(&tx, test).await;
             assert_parse(test);
         }
-        tx.rollback().await.unwrap();
-    }
-
-    async fn init<'a>(
-        client: &'a mut Client,
-        init_sqls: &[&str],
-    ) -> Result<Transaction<'a>, Box<dyn std::error::Error>> {
-        let tx = client.transaction().await?;
-        for init_sql in init_sqls {
-            tx.execute(*init_sql, &[]).await?;
-        }
-        Ok(tx)
     }
 
     async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {

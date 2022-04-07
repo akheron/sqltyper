@@ -2,7 +2,7 @@
 
 CREATE TABLE person (
   id serial PRIMARY KEY,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer
 );
 
@@ -10,7 +10,7 @@ CREATE TABLE person (
 
 WITH youngsters AS (
   SELECT * FROM person
-  WHERE age < ${maximumAge}
+  WHERE age < $1
 )
 SELECT *
 FROM youngsters
@@ -19,12 +19,13 @@ FROM youngsters
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-id: number
-name: string
-age: number
+int4
 
---- expected param types --------------------------------------------------
+--- expected columns ------------------------------------------------------
 
-maximumAge: number
+id: int4
+name: text
+age: int4
+

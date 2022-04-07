@@ -15,7 +15,7 @@ impl NullableParams {
     }
 }
 
-pub async fn infer_param_nullability<C: GenericClient>(
+pub async fn infer_param_nullability<C: GenericClient + Sync>(
     client: &C,
     ast: &ast::AST<'_>,
 ) -> Result<NullableParams, Error> {

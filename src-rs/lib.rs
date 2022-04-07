@@ -2,14 +2,14 @@ mod ast;
 mod infer;
 mod parser;
 mod preprocess;
-mod utils;
 pub mod types;
+mod utils;
 
 use std::fmt;
 use tokio_postgres::{Client, GenericClient, NoTls};
 
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
-use crate::types::{NamedValue, StatementDescription, StatementRowCount, Warn};
+use crate::types::{NamedValue, StatementDescription, StatementRowCount, UnnamedValue, Warn};
 use infer::infer_statement_nullability;
 
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl From<tokio_postgres::Error> for Error {
 
 impl std::error::Error for Error {}
 
-pub async fn describe_statement<'a, C: GenericClient>(
+pub async fn describe_statement<'a, C: GenericClient + Sync>(
     client: &C,
     preprocessed: PreprocessedSql<'a>,
 ) -> Result<StatementDescription<'a>, Error> {
@@ -52,10 +52,8 @@ pub async fn describe_statement<'a, C: GenericClient>(
         params: statement
             .params()
             .iter()
-            .zip(preprocessed.param_names.iter())
-            .map(|(param, name)| {
-                NamedValue::new(
-                    name,
+            .map(|param| {
+                UnnamedValue::new(
                     param.clone(),
                     false, // params are non-nullable by default
                 )
@@ -70,8 +68,8 @@ pub async fn describe_statement<'a, C: GenericClient>(
     })
 }
 
-pub async fn sql_to_statement_description<'a>(
-    client: &Client,
+pub async fn sql_to_statement_description<'a, C: GenericClient + Sync>(
+    client: &C,
     sql: &'a str,
 ) -> Result<Warn<StatementDescription<'a>>, Error> {
     let preprocessed = preprocess_sql(sql)?;

@@ -1,5 +1,5 @@
 use async_recursion::async_recursion;
-use tokio_postgres::Client;
+use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::ast::SubquerySelect;
@@ -16,8 +16,8 @@ use crate::utils::builtin_properties::{
 };
 
 #[async_recursion]
-pub async fn infer_expression_nullability(
-    client: &Client,
+pub async fn infer_expression_nullability<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     source_columns: &SourceColumns,
     param_nullability: &NullableParams,
@@ -384,8 +384,8 @@ pub async fn infer_expression_nullability(
     }
 }
 
-async fn infer_scalar_subquery_nullability(
-    client: &Client,
+async fn infer_scalar_subquery_nullability<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     param_nullability: &NullableParams,
     subquery: &SubquerySelect<'_>,

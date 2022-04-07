@@ -1,13 +1,13 @@
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer,
   shoe_size integer
 );
 
 CREATE TABLE other (
-  text varchar(255) NOT NULL,
+  text text NOT NULL,
   number integer NOT NULL,
   other_number integer
 );
@@ -22,10 +22,10 @@ RETURNING *
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-name: string
-age: number | null
-shoe_size: number | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+name: text
+age: int4?
+shoe_size: int4?

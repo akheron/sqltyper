@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tokio_postgres::Client;
+use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::infer::columns::get_output_columns;
@@ -81,8 +81,8 @@ impl<'a> ContextMutRef<'a> {
     }
 }
 
-pub async fn get_context_for_ctes<'a>(
-    client: &Client,
+pub async fn get_context_for_ctes<'a, C: GenericClient + Sync>(
+    client: &C,
     param_nullability: &NullableParams,
     parent: &'a Context<'a>,
     ctes_opt: &Option<Vec<ast::WithQuery<'_>>>,

@@ -12,7 +12,7 @@ pub struct Column {
     pub type_: Oid,
 }
 
-pub async fn get_table_columns<C: GenericClient>(
+pub async fn get_table_columns<C: GenericClient + Sync>(
     client: &C,
     table: &ast::TableRef<'_>,
 ) -> Result<Vec<Column>, Error> {
@@ -84,7 +84,9 @@ fn find_table(schema_search_order: &[String], rows: &[Row]) -> Option<Vec<Column
     None
 }
 
-async fn get_schema_search_order<C: GenericClient>(client: &C) -> Result<Vec<String>, Error> {
+async fn get_schema_search_order<C: GenericClient + Sync>(
+    client: &C,
+) -> Result<Vec<String>, Error> {
     Ok(client
         .query_one("SELECT current_schemas(true)", &[])
         .await?

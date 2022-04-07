@@ -25,12 +25,12 @@ WHERE nullable1 = ANY(SELECT 1 UNION SELECT 2)
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-out1: number
-out2: boolean | null
-out3: boolean | null
-out4: boolean
-out5: boolean
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+out1: int4
+out2: bool?
+out3: bool?
+out4: bool
+out5: bool

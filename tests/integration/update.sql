@@ -2,21 +2,21 @@
 
 CREATE TABLE person (
   id serial PRIMARY KEY,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer
 );
 
 --- query -----------------------------------------------------------------
 
-UPDATE person SET name = ${name}, age = ${age};
+UPDATE person SET name = $1, age = $2;
 
 --- expected row count ----------------------------------------------------
 
 zero
 
---- expected column types ----------------------------------------------------
+--- expected params -------------------------------------------------------
 
---- expected param types --------------------------------------------------
+text
+int4?
 
-name: string
-age: number | null
+--- expected columns ------------------------------------------------------

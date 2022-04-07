@@ -6,7 +6,7 @@ use tokio_postgres::Column;
 #[derive(Debug)]
 pub struct StatementDescription<'a> {
     pub sql: Cow<'a, str>,
-    pub params: Vec<NamedValue>,
+    pub params: Vec<UnnamedValue>,
     pub columns: Vec<NamedValue>,
     pub row_count: StatementRowCount,
 }
@@ -19,7 +19,7 @@ pub enum StatementRowCount {
     Many,      // zero or more output rows
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ValueType {
     Any(Type),
     Array { type_: Type, elem_nullable: bool },
@@ -35,6 +35,13 @@ impl ValueType {
             x => x.clone(),
         }
     }
+
+    pub fn to_type(&self) -> &Type {
+        match self {
+            ValueType::Any(type_) => type_,
+            ValueType::Array { type_, .. } => type_,
+        }
+    }
 }
 
 impl AsRef<Type> for ValueType {
@@ -46,7 +53,22 @@ impl AsRef<Type> for ValueType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
+pub struct UnnamedValue {
+    pub type_: ValueType,
+    pub nullable: bool,
+}
+
+impl UnnamedValue {
+    pub fn new(type_: Type, nullable: bool) -> UnnamedValue {
+        UnnamedValue {
+            type_: ValueType::Any(type_),
+            nullable,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct NamedValue {
     pub name: String,
     pub type_: ValueType,

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::slice::Iter;
 
 use async_recursion::async_recursion;
-use tokio_postgres::Client;
+use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::infer::columns::get_subquery_select_output_columns;
@@ -140,8 +140,8 @@ impl SourceColumns {
     }
 }
 
-pub async fn get_source_columns_for_table(
-    client: &Client,
+pub async fn get_source_columns_for_table<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     table: &ast::TableRef<'_>,
     as_: &Option<&str>,
@@ -178,8 +178,8 @@ pub async fn get_source_columns_for_table(
 }
 
 #[async_recursion]
-pub async fn get_source_columns_for_table_expr(
-    client: &Client,
+pub async fn get_source_columns_for_table_expr<C: GenericClient + Sync>(
+    client: &C,
     context: &Context,
     param_nullability: &NullableParams,
     table_expr_opt: Option<&'async_recursion ast::TableExpression<'async_recursion>>,
@@ -256,8 +256,8 @@ pub async fn get_source_columns_for_table_expr(
     Ok(result)
 }
 
-async fn get_source_columns_for_subquery(
-    client: &Client,
+async fn get_source_columns_for_subquery<C: GenericClient + Sync>(
+    client: &C,
     context: &Context<'_>,
     param_nullability: &NullableParams,
     query: &ast::SubquerySelect<'_>,
