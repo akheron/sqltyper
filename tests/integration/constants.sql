@@ -1,5 +1,3 @@
---- setup -----------------------------------------------------------------
-
 --- query -----------------------------------------------------------------
 
 SELECT
@@ -36,29 +34,29 @@ SELECT
 
 one
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-t: boolean
-f: boolean
-n1: number
-n2: number | null
-f1: number
-f2: number
-f3: number
-f4: number
-s_b: string
-s_vc: string
-s_d: number
-s_t: string
-s_ts: Date
-s_int: { hours: number; minutes: number; seconds: number }
-p_bi: string
-p_b: string
-p_vc: string
-p_d: number
-p_i4: number
-p_t: string
-p_ts: Date
-p_int: { hours: number; minutes: number; seconds: number }
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+t: bool
+f: bool
+n1: int4
+n2: int4?
+f1: float4
+f2: float4
+f3: float4
+f4: float4
+s_b: bit
+s_vc: varchar
+s_d: float8
+s_t: time
+s_ts: timestamptz
+s_int: interval
+p_bi: int8
+p_b: bit
+p_vc: varchar
+p_d: float8
+p_i4: int4
+p_t: time
+p_ts: timestamptz
+p_int: interval

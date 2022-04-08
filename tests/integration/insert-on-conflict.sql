@@ -1,22 +1,22 @@
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  name varchar(255) CONSTRAINT nonempty CHECK (name <> '')
+  name text CONSTRAINT nonempty CHECK (name <> '')
 );
 
 --- query -----------------------------------------------------------------
 
 INSERT INTO person (name)
-VALUES (${name})
-ON CONFLICT (name) DO UPDATE SET name = ${defaultName}
+VALUES ($1)
+ON CONFLICT (name) DO UPDATE SET name = $2
 
 --- expected row count ----------------------------------------------------
 
 zero
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
---- expected param types --------------------------------------------------
+text?
+text?
 
-name: string | null
-defaultName: string | null
+--- expected columns ------------------------------------------------------

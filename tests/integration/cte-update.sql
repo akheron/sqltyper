@@ -2,7 +2,7 @@
 
 CREATE TABLE person (
   id serial PRIMARY KEY,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer
 );
 
@@ -10,7 +10,7 @@ CREATE TABLE person (
 
 WITH youngsters AS (
   SELECT * FROM person
-  WHERE age < ${maximumAge}
+  WHERE age < $1
 )
 UPDATE person SET name = y.name
 FROM youngsters y
@@ -19,8 +19,8 @@ FROM youngsters y
 
 zero
 
---- expected column types ----------------------------------------------------
+--- expected params -------------------------------------------------------
 
---- expected param types --------------------------------------------------
+int4
 
-maximumAge: number
+--- expected columns ---------------------------------------------------------

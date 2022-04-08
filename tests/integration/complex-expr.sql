@@ -1,5 +1,6 @@
--- Non-nullability inferred from WHERE should "propagate" inside
--- complex expressions
+Non-nullability inferred from WHERE should "propagate" inside
+complex expressions
+
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
@@ -19,9 +20,9 @@ WHERE age IS NOT NULL
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-complex_name: string
-complex_age: boolean
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+complex_name: text
+complex_age: bool

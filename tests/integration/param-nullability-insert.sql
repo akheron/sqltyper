@@ -6,7 +6,7 @@ assigning should not.
 
 CREATE TABLE person (
   id serial PRIMARY KEY,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer,
   height_doubled integer
 );
@@ -14,16 +14,16 @@ CREATE TABLE person (
 --- query -----------------------------------------------------------------
 
 INSERT INTO person (name, age, height_doubled)
-VALUES (${name}, ${age}, ${height} * 2)
+VALUES ($1, $2, $3 * 2)
 
 --- expected row count ----------------------------------------------------
 
 zero
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
---- expected param types --------------------------------------------------
+text
+int4?
+int4
 
-name: string
-age: number | null
-height: number
+--- expected columns ------------------------------------------------------

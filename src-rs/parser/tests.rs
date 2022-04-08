@@ -175,7 +175,7 @@ async fn test_select_distinct() {
             "SELECT ALL age FROM person",
             "SELECT DISTINCT age FROM person",
             "SELECT DISTINCT ON (age, flag) id FROM person",
-            "SELECT DISTINCT ON (age / 5) id FROM person",
+            "SELECT DISTINCT ON (age / 5) id, flag FROM person",
         ],
     )
     .await;

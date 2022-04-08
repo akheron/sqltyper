@@ -49,14 +49,15 @@ WHERE age + 5 < 60
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-age_plus_5: number
-shoe_size: number
-height: number
-weight: number
-name_foo: string
-name: string | null
-arm_length: number
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+age_plus_5: int4
+shoe_size: int4
+height: int4
+weight: int4
+name_foo: text
+name: text?
+arm_length: int4
+

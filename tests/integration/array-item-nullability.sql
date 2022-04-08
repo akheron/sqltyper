@@ -16,9 +16,10 @@ FROM person
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-child_ages: Array<number | null> | null
-parent_ages: Array<number | null>
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+child_ages: [int4?]?
+parent_ages: [int4?]
+

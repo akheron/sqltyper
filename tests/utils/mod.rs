@@ -4,7 +4,7 @@ use std::path::Path;
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
-use nom::character::complete::{alphanumeric1, anychar, char, newline, one_of, space1};
+use nom::character::complete::{alphanumeric1, anychar, char, newline, space1};
 use nom::combinator::{all_consuming, eof, map, opt, peek, recognize, value};
 use nom::multi::{many0, many0_count, many1_count, many_till};
 use nom::sequence::{delimited, terminated, tuple};
@@ -172,7 +172,7 @@ fn unnamed_fields(input: &str) -> IResult<&str, Vec<UnnamedValue>> {
 
 fn unnamed_field(input: &str) -> IResult<&str, UnnamedValue> {
     map(
-        tuple((field_type, opt(char('?')), newline)),
+        tuple((value_type, opt(char('?')), newline)),
         |(type_, nullable, _)| UnnamedValue {
             type_,
             nullable: nullable.is_some(),
@@ -183,6 +183,7 @@ fn unnamed_field(input: &str) -> IResult<&str, UnnamedValue> {
 fn named_fields(input: &str) -> IResult<&str, Vec<NamedValue>> {
     many0(named_field)(input)
 }
+
 fn named_field(input: &str) -> IResult<&str, NamedValue> {
     map(
         tuple((field_name, unnamed_field)),
@@ -196,20 +197,38 @@ fn named_field(input: &str) -> IResult<&str, NamedValue> {
 
 fn field_name(input: &str) -> IResult<&str, &str> {
     terminated(
-        recognize(many1_count(alt((alphanumeric1, value("", one_of("$_")))))),
+        recognize(many1_count(alt((alphanumeric1, value("_", char('_')))))),
         tuple((char(':'), space1)),
     )(input)
 }
 
-fn field_type(input: &str) -> IResult<&str, ValueType> {
-    map(
-        alt((
-            value(Type::INT4, tag("int4")),
-            value(Type::BOOL, tag("bool")),
-            value(Type::TEXT, tag("text")),
-        )),
-        ValueType::Any,
-    )(input)
+fn value_type(input: &str) -> IResult<&str, ValueType> {
+    alt((
+        map(
+            tuple((char('['), primitive_type, opt(char('?')), char(']'))),
+            |(_, type_, nullable, _)| ValueType::Array {
+                type_,
+                elem_nullable: nullable.is_some(),
+            },
+        ),
+        map(primitive_type, ValueType::Any),
+    ))(input)
+}
+
+fn primitive_type(input: &str) -> IResult<&str, Type> {
+    alt((
+        value(Type::BIT, tag("bit")),
+        value(Type::BOOL, tag("bool")),
+        value(Type::FLOAT4, tag("float4")),
+        value(Type::FLOAT8, tag("float8")),
+        value(Type::INT4, tag("int4")),
+        value(Type::INT8, tag("int8")),
+        value(Type::INTERVAL, tag("interval")),
+        value(Type::TEXT, tag("text")),
+        value(Type::TIMESTAMPTZ, tag("timestamptz")),
+        value(Type::TIME, tag("time")),
+        value(Type::VARCHAR, tag("varchar")),
+    ))(input)
 }
 
 #[cfg(test)]
@@ -243,9 +262,8 @@ zero or one
     fn test_parse_test_case_maximal() {
         let case = parse_test_case(
             "
-initial stuff
-ignored
-
+--- initial stuff
+--- is ignored
 --- setup ---------
 
 arst foo
@@ -266,7 +284,7 @@ bool
 
 --- expected columns --------
 
-foo: int4?
+foo: [int4?]?
 bar: bool
 ",
         );
@@ -291,7 +309,10 @@ bar: bool
             vec![
                 NamedValue {
                     name: "foo".to_string(),
-                    type_: ValueType::Any(Type::INT4),
+                    type_: ValueType::Array {
+                        type_: Type::INT4,
+                        elem_nullable: true
+                    },
                     nullable: true
                 },
                 NamedValue {

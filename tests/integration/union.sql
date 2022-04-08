@@ -51,9 +51,10 @@ FROM dimensions
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-val1: number
-val2: number | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+val1: int4
+val2: int4?
+

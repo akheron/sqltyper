@@ -22,9 +22,9 @@ WHERE
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-age: number
-shoe_size: number
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+age: int4
+shoe_size: int4

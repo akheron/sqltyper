@@ -1,10 +1,11 @@
--- Without the ELSE branch the CASE result is always nullable. With
--- the ELSE branch is non-null if all of the branch results, including
--- the else branch, are non-null.
+Without the ELSE branch the CASE result is always nullable. With
+the ELSE branch is non-null if all of the branch results, including
+the else branch, are non-null.
+
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  name varchar(255),
+  name text,
   age integer
 );
 
@@ -28,10 +29,11 @@ FROM person
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-name: string
-name_no_else: string | null
-name_nullable: string | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+name: text
+name_no_else: text?
+name_nullable: text?
+

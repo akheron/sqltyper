@@ -1,4 +1,4 @@
-A custom enum is be converted to a union type of string constants
+A custom enum is converted to a union type of string constants
 
 --- setup -----------------------------------------------------------------
 
@@ -13,18 +13,18 @@ CREATE TABLE mytable (
 --- query -----------------------------------------------------------------
 
 SELECT * FROM mytable
-WHERE value = ${value}
+WHERE value = $1
 
 --- expected row count ----------------------------------------------------
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
+
+"foo" | "bar" | "baz"
+
+--- expected columns ------------------------------------------------------
 
 id: number
 value: "foo" | "bar" | "baz"
 other: "foo" | "bar" | "baz" | null
-
---- expected param types --------------------------------------------------
-
-value: "foo" | "bar" | "baz"

@@ -8,7 +8,7 @@ CREATE TABLE person (
 CREATE TABLE profile (
   profile_id serial PRIMARY KEY,
   person_id integer references person NOT NULL,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   time timestamptz NOT NULL
 );
 
@@ -21,10 +21,10 @@ NATURAL JOIN profile
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-person_id: number
-email: string
-name: string
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+person_id: int4
+email: text
+name: text

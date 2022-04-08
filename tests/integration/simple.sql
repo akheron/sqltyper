@@ -1,7 +1,7 @@
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer
 );
 
@@ -13,9 +13,10 @@ SELECT * FROM person
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-name: string
-age: number | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+name: text
+age: int4?
+

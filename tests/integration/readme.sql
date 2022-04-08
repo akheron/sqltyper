@@ -4,7 +4,7 @@ CREATE TABLE person (
   name text NOT NULL,
   age integer,
   shoe_size integer
-)
+);
 
 --- query -----------------------------------------------------------------
 
@@ -14,20 +14,21 @@ SELECT
   shoe_size
 FROM person
 WHERE
-    name LIKE ${namePattern} AND
-    age > ${minimumAge}
+    name LIKE $1 AND
+    age > $2
 
 --- expected row count ----------------------------------------------------
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-name_capitalized: string
-age: number
-shoe_size: number | null
+text
+int4
 
---- expected param types --------------------------------------------------
+--- expected columns ------------------------------------------------------
 
-namePattern: string
-minimumAge: number
+name_capitalized: text
+age: int4
+shoe_size: int4?
+

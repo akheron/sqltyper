@@ -8,7 +8,7 @@ CREATE TABLE person (
   id serial PRIMARY KEY,
   constant integer,
   age integer,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   height_doubled integer
 );
 
@@ -17,20 +17,20 @@ CREATE TABLE person (
 UPDATE person
 SET
     constant = 42,
-    age = ${age},
-    name = ${name},
-    height_doubled = ${height} * 2
-WHERE id = ${id}
+    age = $1,
+    name = $2,
+    height_doubled = $3 * 2
+WHERE id = $4
 
 --- expected row count ----------------------------------------------------
 
 zero
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
---- expected param types --------------------------------------------------
+int4?
+text
+int4
+int4
 
-age: number | null
-name: string
-height: number
-id: number
+--- expected columns ------------------------------------------------------

@@ -5,15 +5,15 @@
 
 CREATE TABLE person (
   id serial PRIMARY KEY,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer
 );
 
 CREATE TABLE book (
   id serial,
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   author_id integer NOT NULL REFERENCES person(id)
-)
+);
 
 --- query -----------------------------------------------------------------
 
@@ -27,9 +27,9 @@ LEFT JOIN book ON book.author_id = person.id
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-person_name: string
-book_name: string | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+person_name: text
+book_name: text?

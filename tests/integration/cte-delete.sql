@@ -10,19 +10,20 @@ CREATE TABLE person (
 
 WITH youngsters AS (
   SELECT * FROM person
-  WHERE age < ${maximumAge}
+  WHERE age < $1
 )
 DELETE FROM person WHERE age = (SELECT max(age) FROM youngsters)
-RETURNING age;
+RETURNING age
 
 --- expected row count ----------------------------------------------------
 
 many
 
---- expected column types ----------------------------------------------------
+--- expected params -------------------------------------------------------
 
-age: number
+int4
 
---- expected param types --------------------------------------------------
+--- expected columns ---------------------------------------------------------
 
-maximumAge: number
+age: int4
+

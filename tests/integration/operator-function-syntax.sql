@@ -1,8 +1,9 @@
--- Some operators and functions have special syntax
+Some operators and functions have special syntax
+
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer
 );
 
@@ -24,15 +25,15 @@ WHERE age NOT BETWEEN SYMMETRIC 300 AND 200
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-age_factorial: number
-overlaid: string
-pos: number
-sub1: string
-sub2: string
-trim1: string
-trim2: string
-trim3: string
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+age_factorial: int4
+overlaid: text
+pos: int4
+sub1: text
+sub2: text
+trim1: text
+trim2: text
+trim3: text

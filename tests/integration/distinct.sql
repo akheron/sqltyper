@@ -17,10 +17,10 @@ ORDER BY location, time DESC
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-location: string
-time: Date
-report: string
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+location: text
+time: timestamptz
+report: text

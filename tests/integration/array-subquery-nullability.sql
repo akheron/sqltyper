@@ -17,9 +17,9 @@ SELECT
 
 one
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-ages: Array<number | null>
-positive_ages: Array<number>
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+ages: [number?]
+positive_ages: [number]

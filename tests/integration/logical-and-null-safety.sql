@@ -1,5 +1,6 @@
--- FALSE AND NULL evaluates to FALSE, so we must not expect anything
--- about b if `a and b` evaluates to false.
+FALSE AND NULL evaluates to FALSE, so we must not expect anything
+about b if `a and b` evaluates to false.
+
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE tbl (
@@ -17,9 +18,9 @@ WHERE NOT NOT NOT (condition1 AND condition2)
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-condition1: boolean
-condition2: boolean | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+condition1: bool
+condition2: bool?

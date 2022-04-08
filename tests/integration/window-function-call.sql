@@ -1,7 +1,7 @@
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
-  name varchar(255) NOT NULL,
+  name text NOT NULL,
   age integer NOT NULL,
   shoe_size integer
 );
@@ -21,10 +21,11 @@ WINDOW
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-name: string
-age_sum: number
-shoe_size_avg: number | null
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+name: text
+age_sum: int4
+shoe_size_avg: int4?
+

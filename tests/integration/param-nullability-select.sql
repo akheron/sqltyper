@@ -1,18 +1,18 @@
--- In SELECT, params should be non-nullable
---- setup -----------------------------------------------------------------
+In SELECT, params should be non-nullable
 
 --- query -----------------------------------------------------------------
 
-SELECT ${param}::integer AS output
+SELECT $1::integer AS output
 
 --- expected row count ----------------------------------------------------
 
 one
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-output: number
+int4
 
---- expected param types --------------------------------------------------
+--- expected columns ------------------------------------------------------
 
-param: number
+output: int4
+

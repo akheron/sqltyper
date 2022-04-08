@@ -9,7 +9,7 @@ CREATE TABLE test (
 --- query -----------------------------------------------------------------
 
 SELECT
-    1 IN (foo, :param) AS a,
+    1 IN (foo, $1) AS a,
     1 IN (foo, bar) AS b,
     1 + NULL IN (1, 2, 3) AS c,
     1 IN ((SELECT foo FROM test LIMIT 1), 1, 2) AS d
@@ -19,13 +19,13 @@ FROM test
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-a: boolean
-b: boolean | null
-c: boolean | null
-d: boolean
+int4
 
---- expected param types --------------------------------------------------
+--- expected columns ------------------------------------------------------
 
-param: number
+a: bool
+b: bool?
+c: bool?
+d: bool

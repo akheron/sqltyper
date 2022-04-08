@@ -1,5 +1,6 @@
--- `HAVING expr` works like `WHERE expr` when it comes to nullability.
--- See e.g. ./where.sql.
+`HAVING expr` works like `WHERE expr` when it comes to nullability.
+See e.g. ./where.sql.
+
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
@@ -24,10 +25,10 @@ HAVING
 
 many
 
---- expected column types -------------------------------------------------
+--- expected params -------------------------------------------------------
 
-age: number
-height_sum: number
-shoe_size_count: number
+--- expected columns ------------------------------------------------------
 
---- expected param types --------------------------------------------------
+age: int4
+height_sum: int4
+shoe_size_count: int4
