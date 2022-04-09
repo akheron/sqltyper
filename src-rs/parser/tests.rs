@@ -1,7 +1,7 @@
 use utils::test;
 
 #[tokio::test]
-async fn test_expression_subqueres() {
+async fn test_expression_subqueries() {
     test(
         &["CREATE TABLE person (age integer)"],
         &[
@@ -104,6 +104,7 @@ async fn test_expression_operators() {
             "SELECT EXISTS (SELECT * FROM person) IS TRUE",
             "SELECT id IS NULL, friends IS NOT NULL FROM person",
             "SELECT NOT true AND true OR 123 <= id FROM person",
+            "SELECT id IS DISTINCT FROM 123, id IS NOT DISTINCT FROM 321 FROM person",
         ],
     )
     .await;

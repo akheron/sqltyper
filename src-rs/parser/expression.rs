@@ -6,7 +6,6 @@ use nom::multi::{many0, many1};
 use nom::sequence::{delimited, preceded, tuple};
 
 use crate::ast;
-use crate::ast::Expression;
 use crate::parser::keyword::Keyword;
 use crate::parser::select::{subquery_select, window_definition};
 use crate::parser::special_function::special_function_call;
@@ -190,7 +189,7 @@ fn add_sub(input: &str) -> Result<ast::Expression> {
     binop(alt((operator("+"), operator("-"))), mul_div_mod)(input)
 }
 
-fn other_op(input: &str) -> Result<Expression> {
+fn other_op(input: &str) -> Result<ast::Expression> {
     binop(
         any_operator_except(&[
             "<", ">", "=", "<=", ">=", "<>", "+", "-", "*", "/", "%", "^",
@@ -217,7 +216,7 @@ enum OtherRhs<'a> {
 }
 
 impl<'a> OtherRhs<'a> {
-    pub fn into_expression(self, lhs: Box<Expression<'a>>) -> Expression<'a> {
+    pub fn into_expression(self, lhs: Box<ast::Expression<'a>>) -> ast::Expression<'a> {
         match self {
             OtherRhs::InSubquery { op, subquery } => {
                 ast::Expression::InSubquery { lhs, op, subquery }
@@ -325,30 +324,61 @@ fn comparison(input: &str) -> Result<ast::Expression> {
 }
 
 fn is(input: &str) -> Result<ast::Expression> {
+    enum IsRhs<'a> {
+        UnaryOp(&'a str),
+        BinaryOp { op: &'a str, rhs: Expression<'a> },
+    }
+
     seq(
         (
             comparison,
             opt(alt((
-                keywords_to(&[Keyword::IS, Keyword::NULL], "IS NULL"),
-                keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::NULL], "IS NOT NULL"),
-                keyword_to(Keyword::ISNULL, "ISNULL"),
-                keyword_to(Keyword::NOTNULL, "NOTNULL"),
-                keywords_to(&[Keyword::IS, Keyword::TRUE], "IS TRUE"),
-                keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::TRUE], "IS NOT TRUE"),
-                keywords_to(&[Keyword::IS, Keyword::FALSE], "IS FALSE"),
-                keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::FALSE], "IS NOT FALSE"),
-                keywords_to(&[Keyword::IS, Keyword::UNKNOWN], "IS UNKNOWN"),
-                keywords_to(
-                    &[Keyword::IS, Keyword::NOT, Keyword::UNKNOWN],
-                    "IS NOT UNKNOWN",
+                map(
+                    alt((
+                        keywords_to(&[Keyword::IS, Keyword::NULL], "IS NULL"),
+                        keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::NULL], "IS NOT NULL"),
+                        keyword_to(Keyword::ISNULL, "ISNULL"),
+                        keyword_to(Keyword::NOTNULL, "NOTNULL"),
+                        keywords_to(&[Keyword::IS, Keyword::TRUE], "IS TRUE"),
+                        keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::TRUE], "IS NOT TRUE"),
+                        keywords_to(&[Keyword::IS, Keyword::FALSE], "IS FALSE"),
+                        keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::FALSE], "IS NOT FALSE"),
+                        keywords_to(&[Keyword::IS, Keyword::UNKNOWN], "IS UNKNOWN"),
+                        keywords_to(
+                            &[Keyword::IS, Keyword::NOT, Keyword::UNKNOWN],
+                            "IS NOT UNKNOWN",
+                        ),
+                    )),
+                    IsRhs::UnaryOp,
+                ),
+                seq(
+                    (
+                        alt((
+                            keywords_to(
+                                &[Keyword::IS, Keyword::DISTINCT, Keyword::FROM],
+                                "IS DISTINCT FROM",
+                            ),
+                            keywords_to(
+                                &[Keyword::IS, Keyword::NOT, Keyword::DISTINCT, Keyword::FROM],
+                                "IS NOT DISTINCT FROM",
+                            ),
+                        )),
+                        comparison,
+                    ),
+                    |(op, rhs)| IsRhs::BinaryOp { op, rhs },
                 ),
             ))),
         ),
-        |(expr, op_opt)| match op_opt {
-            None => expr,
-            Some(op) => Expression::UnaryOp {
-                op,
-                expr: Box::new(expr),
+        |(lhs, op_opt)| match op_opt {
+            None => lhs,
+            Some(rhs) => match rhs {
+                IsRhs::UnaryOp(op) => ast::Expression::UnaryOp {
+                    op,
+                    expr: Box::new(lhs),
+                },
+                IsRhs::BinaryOp { op, rhs } => {
+                    ast::Expression::BinaryOp(Box::new(lhs), op, Box::new(rhs))
+                }
             },
         },
     )(input)
