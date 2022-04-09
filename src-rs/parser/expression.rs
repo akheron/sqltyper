@@ -207,6 +207,10 @@ enum OtherRhs<'a> {
         op: &'a str,
         expr_list: Vec<ast::Expression<'a>>,
     },
+    Binary {
+        op: &'a str,
+        rhs: Box<ast::Expression<'a>>,
+    },
     Ternary {
         op: &'a str,
         rhs1: Box<ast::Expression<'a>>,
@@ -224,6 +228,7 @@ impl<'a> OtherRhs<'a> {
             OtherRhs::InExprList { op, expr_list } => {
                 ast::Expression::InExprList { lhs, op, expr_list }
             }
+            OtherRhs::Binary { op, rhs } => ast::Expression::BinaryOp(lhs, op, rhs),
             OtherRhs::Ternary { op, rhs1, rhs2 } => ast::Expression::TernaryOp {
                 lhs,
                 op,
@@ -257,6 +262,30 @@ fn in_expr_list(input: &str) -> Result<OtherRhs> {
     })(input)
 }
 
+fn pattern_match(input: &str) -> Result<OtherRhs> {
+    seq(
+        (
+            alt((
+                keyword_to(Keyword::LIKE, "LIKE"),
+                keyword_to(Keyword::ILIKE, "ILIKE"),
+                keywords_to(&[Keyword::NOT, Keyword::LIKE], "NOT LIKE"),
+                keywords_to(&[Keyword::NOT, Keyword::ILIKE], "NOT ILIKE"),
+                // TODO: SIMILAR TO a ESCAPE b
+                keywords_to(&[Keyword::SIMILAR, Keyword::TO], "SIMILAR TO"),
+                keywords_to(
+                    &[Keyword::NOT, Keyword::SIMILAR, Keyword::TO],
+                    "NOT SIMILAR TO",
+                ),
+            )),
+            other_op,
+        ),
+        |(op, rhs)| OtherRhs::Binary {
+            op,
+            rhs: Box::new(rhs),
+        },
+    )(input)
+}
+
 fn ternary(input: &str) -> Result<OtherRhs> {
     seq(
         (
@@ -286,27 +315,28 @@ fn unary_suffix(input: &str) -> Result<OtherRhs> {
 }
 
 fn other(input: &str) -> Result<ast::Expression> {
-    seq(
-        (
-            other_op,
-            opt(alt((in_subquery, in_expr_list, ternary, unary_suffix))),
+    alt((
+        seq(
+            (
+                other_op,
+                opt(alt((
+                    in_subquery,
+                    in_expr_list,
+                    ternary,
+                    pattern_match,
+                    unary_suffix,
+                ))),
+            ),
+            |(lhs, rhs_opt)| match rhs_opt {
+                None => lhs,
+                Some(rhs) => rhs.into_expression(Box::new(lhs)),
+            },
         ),
-        |(lhs, rhs_opt)| match rhs_opt {
-            None => lhs,
-            Some(rhs) => rhs.into_expression(Box::new(lhs)),
-        },
-    )(input)
-}
-
-fn exists(input: &str) -> Result<ast::Expression> {
-    map(
-        prefixed(Keyword::EXISTS, parenthesized(subquery_select)),
-        |query| ast::Expression::Exists(Box::new(query)),
-    )(input)
-}
-
-fn exists_or_other(input: &str) -> Result<ast::Expression> {
-    alt((exists, other))(input)
+        map(
+            prefixed(Keyword::EXISTS, parenthesized(subquery_select)),
+            |query| ast::Expression::Exists(Box::new(query)),
+        ),
+    ))(input)
 }
 
 fn comparison(input: &str) -> Result<ast::Expression> {
@@ -319,14 +349,17 @@ fn comparison(input: &str) -> Result<ast::Expression> {
             operator(">="),
             operator(">"),
         )),
-        exists_or_other,
+        other,
     )(input)
 }
 
 fn is(input: &str) -> Result<ast::Expression> {
     enum IsRhs<'a> {
         UnaryOp(&'a str),
-        BinaryOp { op: &'a str, rhs: Expression<'a> },
+        BinaryOp {
+            op: &'a str,
+            rhs: ast::Expression<'a>,
+        },
     }
 
     seq(

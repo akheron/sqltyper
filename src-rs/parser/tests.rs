@@ -105,6 +105,10 @@ async fn test_expression_operators() {
             "SELECT id IS NULL, friends IS NOT NULL FROM person",
             "SELECT NOT true AND true OR 123 <= id FROM person",
             "SELECT id IS DISTINCT FROM 123, id IS NOT DISTINCT FROM 321 FROM person",
+            "SELECT friends[0] LIKE '%roy', friends[0] NOT LIKE '%roy' FROM person",
+            "SELECT friends[0] ILIKE '%roy', friends[0] NOT ILIKE '%roy' FROM person",
+            "SELECT friends[0] SIMILAR TO 'roy', friends[0] NOT SIMILAR TO 'roy' FROM person",
+            // "SELECT friends[0] SIMILAR TO 'roy' ESCAPE '', friends[0] NOT SIMILAR TO 'roy' ESCAPE '' FROM person",
         ],
     )
     .await;
