@@ -48,7 +48,14 @@ async fn test_expression_special_function_call() {
 #[tokio::test]
 async fn test_expression_function_call() {
     test(
-        &["CREATE TABLE person (age integer)"],
+        &[r#"
+CREATE TABLE person (age integer);
+
+CREATE SCHEMA s;
+CREATE FUNCTION s.func() RETURNS boolean AS $$
+  SELECT true
+$$ LANGUAGE sql;
+"#],
         &[
             "SELECT count(*) FROM person",
             "SELECT now()",
@@ -59,6 +66,7 @@ async fn test_expression_function_call() {
             "SELECT count(*) OVER (PARTITION BY age) FROM person",
             "SELECT count(*) OVER (ORDER BY age) FROM person",
             "SELECT count(*) FILTER (WHERE age > 0) OVER (PARTITION BY age ORDER BY age) FROM person",
+            "SELECT s.func()",
         ],
     )
     .await;
@@ -69,6 +77,12 @@ async fn test_expression_typecast() {
     test(
         &[],
         &[
+            // simple type casts
+            "SELECT NULL::integer",
+            "SELECT 3.1415::real",
+            "SELECT .1415::real",
+            "SELECT 3e6::real",
+            "SELECT 3E-6::real",
             // special type casts
             "SELECT '10011'::bit(5)",
             "SELECT 'foo bar baz'::character varying (200)",
@@ -280,7 +294,7 @@ mod utils {
         let tx = client.transaction().await.unwrap();
 
         for init_sql in init_sqls {
-            tx.execute(*init_sql, &[]).await.unwrap();
+            tx.batch_execute(*init_sql).await.unwrap();
         }
         for test in tests {
             assert_prepare(&tx, test).await;
