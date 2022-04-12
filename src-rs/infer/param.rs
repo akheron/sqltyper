@@ -13,6 +13,10 @@ impl NullableParams {
     pub fn is_nullable(&self, param: usize) -> bool {
         self.0.contains(&param)
     }
+
+    fn extend(&mut self, other: &NullableParams) {
+        self.0.extend(other.0.iter());
+    }
 }
 
 pub async fn infer_param_nullability<C: GenericClient + Sync>(
@@ -25,6 +29,7 @@ pub async fn infer_param_nullability<C: GenericClient + Sync>(
             table,
             columns,
             values,
+            on_conflict,
             ..
         }) => match values {
             ast::Values::DefaultValues => {}
@@ -32,10 +37,21 @@ pub async fn infer_param_nullability<C: GenericClient + Sync>(
                 let table_columns = get_table_columns(client, table).await?;
                 let target_columns = find_insert_columns(columns, table_columns)?;
                 let values_list_params = find_params_from_values(values);
-                return Ok(combine_param_nullability(
-                    target_columns,
-                    values_list_params,
-                ));
+                let mut nullable_params =
+                    combine_param_nullability(&target_columns, &values_list_params);
+
+                if let Some(ast::OnConflict {
+                    conflict_action: ast::ConflictAction::DoUpdate(update_assignments),
+                    ..
+                }) = on_conflict
+                {
+                    nullable_params.extend(&find_param_nullability_from_updates(
+                        &target_columns,
+                        update_assignments,
+                    ));
+                }
+
+                return Ok(nullable_params);
             }
             ast::Values::Query(_) => {}
         },
@@ -97,8 +113,8 @@ fn param_index_from_expr(expr: &ast::Expression<'_>) -> Option<usize> {
 }
 
 fn combine_param_nullability(
-    target_columns: Vec<Column>,
-    values_list_params: Vec<Vec<Option<usize>>>,
+    target_columns: &[Column],
+    values_list_params: &[Vec<Option<usize>>],
 ) -> NullableParams {
     let mut result: HashSet<usize> = HashSet::new();
     for values_params in values_list_params {
@@ -145,11 +161,12 @@ fn update_to_param_nullability(
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+    use std::iter::FromIterator;
+
     use crate::ast;
     use crate::infer::db::Column;
     use crate::infer::param::{find_param_nullability_from_updates, NullableParams};
-    use std::collections::HashSet;
-    use std::iter::FromIterator;
 
     use super::find_insert_columns;
     use super::find_params_from_values;
