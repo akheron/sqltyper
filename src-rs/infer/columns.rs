@@ -144,7 +144,7 @@ async fn infer_set_ops_output<C: GenericClient + Sync>(
                     Column {
                         // Column names are determined by the first SELECT
                         name: a.name,
-                        nullability: ValueNullability::disjunction(&a.nullability, &b.nullability),
+                        nullability: ValueNullability::disjunction(a.nullability, b.nullability),
                     }
                 })
                 .collect();

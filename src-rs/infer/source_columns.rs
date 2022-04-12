@@ -20,35 +20,34 @@ pub enum ValueNullability {
 }
 
 impl ValueNullability {
-    pub fn is_nullable(&self) -> bool {
+    pub fn is_nullable(self) -> bool {
         match self {
             ValueNullability::Scalar { nullable } => nullable,
             ValueNullability::Array { nullable, .. } => nullable,
         }
-        .to_owned()
     }
 
-    pub fn to_non_nullable(&self) -> ValueNullability {
+    pub fn to_non_nullable(self) -> ValueNullability {
         match self {
             ValueNullability::Scalar { .. } => ValueNullability::Scalar { nullable: false },
             ValueNullability::Array { elem_nullable, .. } => ValueNullability::Array {
                 nullable: false,
-                elem_nullable: *elem_nullable,
+                elem_nullable,
             },
         }
     }
 
-    pub fn to_nullable(&self) -> ValueNullability {
+    pub fn to_nullable(self) -> ValueNullability {
         match self {
             ValueNullability::Scalar { .. } => ValueNullability::Scalar { nullable: true },
             ValueNullability::Array { elem_nullable, .. } => ValueNullability::Array {
                 nullable: true,
-                elem_nullable: *elem_nullable,
+                elem_nullable,
             },
         }
     }
 
-    pub fn disjunction(a: &ValueNullability, b: &ValueNullability) -> ValueNullability {
+    pub fn disjunction(a: ValueNullability, b: ValueNullability) -> ValueNullability {
         match (a, b) {
             (
                 ValueNullability::Scalar {
@@ -76,7 +75,7 @@ impl ValueNullability {
                     ..
                 },
             ) => ValueNullability::Scalar {
-                nullable: *a_nullable || *b_nullable,
+                nullable: a_nullable || b_nullable,
             },
             (
                 ValueNullability::Array {
@@ -88,18 +87,18 @@ impl ValueNullability {
                     elem_nullable: b_elem_nullable,
                 },
             ) => ValueNullability::Array {
-                nullable: *a_nullable || *b_nullable,
-                elem_nullable: *a_elem_nullable || *b_elem_nullable,
+                nullable: a_nullable || b_nullable,
+                elem_nullable: a_elem_nullable || b_elem_nullable,
             },
         }
     }
 
     pub fn disjunction3(
-        a: &ValueNullability,
-        b: &ValueNullability,
-        c: &ValueNullability,
+        a: ValueNullability,
+        b: ValueNullability,
+        c: ValueNullability,
     ) -> ValueNullability {
-        ValueNullability::disjunction(&ValueNullability::disjunction(a, b), c)
+        ValueNullability::disjunction(ValueNullability::disjunction(a, b), c)
     }
 }
 
