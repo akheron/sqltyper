@@ -1,10 +1,12 @@
 use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::slice::Iter;
 
 use async_recursion::async_recursion;
 use tokio_postgres::GenericClient;
 
 use crate::ast;
+use crate::ast::{JoinCondition, JoinType};
 use crate::infer::columns::get_subquery_select_output_columns;
 use crate::infer::context::Context;
 use crate::infer::db::get_table_columns;
@@ -113,11 +115,31 @@ pub struct SourceColumn {
     pub hidden: bool,
 }
 
+impl SourceColumn {
+    fn into_non_nullable(self) -> SourceColumn {
+        SourceColumn {
+            nullability: self.nullability.to_non_nullable(),
+            ..self
+        }
+    }
+
+    fn into_nullable(self) -> SourceColumn {
+        SourceColumn {
+            nullability: self.nullability.to_nullable(),
+            ..self
+        }
+    }
+}
+
 pub struct SourceColumns(Vec<SourceColumn>);
 
 impl SourceColumns {
+    fn new() -> SourceColumns {
+        SourceColumns(Vec::new())
+    }
+
     pub fn iter(&self) -> Iter<SourceColumn> {
-        return self.0.iter();
+        self.0.iter()
     }
 
     pub fn find_table_column(&self, table: &str, column: &str) -> Option<&SourceColumn> {
@@ -137,6 +159,27 @@ impl SourceColumns {
             }
         }
         result
+    }
+
+    pub fn into_nullable(self) -> SourceColumns {
+        SourceColumns(self.into_iter().map(|col| col.into_nullable()).collect())
+    }
+
+    fn push(&mut self, item: SourceColumn) {
+        self.0.push(item);
+    }
+
+    fn append(&mut self, mut other: SourceColumns) {
+        self.0.append(&mut other.0);
+    }
+}
+
+impl IntoIterator for SourceColumns {
+    type Item = SourceColumn;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -183,9 +226,8 @@ pub async fn get_source_columns_for_table_expr<C: GenericClient + Sync>(
     context: &Context,
     param_nullability: &NullableParams,
     table_expr_opt: Option<&'async_recursion ast::TableExpression<'async_recursion>>,
-    set_nullable: bool,
 ) -> Result<SourceColumns, Error> {
-    let mut result = match table_expr_opt {
+    Ok(match table_expr_opt {
         None => SourceColumns(Vec::new()),
         Some(table_expr) => match table_expr {
             ast::TableExpression::Table { table, as_ } => {
@@ -201,21 +243,19 @@ pub async fn get_source_columns_for_table_expr<C: GenericClient + Sync>(
                 )
                 .await?
             }
-            ast::TableExpression::CrossJoin { left, right } => combine_source_columns(
-                &mut get_source_columns_for_table_expr(
+            ast::TableExpression::CrossJoin { left, right } => cross_join(
+                get_source_columns_for_table_expr(
                     client,
                     context,
                     param_nullability,
                     Some(left.borrow()),
-                    false,
                 )
                 .await?,
-                &mut get_source_columns_for_table_expr(
+                get_source_columns_for_table_expr(
                     client,
                     context,
                     param_nullability,
                     Some(right.borrow()),
-                    false,
                 )
                 .await?,
             ),
@@ -223,37 +263,27 @@ pub async fn get_source_columns_for_table_expr<C: GenericClient + Sync>(
                 left,
                 join_type,
                 right,
-                ..
-            } => {
-                combine_source_columns(
-                    &mut get_source_columns_for_table_expr(
-                        client,
-                        context,
-                        param_nullability,
-                        Some(left.borrow()),
-                        // RIGHT or FULL JOIN -> The left side columns becomes nullable
-                        *join_type == ast::JoinType::Right || *join_type == ast::JoinType::Full,
-                    )
-                    .await?,
-                    &mut get_source_columns_for_table_expr(
-                        client,
-                        context,
-                        param_nullability,
-                        Some(right.borrow()),
-                        // LET or FULL JOIN -> The right side columns becomes nullable
-                        *join_type == ast::JoinType::Left || *join_type == ast::JoinType::Full,
-                    )
-                    .await?,
+                condition,
+            } => qualified_join(
+                get_source_columns_for_table_expr(
+                    client,
+                    context,
+                    param_nullability,
+                    Some(left.borrow()),
                 )
-            }
+                .await?,
+                get_source_columns_for_table_expr(
+                    client,
+                    context,
+                    param_nullability,
+                    Some(right.borrow()),
+                )
+                .await?,
+                join_type,
+                condition,
+            ),
         },
-    };
-    if set_nullable {
-        for col in &mut result.0 {
-            col.nullability = col.nullability.to_nullable();
-        }
-    }
-    Ok(result)
+    })
 }
 
 async fn get_source_columns_for_subquery<C: GenericClient + Sync>(
@@ -278,9 +308,68 @@ async fn get_source_columns_for_subquery<C: GenericClient + Sync>(
     ))
 }
 
-pub fn combine_source_columns(a: &mut SourceColumns, b: &mut SourceColumns) -> SourceColumns {
-    let mut result = Vec::<SourceColumn>::with_capacity(a.0.len() + b.0.len());
-    result.append(&mut a.0);
-    result.append(&mut b.0);
-    SourceColumns(result)
+pub fn cross_join(mut left: SourceColumns, right: SourceColumns) -> SourceColumns {
+    left.append(right);
+    left
+}
+
+fn qualified_join(
+    left: SourceColumns,
+    right: SourceColumns,
+    join_type: &JoinType,
+    join_condition: &JoinCondition,
+) -> SourceColumns {
+    let (left, right) = match join_type {
+        JoinType::Inner => (left, right),
+        JoinType::Left => (left, right.into_nullable()),
+        JoinType::Right => (left.into_nullable(), right),
+        JoinType::Full => (left.into_nullable(), right.into_nullable()),
+    };
+
+    match join_condition {
+        JoinCondition::On(_) => cross_join(left, right),
+        JoinCondition::Using(join_columns) => {
+            let mut join_cols = HashSet::new();
+            for col in join_columns {
+                join_cols.insert(col.to_string());
+            }
+            join_using(left, right, &join_cols)
+        }
+        JoinCondition::Natural => {
+            let mut left_cols = HashSet::new();
+            for col in left.iter() {
+                if !col.hidden {
+                    left_cols.insert(col.column_name.clone());
+                }
+            }
+            let mut join_cols = HashSet::new();
+            for col in right.iter() {
+                if !col.hidden && left_cols.contains(&col.column_name) {
+                    join_cols.insert(col.column_name.clone());
+                }
+            }
+            join_using(left, right, &join_cols)
+        }
+    }
+}
+
+fn join_using(
+    left: SourceColumns,
+    right: SourceColumns,
+    join_cols: &HashSet<String>,
+) -> SourceColumns {
+    let mut result = SourceColumns::new();
+    for col in left {
+        if join_cols.contains(&col.column_name) {
+            result.push(col.into_non_nullable());
+        } else {
+            result.push(col);
+        }
+    }
+    for col in right {
+        if !join_cols.contains(&col.column_name) {
+            result.push(col);
+        }
+    }
+    result
 }

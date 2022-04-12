@@ -1,20 +1,23 @@
+-- With NATURAL JOIN the join condition columns are inferred as
+-- non-nullable (person_id and email in this case)
 --- setup -----------------------------------------------------------------
 
 CREATE TABLE person (
   person_id serial PRIMARY KEY,
-  email text NOT NULL
+  email text,
+  updated timestamptz NOT NULL
 );
 
 CREATE TABLE profile (
   profile_id serial PRIMARY KEY,
-  person_id integer references person NOT NULL,
-  name text NOT NULL,
-  time timestamptz NOT NULL
+  person_id integer REFERENCES person,
+  email text,
+  name text
 );
 
 --- query -----------------------------------------------------------------
 
-SELECT person_id, email, name FROM person
+SELECT person_id, email, name, updated FROM person
 NATURAL JOIN profile
 
 --- expected row count ----------------------------------------------------
@@ -27,4 +30,5 @@ many
 
 person_id: int4
 email: text
-name: text
+name: text?
+updated: timestamptz

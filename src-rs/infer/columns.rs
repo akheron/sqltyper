@@ -8,8 +8,8 @@ use crate::infer::error::Error;
 use crate::infer::param::NullableParams;
 use crate::infer::select_list::infer_select_list_output;
 use crate::infer::source_columns::{
-    combine_source_columns, get_source_columns_for_table, get_source_columns_for_table_expr,
-    Column, ValueNullability,
+    cross_join, get_source_columns_for_table, get_source_columns_for_table_expr, Column,
+    ValueNullability,
 };
 
 pub async fn infer_column_nullability<C: GenericClient + Sync>(
@@ -68,15 +68,14 @@ pub async fn get_output_columns<C: GenericClient + Sync>(
         }
         ast::Query::Update(update) => {
             if let Some(returning) = &update.returning {
-                let source_columns = combine_source_columns(
-                    &mut get_source_columns_for_table(client, context, &update.table, &update.as_)
+                let source_columns = cross_join(
+                    get_source_columns_for_table(client, context, &update.table, &update.as_)
                         .await?,
-                    &mut get_source_columns_for_table_expr(
+                    get_source_columns_for_table_expr(
                         client,
                         context,
                         param_nullability,
                         update.from.as_ref(),
-                        false,
                     )
                     .await?,
                 );
@@ -160,14 +159,9 @@ async fn infer_select_body_output<C: GenericClient + Sync>(
     param_nullability: &NullableParams,
     body: &ast::SelectBody<'_>,
 ) -> Result<Vec<Column>, Error> {
-    let source_columns = get_source_columns_for_table_expr(
-        client,
-        context,
-        param_nullability,
-        body.from.as_ref(),
-        false,
-    )
-    .await?;
+    let source_columns =
+        get_source_columns_for_table_expr(client, context, param_nullability, body.from.as_ref())
+            .await?;
     infer_select_list_output(
         client,
         context,
