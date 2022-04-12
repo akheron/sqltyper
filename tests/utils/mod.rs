@@ -39,19 +39,15 @@ async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {
     connect_to_database(&config.unwrap()).await
 }
 
-async fn get_statement<'a>(
-    init_sql: Option<&str>,
-    sql: &'a str,
-) -> Result<Warn<StatementDescription<'a>>, Box<dyn std::error::Error>> {
-    // Run in transaction to rollback all changes automatically
-    let mut client = connect().await?;
-    let tx = client.transaction().await?;
+async fn get_statement<'a>(init_sql: Option<&str>, sql: &'a str) -> Warn<StatementDescription<'a>> {
+    let mut client = connect().await.unwrap();
+    let tx = client.transaction().await.unwrap();
 
+    // Run in transaction to rollback all changes automatically
     if let Some(init) = init_sql {
-        tx.batch_execute(init).await?;
+        tx.batch_execute(init).await.unwrap();
     }
-    let result = sql_to_statement_description(&tx, sql).await?;
-    Ok(result)
+    sql_to_statement_description(&tx, sql).await.unwrap()
 }
 
 pub async fn test(
@@ -61,7 +57,7 @@ pub async fn test(
     params: &[UnnamedValue],
     columns: &[NamedValue],
 ) {
-    let statement = get_statement(init_sql, sql).await.unwrap();
+    let statement = get_statement(init_sql, sql).await;
     assert_statement(&statement, row_count, params, columns);
 }
 
