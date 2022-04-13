@@ -47,15 +47,6 @@ impl ValueType {
     }
 }
 
-impl AsRef<Type> for ValueType {
-    fn as_ref(&self) -> &Type {
-        match self {
-            ValueType::Any(type_) => type_,
-            ValueType::Array { type_, .. } => type_,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub struct UnnamedValue {
     pub type_: ValueType,

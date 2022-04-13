@@ -15,7 +15,7 @@ use crate::infer::source_columns::{
 pub async fn infer_column_nullability<C: GenericClient + Sync>(
     client: &C,
     param_nullability: &NullableParams,
-    tree: &ast::AST<'_>,
+    tree: &ast::Ast<'_>,
 ) -> Result<Vec<Column>, Error> {
     get_output_columns(client, &Context::root(), param_nullability, tree).await
 }
@@ -25,9 +25,9 @@ pub async fn get_output_columns<C: GenericClient + Sync>(
     client: &C,
     parent_context: &Context<'_>,
     param_nullability: &NullableParams,
-    tree: &ast::AST<'_>,
+    tree: &ast::Ast<'_>,
 ) -> Result<Vec<Column>, Error> {
-    let ast::AST { ctes, query } = tree;
+    let ast::Ast { ctes, query } = tree;
     let cte_context = get_context_for_ctes(client, param_nullability, parent_context, ctes).await?;
     let context = cte_context.as_ref().unwrap_or(parent_context);
 

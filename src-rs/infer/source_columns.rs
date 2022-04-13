@@ -230,7 +230,7 @@ pub async fn get_source_columns_for_table_expr<C: GenericClient + Sync>(
         None => SourceColumns(Vec::new()),
         Some(table_expr) => match table_expr {
             ast::TableExpression::Table { table, as_ } => {
-                get_source_columns_for_table(client, context, &table, as_).await?
+                get_source_columns_for_table(client, context, table, as_).await?
             }
             ast::TableExpression::SubQuery { query, as_ } => {
                 get_source_columns_for_subquery(
@@ -293,7 +293,7 @@ async fn get_source_columns_for_subquery<C: GenericClient + Sync>(
     as_: &str,
 ) -> Result<SourceColumns, Error> {
     let columns =
-        get_subquery_select_output_columns(client, context, param_nullability, &query).await?;
+        get_subquery_select_output_columns(client, context, param_nullability, query).await?;
     Ok(SourceColumns(
         columns
             .into_iter()

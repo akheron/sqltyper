@@ -18,14 +18,14 @@ mod update;
 
 #[derive(Debug)]
 pub enum Query<'a> {
-    Select(Select<'a>),
-    Insert(Insert<'a>),
-    Update(Update<'a>),
-    Delete(Delete<'a>),
+    Select(Box<Select<'a>>),
+    Insert(Box<Insert<'a>>),
+    Update(Box<Update<'a>>),
+    Delete(Box<Delete<'a>>),
 }
 
 #[derive(Debug)]
-pub struct AST<'a> {
+pub struct Ast<'a> {
     pub ctes: Option<Vec<WithQuery<'a>>>,
     pub query: Query<'a>,
 }

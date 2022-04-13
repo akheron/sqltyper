@@ -8,9 +8,9 @@ pub enum ValuesValue<'a> {
 
 #[derive(Debug)]
 pub enum Values<'a> {
-    DefaultValues,
-    ExpressionValues(Vec<Vec<ValuesValue<'a>>>),
-    Query(SubquerySelect<'a>),
+    Default,
+    Expression(Vec<Vec<ValuesValue<'a>>>),
+    Query(Box<SubquerySelect<'a>>),
 }
 
 #[derive(Debug)]

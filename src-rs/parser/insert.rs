@@ -13,7 +13,7 @@ use super::Result;
 
 fn default_values(input: &str) -> Result<ast::Values> {
     map(keywords(&[Keyword::DEFAULT, Keyword::VALUES]), |_| {
-        ast::Values::DefaultValues
+        ast::Values::Default
     })(input)
 }
 
@@ -31,7 +31,7 @@ fn expression_values_list(input: &str) -> Result<Vec<ast::ValuesValue>> {
 fn values(input: &str) -> Result<ast::Values> {
     map(
         prefixed(Keyword::VALUES, sep_by1(",", expression_values_list)),
-        ast::Values::ExpressionValues,
+        ast::Values::Expression,
     )(input)
 }
 
@@ -86,7 +86,7 @@ pub fn insert(input: &str) -> Result<ast::Insert> {
             alt((
                 default_values,
                 values,
-                map(subquery_select, ast::Values::Query),
+                map(subquery_select, |s| ast::Values::Query(Box::new(s))),
             )),
             opt(on_conflict),
             opt(returning),

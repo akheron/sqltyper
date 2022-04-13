@@ -29,22 +29,22 @@ mod typecasts;
 mod update;
 mod utils;
 
-fn statement(input: &str) -> Result<ast::AST> {
+fn statement(input: &str) -> Result<ast::Ast> {
     seq(
         (
             opt(with_queries),
             alt((
-                map(select, ast::Query::Select),
-                map(insert, ast::Query::Insert),
-                map(update, ast::Query::Update),
-                map(delete, ast::Query::Delete),
+                map(select, |s| ast::Query::Select(Box::new(s))),
+                map(insert, |i| ast::Query::Insert(Box::new(i))),
+                map(update, |u| ast::Query::Update(Box::new(u))),
+                map(delete, |d| ast::Query::Delete(Box::new(d))),
             )),
         ),
-        |(ctes, query)| ast::AST { ctes, query },
+        |(ctes, query)| ast::Ast { ctes, query },
     )(input)
 }
 
-pub fn parse_sql(input: &str) -> std::result::Result<ast::AST, ErrorTree<&str>> {
+pub fn parse_sql(input: &str) -> std::result::Result<ast::Ast, ErrorTree<&str>> {
     final_parser(terminated2(statement, opt(symbol(";")), eof))(input)
 }
 

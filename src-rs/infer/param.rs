@@ -21,41 +21,45 @@ impl NullableParams {
 
 pub async fn infer_param_nullability<C: GenericClient + Sync>(
     client: &C,
-    ast: &ast::AST<'_>,
+    ast: &ast::Ast<'_>,
 ) -> Result<NullableParams, Error> {
     match &ast.query {
         ast::Query::Select(_) => {}
-        ast::Query::Insert(ast::Insert {
-            table,
-            columns,
-            values,
-            on_conflict,
-            ..
-        }) => match values {
-            ast::Values::DefaultValues => {}
-            ast::Values::ExpressionValues(values) => {
-                let table_columns = get_table_columns(client, table).await?;
-                let target_columns = find_insert_columns(columns, table_columns)?;
-                let values_list_params = find_params_from_values(values);
-                let mut nullable_params =
-                    combine_param_nullability(&target_columns, &values_list_params);
+        ast::Query::Insert(insert) => {
+            let ast::Insert {
+                table,
+                columns,
+                values,
+                on_conflict,
+                ..
+            } = insert.as_ref();
+            match values {
+                ast::Values::Default => {}
+                ast::Values::Expression(values) => {
+                    let table_columns = get_table_columns(client, table).await?;
+                    let target_columns = find_insert_columns(columns, table_columns)?;
+                    let values_list_params = find_params_from_values(values);
+                    let mut nullable_params =
+                        combine_param_nullability(&target_columns, &values_list_params);
 
-                if let Some(ast::OnConflict {
-                    conflict_action: ast::ConflictAction::DoUpdate(update_assignments),
-                    ..
-                }) = on_conflict
-                {
-                    nullable_params.extend(&find_param_nullability_from_updates(
-                        &target_columns,
-                        update_assignments,
-                    ));
+                    if let Some(ast::OnConflict {
+                        conflict_action: ast::ConflictAction::DoUpdate(update_assignments),
+                        ..
+                    }) = on_conflict
+                    {
+                        nullable_params.extend(&find_param_nullability_from_updates(
+                            &target_columns,
+                            update_assignments,
+                        ));
+                    }
+
+                    return Ok(nullable_params);
                 }
-
-                return Ok(nullable_params);
-            }
-            ast::Values::Query(_) => {}
-        },
-        ast::Query::Update(ast::Update { table, updates, .. }) => {
+                ast::Values::Query(_) => {}
+            };
+        }
+        ast::Query::Update(update) => {
+            let ast::Update { table, updates, .. } = update.as_ref();
             let table_columns = get_table_columns(client, table).await?;
             return Ok(find_param_nullability_from_updates(&table_columns, updates));
         }

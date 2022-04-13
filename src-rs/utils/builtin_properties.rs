@@ -48,13 +48,11 @@ pub fn builtin_function_null_safety(function_name: &str) -> NullSafety {
 }
 
 pub fn is_operator_commutative(op: &str) -> bool {
-    match op {
+    matches!(
+        op,
         // 9.2. Comparison Functions and Operators
-        "=" | "<>" | "!=" => true,
-
+        "=" | "<>" | "!=" |
         // 9.3. Mathematical Functions and Operators
-        "+" | "*" | "&" | "|" | "#" => true,
-
-        _ => false,
-    }
+        "+" | "*" | "&" | "|" | "#"
+    )
 }

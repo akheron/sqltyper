@@ -55,9 +55,9 @@ fn select_body(input: &str) -> Result<ast::SelectBody> {
                 select_list,
                 from,
                 where_,
-                group_by: group_by.unwrap_or_else(Vec::new),
+                group_by: group_by.unwrap_or_default(),
                 having,
-                window: window.unwrap_or_else(Vec::new),
+                window: window.unwrap_or_default(),
             },
         ),
     )(input)
@@ -179,7 +179,7 @@ pub fn select(input: &str) -> Result<ast::Select> {
         |(body, set_ops, order_by, limit)| ast::Select {
             body,
             set_ops,
-            order_by: order_by.unwrap_or_else(Vec::new),
+            order_by: order_by.unwrap_or_default(),
             limit,
         },
     )(input)

@@ -1,16 +1,17 @@
 use crate::{ast, StatementRowCount};
 
-pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
+pub fn infer_row_count(ast: &ast::Ast<'_>) -> StatementRowCount {
     match &ast.query {
         ast::Query::Select(select) => infer_select_row_count(select),
-        ast::Query::Insert(ast::Insert {
-            values, returning, ..
-        }) => {
+        ast::Query::Insert(insert) => {
+            let ast::Insert {
+                values, returning, ..
+            } = insert.as_ref();
             match returning {
                 Some(_) => match values {
                     // INSERT INTO ... DEFAULT VALUES always creates a single row
-                    ast::Values::DefaultValues => StatementRowCount::One,
-                    ast::Values::ExpressionValues(values) => {
+                    ast::Values::Default => StatementRowCount::One,
+                    ast::Values::Expression(values) => {
                         // Check the length of the VALUES expression list
                         if values.len() == 1 {
                             StatementRowCount::One
@@ -24,14 +25,20 @@ pub fn infer_row_count(ast: &ast::AST<'_>) -> StatementRowCount {
                 None => StatementRowCount::Zero,
             }
         }
-        ast::Query::Update(ast::Update { returning, .. }) => match returning {
-            Some(_) => StatementRowCount::Many,
-            None => StatementRowCount::Zero,
-        },
-        ast::Query::Delete(ast::Delete { returning, .. }) => match returning {
-            Some(_) => StatementRowCount::Many,
-            None => StatementRowCount::Zero,
-        },
+        ast::Query::Update(update) => {
+            let ast::Update { returning, .. } = update.as_ref();
+            match returning {
+                Some(_) => StatementRowCount::Many,
+                None => StatementRowCount::Zero,
+            }
+        }
+        ast::Query::Delete(delete) => {
+            let ast::Delete { returning, .. } = delete.as_ref();
+            match returning {
+                Some(_) => StatementRowCount::Many,
+                None => StatementRowCount::Zero,
+            }
+        }
     }
 }
 
