@@ -62,7 +62,7 @@ pub async fn describe_statement<'a, C: GenericClient + Sync>(
         columns: statement
             .columns()
             .iter()
-            .map(|col| NamedValue::from_column(col))
+            .map(NamedValue::from_column)
             .collect(),
         row_count: StatementRowCount::Many,
     })

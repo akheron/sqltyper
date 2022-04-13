@@ -40,7 +40,7 @@ pub async fn infer_statement_nullability<'a, C: GenericClient + Sync>(
                 elem_nullable,
             } => {
                 column.nullable = nullable;
-                column.type_ = column.type_.to_array_type(elem_nullable);
+                column.type_ = column.type_.lift_to_array(elem_nullable);
             }
         }
     }

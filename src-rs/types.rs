@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-pub use tokio_postgres::types::Type;
+pub use tokio_postgres::types::{Kind, Type};
 use tokio_postgres::Column;
 
 #[derive(Debug)]
@@ -26,20 +26,23 @@ pub enum ValueType {
 }
 
 impl ValueType {
-    pub fn to_array_type(&self, elem_nullable: bool) -> ValueType {
+    fn from_type(type_: &Type) -> Self {
+        match type_.kind() {
+            Kind::Array(elem) => ValueType::Array {
+                type_: elem.clone(),
+                elem_nullable: true,
+            },
+            _ => ValueType::Any(type_.clone()),
+        }
+    }
+
+    pub fn lift_to_array(&self, elem_nullable: bool) -> Self {
         match self {
             ValueType::Any(type_) => ValueType::Array {
                 type_: type_.clone(),
                 elem_nullable,
             },
             x => x.clone(),
-        }
-    }
-
-    pub fn to_type(&self) -> &Type {
-        match self {
-            ValueType::Any(type_) => type_,
-            ValueType::Array { type_, .. } => type_,
         }
     }
 }
@@ -95,7 +98,7 @@ impl NamedValue {
     pub fn from_column(column: &Column) -> NamedValue {
         NamedValue {
             name: column.name().to_string(),
-            type_: ValueType::Any(column.type_().clone()),
+            type_: ValueType::from_type(column.type_()),
             nullable: true,
         }
     }
