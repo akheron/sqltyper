@@ -13,7 +13,7 @@ use crate::infer::db::get_table_columns;
 use crate::infer::error::Error;
 use crate::infer::param::NullableParams;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ValueNullability {
     Scalar { nullable: bool },
     Array { nullable: bool, elem_nullable: bool },
@@ -102,6 +102,7 @@ impl ValueNullability {
     }
 }
 
+#[derive(Debug)]
 pub struct Column {
     pub name: String,
     pub nullability: ValueNullability,

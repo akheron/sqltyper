@@ -42,7 +42,10 @@ impl ValueType {
                 type_: type_.clone(),
                 elem_nullable,
             },
-            x => x.clone(),
+            ValueType::Array { type_, .. } => ValueType::Array {
+                type_: type_.clone(),
+                elem_nullable,
+            },
         }
     }
 }

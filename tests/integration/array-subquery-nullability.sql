@@ -21,5 +21,5 @@ one
 
 --- expected columns ------------------------------------------------------
 
-ages: [number?]
-positive_ages: [number]
+ages: [int4?]
+positive_ages: [int4]
