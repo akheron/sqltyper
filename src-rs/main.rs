@@ -9,11 +9,7 @@ async fn run() -> Result<(), Error> {
     let client = connect_to_database(&db_config).await?;
     let statement = sql_to_statement_description(&client, &sql).await?;
 
-    println!("{:?}", statement.payload);
-    if !statement.warnings.is_empty() {
-        println!("Warnings: {:?}", statement.warnings);
-    }
-
+    println!("{:?}", statement);
     Ok(())
 }
 

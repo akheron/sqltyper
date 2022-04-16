@@ -5,50 +5,16 @@ use std::path::Path;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_until};
 use nom::character::complete::{alphanumeric1, anychar, char, newline, space1};
-use nom::combinator::{all_consuming, eof, map, opt, peek, recognize, value};
+use nom::combinator::{all_consuming, map, opt, peek, recognize, rest, value};
 use nom::multi::{many0, many0_count, many1_count, many_till};
 use nom::sequence::{delimited, terminated, tuple};
 use nom::{error, Finish, IResult, Parser};
 use tokio_postgres::types::Type;
 
 use sqltyper::types::{
-    NamedValue, StatementDescription, StatementRowCount, UnnamedValue, ValueType, Warn, Warning,
+    NamedValue, StatementDescription, StatementRowCount, UnnamedValue, ValueType,
 };
 use sqltyper::{connect_to_database, sql_to_statement_description};
-
-fn assert_statement(
-    statement_with_warnings: &Warn<StatementDescription>,
-    row_count: StatementRowCount,
-    params: &[UnnamedValue],
-    columns: &[NamedValue],
-) {
-    let statement = &statement_with_warnings.payload;
-    let warnings = &statement_with_warnings.warnings;
-
-    assert_eq!(*warnings, Vec::<Warning>::new());
-    assert_eq!(statement.row_count, row_count, "Row count");
-    assert_eq!(statement.params, params, "Params");
-    assert_eq!(statement.columns, columns, "Columns");
-}
-
-async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {
-    let config = std::env::var("DATABASE");
-    if let Err(std::env::VarError::NotPresent) = config {
-        panic!("Environment variable DATABASE not set");
-    }
-    connect_to_database(&config.unwrap()).await
-}
-
-async fn get_statement<'a>(init_sql: Option<&str>, sql: &'a str) -> Warn<StatementDescription<'a>> {
-    let mut client = connect().await.unwrap();
-    let tx = client.transaction().await.unwrap();
-
-    // Run in transaction to rollback all changes automatically
-    if let Some(init) = init_sql {
-        tx.batch_execute(init).await.unwrap();
-    }
-    sql_to_statement_description(&tx, sql).await.unwrap()
-}
 
 pub async fn test(
     init_sql: Option<&str>,
@@ -59,6 +25,36 @@ pub async fn test(
 ) {
     let statement = get_statement(init_sql, sql).await;
     assert_statement(&statement, row_count, params, columns);
+}
+async fn get_statement<'a>(init_sql: Option<&str>, sql: &'a str) -> StatementDescription<'a> {
+    // Run in transaction to rollback all changes automatically
+    let mut client = connect().await.unwrap();
+    let tx = client.transaction().await.unwrap();
+
+    if let Some(init) = init_sql {
+        tx.batch_execute(init).await.unwrap();
+    }
+    sql_to_statement_description(&tx, sql).await.unwrap()
+}
+
+async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {
+    let config = std::env::var("DATABASE");
+    if let Err(std::env::VarError::NotPresent) = config {
+        panic!("Environment variable DATABASE not set");
+    }
+    connect_to_database(&config.unwrap()).await
+}
+
+fn assert_statement(
+    statement: &StatementDescription,
+    expected_row_count: StatementRowCount,
+    expected_params: &[UnnamedValue],
+    expected_columns: &[NamedValue],
+) {
+    assert!(statement.analyze_error.is_none(), "Analyze error");
+    assert_eq!(statement.row_count, expected_row_count, "Row count");
+    assert_eq!(statement.params, expected_params, "Params");
+    assert_eq!(statement.columns, expected_columns, "Columns");
 }
 
 pub struct TestCase<'a> {
@@ -147,7 +143,7 @@ fn section_heading(section_name: &'static str) -> impl FnMut(&str) -> IResult<&s
 }
 
 fn section_content(input: &str) -> IResult<&str, &str> {
-    alt((recognize(tuple((take_until("\n--- "), newline))), eof))(input)
+    alt((recognize(tuple((take_until("\n--- "), newline))), rest))(input)
 }
 
 fn row_count(input: &str) -> IResult<&str, StatementRowCount> {

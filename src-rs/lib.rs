@@ -9,8 +9,8 @@ use std::fmt;
 use tokio_postgres::{Client, GenericClient, NoTls};
 
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
-use crate::types::{NamedValue, StatementDescription, StatementRowCount, UnnamedValue, Warn};
-use infer::infer_statement_nullability;
+use crate::types::{NamedValue, StatementDescription, StatementRowCount, UnnamedValue};
+use infer::analyze_statement;
 
 #[derive(Debug)]
 pub enum Error {
@@ -65,23 +65,21 @@ pub async fn describe_statement<'a, C: GenericClient + Sync>(
             .map(NamedValue::from_column)
             .collect(),
         row_count: StatementRowCount::Many,
+        analyze_error: None,
     })
 }
 
 pub async fn sql_to_statement_description<'a, C: GenericClient + Sync>(
     client: &C,
     sql: &'a str,
-) -> Result<Warn<StatementDescription<'a>>, Error> {
+) -> Result<StatementDescription<'a>, Error> {
     let preprocessed = preprocess_sql(sql)?;
     let mut statement_description = describe_statement(client, preprocessed).await?;
-    match infer_statement_nullability(client, &mut statement_description).await {
-        Err(err) => Ok(Warn::warn(
-            statement_description,
-            "The internal SQL parser failed to parse the SQL statement.",
-            format!("{}", err),
-        )),
-        Ok(_) => Ok(Warn::of(statement_description)),
-    }
+    match analyze_statement(client, &statement_description.sql).await {
+        Ok(output) => output.update_statement(&mut statement_description),
+        Err(err) => statement_description.analyze_error = Some(err),
+    };
+    Ok(statement_description)
 }
 
 pub async fn connect_to_database(config: &str) -> Result<Client, tokio_postgres::Error> {

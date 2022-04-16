@@ -329,6 +329,8 @@ fn qualified_join(
     match join_condition {
         JoinCondition::On(_) => cross_join(left, right),
         JoinCondition::Using(join_columns) => {
+            // No need to check that all join_columns exist on both sides, because Postgres
+            // already has.
             let mut join_cols = HashSet::new();
             for col in join_columns {
                 join_cols.insert(col.to_string());

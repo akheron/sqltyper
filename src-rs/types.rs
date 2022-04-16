@@ -3,12 +3,16 @@ use std::borrow::Cow;
 pub use tokio_postgres::types::{Kind, Type};
 use tokio_postgres::Column;
 
+use super::infer;
+
 #[derive(Debug)]
 pub struct StatementDescription<'a> {
     pub sql: Cow<'a, str>,
     pub params: Vec<UnnamedValue>,
     pub columns: Vec<NamedValue>,
     pub row_count: StatementRowCount,
+
+    pub analyze_error: Option<infer::Error>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -17,37 +21,6 @@ pub enum StatementRowCount {
     One,       // exactly one output row
     ZeroOrOne, // zero or one output row
     Many,      // zero or more output rows
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValueType {
-    Any(Type),
-    Array { type_: Type, elem_nullable: bool },
-}
-
-impl ValueType {
-    fn from_type(type_: &Type) -> Self {
-        match type_.kind() {
-            Kind::Array(elem) => ValueType::Array {
-                type_: elem.clone(),
-                elem_nullable: true,
-            },
-            _ => ValueType::Any(type_.clone()),
-        }
-    }
-
-    pub fn lift_to_array(&self, elem_nullable: bool) -> Self {
-        match self {
-            ValueType::Any(type_) => ValueType::Array {
-                type_: type_.clone(),
-                elem_nullable,
-            },
-            ValueType::Array { type_, .. } => ValueType::Array {
-                type_: type_.clone(),
-                elem_nullable,
-            },
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -98,37 +71,33 @@ impl NamedValue {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Warning {
-    pub summary: String,
-    pub description: String,
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValueType {
+    Any(Type),
+    Array { type_: Type, elem_nullable: bool },
 }
 
-#[derive(Debug)]
-pub struct Warn<T> {
-    pub payload: T,
-    pub warnings: Vec<Warning>,
-}
-
-impl<T> Warn<T> {
-    pub fn of(payload: T) -> Warn<T> {
-        Warn {
-            payload,
-            warnings: vec![],
+impl ValueType {
+    fn from_type(type_: &Type) -> Self {
+        match type_.kind() {
+            Kind::Array(elem) => ValueType::Array {
+                type_: elem.clone(),
+                elem_nullable: true,
+            },
+            _ => ValueType::Any(type_.clone()),
         }
     }
 
-    pub fn warn<S1: Into<String>, S2: Into<String>>(
-        payload: T,
-        summary: S1,
-        description: S2,
-    ) -> Warn<T> {
-        Warn {
-            payload,
-            warnings: vec![Warning {
-                summary: summary.into(),
-                description: description.into(),
-            }],
+    pub fn lift_to_array(&self, elem_nullable: bool) -> Self {
+        match self {
+            ValueType::Any(type_) => ValueType::Array {
+                type_: type_.clone(),
+                elem_nullable,
+            },
+            ValueType::Array { type_, .. } => ValueType::Array {
+                type_: type_.clone(),
+                elem_nullable,
+            },
         }
     }
 }
