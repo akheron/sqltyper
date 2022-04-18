@@ -1,103 +1,95 @@
+use postgres_types::Oid;
 use std::borrow::Cow;
-
-pub use tokio_postgres::types::{Kind, Type};
-use tokio_postgres::Column;
 
 use super::infer;
 
 #[derive(Debug)]
 pub struct StatementDescription<'a> {
     pub sql: Cow<'a, str>,
-    pub params: Vec<UnnamedValue>,
-    pub columns: Vec<NamedValue>,
-    pub row_count: StatementRowCount,
-
+    pub params: Vec<Type>,
+    pub columns: Vec<Field>,
+    pub row_count: RowCount,
     pub analyze_error: Option<infer::Error>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StatementRowCount {
+pub enum RowCount {
     Zero,      // no output rows ever
     One,       // exactly one output row
     ZeroOrOne, // zero or one output row
     Many,      // zero or more output rows
 }
 
-#[derive(Debug, PartialEq)]
-pub struct UnnamedValue {
-    pub type_: ValueType,
-    pub nullable: bool,
-}
-
-impl UnnamedValue {
-    pub fn new(type_: Type, nullable: bool) -> UnnamedValue {
-        UnnamedValue {
-            type_: ValueType::Any(type_),
-            nullable,
-        }
-    }
-}
+type PostgresType = tokio_postgres::types::Type;
+type PostgresKind = tokio_postgres::types::Kind;
+type PostgresField = tokio_postgres::types::Field;
+type PostgresColumn = tokio_postgres::Column;
 
 #[derive(Debug, PartialEq)]
-pub struct NamedValue {
+pub struct Type {
+    pub schema: String,
     pub name: String,
-    pub type_: ValueType,
+    pub oid: Oid,
+    pub kind: Box<Kind>,
     pub nullable: bool,
 }
 
-impl NamedValue {
-    pub fn new(name: &str, type_: Type, nullable: bool) -> NamedValue {
-        NamedValue {
-            name: String::from(name),
-            type_: ValueType::Any(type_),
+impl Type {
+    pub fn from_postgres(type_: &PostgresType, nullable: bool) -> Self {
+        Self {
+            schema: type_.schema().to_string(),
+            name: type_.name().to_string(),
+            oid: type_.oid(),
+            kind: Box::new(Kind::from_postgres(type_.kind())),
             nullable,
         }
     }
+}
 
-    pub fn from_type(name: &str, type_: Type) -> NamedValue {
-        NamedValue {
-            name: name.to_string(),
-            type_: ValueType::Any(type_),
-            nullable: true,
+#[derive(Debug, PartialEq)]
+pub enum Kind {
+    Simple,
+    Enum(Vec<String>),
+    Pseudo,
+    Array(Type),
+    Range(Type),
+    Domain(Type),
+    Composite(Vec<Field>),
+}
+
+impl Kind {
+    pub fn from_postgres(kind: &PostgresKind) -> Self {
+        match kind {
+            PostgresKind::Simple => Self::Simple,
+            PostgresKind::Enum(variants) => Self::Enum(variants.clone()),
+            PostgresKind::Pseudo => Self::Pseudo,
+            PostgresKind::Array(elem) => Self::Array(Type::from_postgres(elem, true)),
+            PostgresKind::Range(elem) => Self::Range(Type::from_postgres(elem, false)),
+            PostgresKind::Domain(elem) => Self::Range(Type::from_postgres(elem, false)),
+            // TODO
+            _ => Self::Simple,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Field {
+    pub name: String,
+    pub type_: Type,
+}
+
+impl Field {
+    pub fn from_postgres_field(field: &PostgresField) -> Self {
+        Self {
+            name: field.name().to_string(),
+            type_: Type::from_postgres(field.type_(), false),
         }
     }
 
-    pub fn from_column(column: &Column) -> NamedValue {
-        NamedValue {
+    pub fn from_postgres_column(column: &PostgresColumn) -> Self {
+        Self {
             name: column.name().to_string(),
-            type_: ValueType::from_type(column.type_()),
-            nullable: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValueType {
-    Any(Type),
-    Array { type_: Type, elem_nullable: bool },
-}
-
-impl ValueType {
-    fn from_type(type_: &Type) -> Self {
-        match type_.kind() {
-            Kind::Array(elem) => ValueType::Array {
-                type_: elem.clone(),
-                elem_nullable: true,
-            },
-            _ => ValueType::Any(type_.clone()),
-        }
-    }
-
-    pub fn lift_to_array(&self, elem_nullable: bool) -> Self {
-        match self {
-            ValueType::Any(type_) => ValueType::Array {
-                type_: type_.clone(),
-                elem_nullable,
-            },
-            ValueType::Array { type_, .. } => ValueType::Array {
-                type_: type_.clone(),
-                elem_nullable,
-            },
+            type_: Type::from_postgres(column.type_(), false),
         }
     }
 }

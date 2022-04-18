@@ -73,8 +73,8 @@ struct ColumnInfo {
 fn find_table(schema_search_order: &[String], rows: &[Row]) -> Option<Vec<ColumnInfo>> {
     for schema in schema_search_order {
         let row_opt = rows.iter().find(|row| {
-            let row_schema: String = row.get(0);
-            *schema == row_schema
+            let row_schema: &str = row.get(0);
+            schema == row_schema
         });
         if let Some(row) = row_opt {
             let result: Json<Vec<ColumnInfo>> = row.get(1);

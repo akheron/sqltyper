@@ -9,7 +9,7 @@ use std::fmt;
 use tokio_postgres::{Client, GenericClient, NoTls};
 
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
-use crate::types::{NamedValue, StatementDescription, StatementRowCount, UnnamedValue};
+use crate::types::{Field, RowCount, StatementDescription, Type};
 use infer::analyze_statement;
 
 #[derive(Debug)]
@@ -53,18 +53,16 @@ pub async fn describe_statement<'a, C: GenericClient + Sync>(
             .params()
             .iter()
             .map(|param| {
-                UnnamedValue::new(
-                    param.clone(),
-                    false, // params are non-nullable by default
-                )
+                // params are non-nullable by default
+                Type::from_postgres(param, false)
             })
             .collect(),
         columns: statement
             .columns()
             .iter()
-            .map(NamedValue::from_column)
+            .map(Field::from_postgres_column)
             .collect(),
-        row_count: StatementRowCount::Many,
+        row_count: RowCount::Many,
         analyze_error: None,
     })
 }

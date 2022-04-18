@@ -9,22 +9,19 @@ use nom::combinator::{all_consuming, map, opt, peek, recognize, rest, value};
 use nom::multi::{many0, many0_count, many1_count, many_till};
 use nom::sequence::{delimited, terminated, tuple};
 use nom::{error, Finish, IResult, Parser};
-use tokio_postgres::types::Type;
 
-use sqltyper::types::{
-    NamedValue, StatementDescription, StatementRowCount, UnnamedValue, ValueType,
-};
+use sqltyper::types::{Field, Kind, RowCount, StatementDescription, Type};
 use sqltyper::{connect_to_database, sql_to_statement_description};
 
 pub async fn test(
     init_sql: Option<&str>,
     sql: &str,
-    row_count: StatementRowCount,
-    params: &[UnnamedValue],
-    columns: &[NamedValue],
+    row_count: RowCount,
+    params: &[Type],
+    columns: &[Field],
 ) {
     let statement = get_statement(init_sql, sql).await;
-    assert_statement(&statement, row_count, params, columns);
+    assert_statement(statement, row_count, params, columns);
 }
 async fn get_statement<'a>(init_sql: Option<&str>, sql: &'a str) -> StatementDescription<'a> {
     // Run in transaction to rollback all changes automatically
@@ -46,10 +43,10 @@ async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {
 }
 
 fn assert_statement(
-    statement: &StatementDescription,
-    expected_row_count: StatementRowCount,
-    expected_params: &[UnnamedValue],
-    expected_columns: &[NamedValue],
+    statement: StatementDescription,
+    expected_row_count: RowCount,
+    expected_params: &[Type],
+    expected_columns: &[Field],
 ) {
     assert!(statement.analyze_error.is_none(), "Analyze error");
     assert_eq!(statement.row_count, expected_row_count, "Row count");
@@ -57,12 +54,13 @@ fn assert_statement(
     assert_eq!(statement.columns, expected_columns, "Columns");
 }
 
+#[derive(Debug)]
 pub struct TestCase<'a> {
     setup: Option<&'a str>,
     query: &'a str,
-    row_count: StatementRowCount,
-    params: Vec<UnnamedValue>,
-    columns: Vec<NamedValue>,
+    row_count: RowCount,
+    params: Vec<Type>,
+    columns: Vec<Field>,
 }
 
 pub async fn run_test_file(path: &Path) {
@@ -92,8 +90,8 @@ fn test_case(input: &str) -> IResult<&str, TestCase> {
             opt(section("setup", section_content)),
             section("query", section_content),
             section("expected row count", row_count),
-            section("expected params", unnamed_fields),
-            section("expected columns", named_fields),
+            section("expected params", params),
+            section("expected columns", fields),
         )),
         |(_, setup, query, row_count, params, columns)| TestCase {
             setup,
@@ -146,45 +144,37 @@ fn section_content(input: &str) -> IResult<&str, &str> {
     alt((recognize(tuple((take_until("\n--- "), newline))), rest))(input)
 }
 
-fn row_count(input: &str) -> IResult<&str, StatementRowCount> {
+fn row_count(input: &str) -> IResult<&str, RowCount> {
     terminated(
         alt((
-            map(tag("zero or one"), |_| StatementRowCount::ZeroOrOne),
-            map(tag("zero"), |_| StatementRowCount::Zero),
-            map(tag("one"), |_| StatementRowCount::One),
-            map(tag("many"), |_| StatementRowCount::Many),
+            map(tag("zero or one"), |_| RowCount::ZeroOrOne),
+            map(tag("zero"), |_| RowCount::Zero),
+            map(tag("one"), |_| RowCount::One),
+            map(tag("many"), |_| RowCount::Many),
         )),
         newline,
     )(input)
 }
 
-fn unnamed_fields(input: &str) -> IResult<&str, Vec<UnnamedValue>> {
-    many0(unnamed_field)(input)
+fn params(input: &str) -> IResult<&str, Vec<Type>> {
+    many0(param)(input)
 }
 
-fn unnamed_field(input: &str) -> IResult<&str, UnnamedValue> {
-    map(
-        tuple((value_type, opt(char('?')), newline)),
-        |(type_, nullable, _)| UnnamedValue {
-            type_,
-            nullable: nullable.is_some(),
-        },
-    )(input)
+fn param(input: &str) -> IResult<&str, Type> {
+    terminated(type_, newline)(input)
 }
 
-fn named_fields(input: &str) -> IResult<&str, Vec<NamedValue>> {
-    many0(named_field)(input)
+fn fields(input: &str) -> IResult<&str, Vec<Field>> {
+    many0(field)(input)
 }
 
-fn named_field(input: &str) -> IResult<&str, NamedValue> {
-    map(
-        tuple((field_name, unnamed_field)),
-        |(name, unnamed_field)| NamedValue {
+fn field(input: &str) -> IResult<&str, Field> {
+    map(tuple((field_name, type_, newline)), |(name, type_, _)| {
+        Field {
             name: name.to_string(),
-            type_: unnamed_field.type_,
-            nullable: unnamed_field.nullable,
-        },
-    )(input)
+            type_,
+        }
+    })(input)
 }
 
 fn field_name(input: &str) -> IResult<&str, &str> {
@@ -194,33 +184,59 @@ fn field_name(input: &str) -> IResult<&str, &str> {
     )(input)
 }
 
-fn value_type(input: &str) -> IResult<&str, ValueType> {
+type PostgresType = tokio_postgres::types::Type;
+
+fn type_(input: &str) -> IResult<&str, Type> {
+    alt((array_type, simple_type))(input)
+}
+
+fn array_type(input: &str) -> IResult<&str, Type> {
+    map(
+        tuple((char('['), tag("int4"), nullable, char(']'), nullable)),
+        |(_, _, elem_nullable, _, nullable)| {
+            type_from_postgres_array(&PostgresType::INT4_ARRAY, nullable, elem_nullable).unwrap()
+        },
+    )(input)
+}
+
+fn simple_type(input: &str) -> IResult<&str, Type> {
+    map(tuple((postgres_type, nullable)), |(type_, nullable)| {
+        Type::from_postgres(&type_, nullable)
+    })(input)
+}
+
+fn postgres_type(input: &str) -> IResult<&str, PostgresType> {
     alt((
-        map(
-            tuple((char('['), primitive_type, opt(char('?')), char(']'))),
-            |(_, type_, nullable, _)| ValueType::Array {
-                type_,
-                elem_nullable: nullable.is_some(),
-            },
-        ),
-        map(primitive_type, ValueType::Any),
+        value(PostgresType::BIT, tag("bit")),
+        value(PostgresType::BOOL, tag("bool")),
+        value(PostgresType::FLOAT4, tag("float4")),
+        value(PostgresType::FLOAT8, tag("float8")),
+        value(PostgresType::INT4, tag("int4")),
+        value(PostgresType::INT8, tag("int8")),
+        value(PostgresType::INTERVAL, tag("interval")),
+        value(PostgresType::TEXT, tag("text")),
+        value(PostgresType::TIMESTAMPTZ, tag("timestamptz")),
+        value(PostgresType::TIME, tag("time")),
+        value(PostgresType::VARCHAR, tag("varchar")),
     ))(input)
 }
 
-fn primitive_type(input: &str) -> IResult<&str, Type> {
-    alt((
-        value(Type::BIT, tag("bit")),
-        value(Type::BOOL, tag("bool")),
-        value(Type::FLOAT4, tag("float4")),
-        value(Type::FLOAT8, tag("float8")),
-        value(Type::INT4, tag("int4")),
-        value(Type::INT8, tag("int8")),
-        value(Type::INTERVAL, tag("interval")),
-        value(Type::TEXT, tag("text")),
-        value(Type::TIMESTAMPTZ, tag("timestamptz")),
-        value(Type::TIME, tag("time")),
-        value(Type::VARCHAR, tag("varchar")),
-    ))(input)
+fn nullable(input: &str) -> IResult<&str, bool> {
+    map(opt(char('?')), |c| c.is_some())(input)
+}
+
+fn type_from_postgres_array(
+    type_: &PostgresType,
+    nullable: bool,
+    elem_nullable: bool,
+) -> Option<Type> {
+    let mut result = Type::from_postgres(type_, nullable);
+    if let Kind::Array(elem) = result.kind.as_mut() {
+        elem.nullable = elem_nullable;
+        Some(result)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -245,7 +261,7 @@ zero or one
         );
         assert_eq!(case.setup, None);
         assert_eq!(case.query, "jee jee query jee\n\n");
-        assert_eq!(case.row_count, StatementRowCount::ZeroOrOne);
+        assert_eq!(case.row_count, RowCount::ZeroOrOne);
         assert_eq!(case.params, Vec::new());
         assert_eq!(case.columns, Vec::new());
     }
@@ -272,7 +288,7 @@ zero or one
 --- expected params ---------
 
 int4
-bool
+bool?
 
 --- expected columns --------
 
@@ -282,35 +298,24 @@ bar: bool
         );
         assert_eq!(case.setup.unwrap(), "arst foo\nbar baz\n\n");
         assert_eq!(case.query, "jee jee query jee\n\n");
-        assert_eq!(case.row_count, StatementRowCount::ZeroOrOne);
+        assert_eq!(case.row_count, RowCount::ZeroOrOne);
         assert_eq!(
             case.params,
             vec![
-                UnnamedValue {
-                    type_: ValueType::Any(Type::INT4),
-                    nullable: false
-                },
-                UnnamedValue {
-                    type_: ValueType::Any(Type::BOOL),
-                    nullable: false
-                }
+                Type::from_postgres(&PostgresType::INT4, false),
+                Type::from_postgres(&PostgresType::BOOL, true),
             ]
         );
         assert_eq!(
             case.columns,
             vec![
-                NamedValue {
+                Field {
                     name: "foo".to_string(),
-                    type_: ValueType::Array {
-                        type_: Type::INT4,
-                        elem_nullable: true
-                    },
-                    nullable: true
+                    type_: type_from_postgres_array(&PostgresType::INT4_ARRAY, true, true).unwrap(),
                 },
-                NamedValue {
+                Field {
                     name: "bar".to_string(),
-                    type_: ValueType::Any(Type::BOOL),
-                    nullable: false
+                    type_: Type::from_postgres(&PostgresType::BOOL, false),
                 }
             ]
         );

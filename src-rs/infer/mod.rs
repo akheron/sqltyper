@@ -1,6 +1,7 @@
 use crate::infer::param::NullableParams;
 use crate::infer::source_columns::Column;
-use crate::{parser::parse_sql, types::StatementDescription, StatementRowCount};
+use crate::types::Kind;
+use crate::{parser::parse_sql, types::StatementDescription, RowCount};
 use tokio_postgres::GenericClient;
 
 use self::columns::infer_column_nullability;
@@ -38,7 +39,7 @@ pub async fn analyze_statement<'a, C: GenericClient + Sync>(
 }
 
 pub struct AnalyzeOutput {
-    row_count: StatementRowCount,
+    row_count: RowCount,
     params: NullableParams,
     columns: Vec<Column>,
 }
@@ -54,14 +55,18 @@ impl AnalyzeOutput {
         for (column, inferred) in statement.columns.iter_mut().zip(&self.columns) {
             match inferred.nullability {
                 ValueNullability::Scalar { nullable } => {
-                    column.nullable = nullable;
+                    column.type_.nullable = nullable;
                 }
                 ValueNullability::Array {
                     nullable,
                     elem_nullable,
                 } => {
-                    column.nullable = nullable;
-                    column.type_ = column.type_.lift_to_array(elem_nullable);
+                    column.type_.nullable = nullable;
+                    if let Kind::Array(elem_type) = column.type_.kind.as_mut() {
+                        elem_type.nullable = elem_nullable;
+                    } else {
+                        // TODO: Should it be considered an error if we inferred an array but the actual type is something else?
+                    }
                 }
             }
         }
