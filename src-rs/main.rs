@@ -9,7 +9,7 @@ async fn run() -> Result<(), Error> {
     let client = connect_to_database(&db_config).await?;
     let statement = sql_to_statement_description(&client, &sql).await?;
 
-    println!("{:?}", statement);
+    println!("{}", serde_json::to_string(&statement).unwrap());
     Ok(())
 }
 

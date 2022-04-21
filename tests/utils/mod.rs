@@ -10,7 +10,7 @@ use nom::multi::{many0, many0_count, many1_count, many_till};
 use nom::sequence::{delimited, terminated, tuple};
 use nom::{error, Finish, IResult, Parser};
 
-use sqltyper::types::{Field, Kind, RowCount, StatementDescription, Type};
+use sqltyper::types::{AnalyzeStatus, Field, Kind, RowCount, StatementDescription, Type};
 use sqltyper::{connect_to_database, sql_to_statement_description};
 
 pub async fn test(
@@ -48,7 +48,10 @@ fn assert_statement(
     expected_params: &[Type],
     expected_columns: &[Field],
 ) {
-    assert!(statement.analyze_error.is_none(), "Analyze error");
+    assert!(
+        matches!(statement.analyze_status, AnalyzeStatus::Success),
+        "Analyze error"
+    );
     assert_eq!(statement.row_count, expected_row_count, "Row count");
     assert_eq!(statement.params, expected_params, "Params");
     assert_eq!(statement.columns, expected_columns, "Columns");
@@ -201,7 +204,7 @@ fn array_type(input: &str) -> IResult<&str, Type> {
 
 fn simple_type(input: &str) -> IResult<&str, Type> {
     map(tuple((postgres_type, nullable)), |(type_, nullable)| {
-        Type::from_postgres(&type_, nullable)
+        Type::from_pg(&type_, nullable)
     })(input)
 }
 
@@ -230,8 +233,8 @@ fn type_from_postgres_array(
     nullable: bool,
     elem_nullable: bool,
 ) -> Option<Type> {
-    let mut result = Type::from_postgres(type_, nullable);
-    if let Kind::Array(elem) = result.kind.as_mut() {
+    let mut result = Type::from_pg(type_, nullable);
+    if let Kind::Array { element_type: elem } = result.kind.as_mut() {
         elem.nullable = elem_nullable;
         Some(result)
     } else {
@@ -302,8 +305,8 @@ bar: bool
         assert_eq!(
             case.params,
             vec![
-                Type::from_postgres(&PostgresType::INT4, false),
-                Type::from_postgres(&PostgresType::BOOL, true),
+                Type::from_pg(&PostgresType::INT4, false),
+                Type::from_pg(&PostgresType::BOOL, true),
             ]
         );
         assert_eq!(
@@ -315,7 +318,7 @@ bar: bool
                 },
                 Field {
                     name: "bar".to_string(),
-                    type_: Type::from_postgres(&PostgresType::BOOL, false),
+                    type_: Type::from_pg(&PostgresType::BOOL, false),
                 }
             ]
         );

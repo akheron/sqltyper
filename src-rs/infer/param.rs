@@ -86,7 +86,9 @@ fn find_insert_columns(
                 {
                     result.push(table_columns.swap_remove(i));
                 } else {
-                    return Err(Error::ColumnNotFound(column_name.to_string()));
+                    return Err(Error::ColumnNotFound {
+                        column: column_name.to_string(),
+                    });
                 }
             }
             Ok(result)

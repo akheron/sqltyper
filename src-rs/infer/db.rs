@@ -58,7 +58,9 @@ GROUP BY schema;
             })
             .collect())
     } else {
-        Err(Error::TableNotFound(format!("{}", table)))
+        Err(Error::TableNotFound {
+            table: format!("{}", table),
+        })
     }
 }
 

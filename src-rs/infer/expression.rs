@@ -40,7 +40,9 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
         ast::Expression::ColumnRef(column) => source_columns
             .find_column(column)
             .map(|source_column| source_column.nullability)
-            .ok_or_else(|| Error::ColumnNotFound(column.to_string())),
+            .ok_or_else(|| Error::ColumnNotFound {
+                column: column.to_string(),
+            }),
 
         ast::Expression::UnaryOp { op, expr } => match operator_null_safety(op) {
             NullSafety::Safe => {
@@ -397,8 +399,8 @@ async fn infer_scalar_subquery_nullability<C: GenericClient + Sync>(
             nullable: columns[0].nullability.is_nullable(),
         })
     } else {
-        Err(Error::UnexpectedNumberOfColumns(
-            "A scalar subquery must return only one column".to_string(),
-        ))
+        Err(Error::UnexpectedNumberOfColumns {
+            message: "A scalar subquery must return only one column".to_string(),
+        })
     }
 }

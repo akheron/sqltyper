@@ -127,10 +127,12 @@ async fn infer_set_ops_output<C: GenericClient + Sync>(
             infer_select_body_output(client, context, param_nullability, &set_op.select).await?;
 
         if next.len() != result.len() {
-            return Err(Error::UnexpectedNumberOfColumns(format!(
-                "Unequal number of columns in {}",
-                Into::<&str>::into(&set_op.op)
-            )));
+            return Err(Error::UnexpectedNumberOfColumns {
+                message: format!(
+                    "Unequal number of columns in {}",
+                    Into::<&str>::into(&set_op.op)
+                ),
+            });
         }
 
         // EXCEPT has no (direct) effect on nullability of the output, because
