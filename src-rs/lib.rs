@@ -5,47 +5,55 @@ mod preprocess;
 pub mod types;
 mod utils;
 
-use std::fmt;
+use serde::Serialize;
 use tokio_postgres::{Client, GenericClient, NoTls};
 
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
-use crate::types::AnalyzeStatus;
-use crate::types::{Field, RowCount, StatementDescription, Type};
+pub use crate::types::{AnalyzeStatus, Field, RowCount, StatementDescription, Type};
 use infer::analyze_statement;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "variant", rename_all = "snake_case")]
 pub enum Error {
-    Preprocess(preprocess::Error),
-    Postgres(tokio_postgres::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::Preprocess(err) => write!(f, "{}", err),
-            Error::Postgres(err) => write!(f, "{}", err),
-        }
-    }
+    Preprocess {
+        error: preprocess::Error,
+    },
+    SqlStatement {
+        message: String,
+        detail: Option<String>,
+        hint: Option<String>,
+    },
+    Postgres {
+        error: String,
+    },
 }
 
 impl From<preprocess::Error> for Error {
-    fn from(err: preprocess::Error) -> Self {
-        Error::Preprocess(err)
+    fn from(error: preprocess::Error) -> Self {
+        Error::Preprocess { error }
     }
 }
 
 impl From<tokio_postgres::Error> for Error {
-    fn from(err: tokio_postgres::Error) -> Self {
-        Error::Postgres(err)
+    fn from(error: tokio_postgres::Error) -> Self {
+        if let Some(db_error) = error.as_db_error() {
+            Error::SqlStatement {
+                message: db_error.message().to_string(),
+                detail: db_error.detail().map(|s| s.to_string()),
+                hint: db_error.hint().map(|s| s.to_string()),
+            }
+        } else {
+            Error::Postgres {
+                error: error.to_string(),
+            }
+        }
     }
 }
 
-impl std::error::Error for Error {}
-
-pub async fn describe_statement<'a, C: GenericClient + Sync>(
+async fn describe_statement<'a, C: GenericClient + Sync>(
     client: &C,
-    preprocessed: PreprocessedSql<'a>,
-) -> Result<StatementDescription<'a>, Error> {
+    preprocessed: PreprocessedSql,
+) -> Result<StatementDescription, Error> {
     let statement = client.prepare(&preprocessed.sql).await?;
 
     Ok(StatementDescription {
@@ -68,10 +76,10 @@ pub async fn describe_statement<'a, C: GenericClient + Sync>(
     })
 }
 
-pub async fn sql_to_statement_description<'a, C: GenericClient + Sync>(
+pub async fn analyze<'a, C: GenericClient + Sync>(
     client: &C,
-    sql: &'a str,
-) -> Result<StatementDescription<'a>, Error> {
+    sql: String,
+) -> Result<StatementDescription, Error> {
     let preprocessed = preprocess_sql(sql)?;
     let statement_description = describe_statement(client, preprocessed).await?;
     Ok(analyze_statement(client, statement_description).await)

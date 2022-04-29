@@ -30,8 +30,8 @@ pub enum AnalyzeStatus {
 
 pub async fn analyze_statement<'a, C: GenericClient + Sync>(
     client: &C,
-    mut statement: StatementDescription<'a>,
-) -> StatementDescription<'a> {
+    mut statement: StatementDescription,
+) -> StatementDescription {
     match do_analyze(client, &statement.sql).await {
         Ok(output) => {
             output.update_statement(&mut statement);

@@ -1,10 +1,11 @@
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::{borrow::Cow, collections::HashMap};
 
-pub struct PreprocessedSql<'a> {
-    pub sql: Cow<'a, str>,
+pub struct PreprocessedSql {
+    pub sql: String,
     pub param_names: Vec<String>,
 }
 
@@ -15,7 +16,8 @@ lazy_static! {
     static ref NUMBERED_PARAM: Regex = Regex::new(r"\$\d+").unwrap();
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Error {
     MixedParamStyles,
 }
@@ -31,9 +33,9 @@ impl Display for Error {
     }
 }
 
-pub fn preprocess_sql(sql: &str) -> Result<PreprocessedSql, Error> {
-    let has_named_params = NAMED_PARAM.is_match(sql);
-    let has_numbered_params = NUMBERED_PARAM.is_match(sql);
+pub fn preprocess_sql(sql: String) -> Result<PreprocessedSql, Error> {
+    let has_named_params = NAMED_PARAM.is_match(&sql);
+    let has_numbered_params = NUMBERED_PARAM.is_match(&sql);
 
     if has_named_params && has_numbered_params {
         Err(Error::MixedParamStyles)
@@ -43,17 +45,17 @@ pub fn preprocess_sql(sql: &str) -> Result<PreprocessedSql, Error> {
         Ok(handle_numbered_params(sql))
     } else {
         Ok(PreprocessedSql {
-            sql: Cow::Borrowed(sql),
+            sql,
             param_names: Vec::new(),
         })
     }
 }
 
-fn handle_named_params(sql: &str) -> PreprocessedSql {
+fn handle_named_params(sql: String) -> PreprocessedSql {
     let mut param_numbers: HashMap<String, usize> = HashMap::new();
     let mut current: usize = 0;
 
-    let processed_sql = NAMED_PARAM.replace_all(sql, |captures: &Captures| {
+    let processed_sql = NAMED_PARAM.replace_all(&sql, |captures: &Captures| {
         let (prefix, capture) = if let Some(dname) = captures.name("dname") {
             ("", dname.as_str())
         } else {
@@ -77,34 +79,31 @@ fn handle_named_params(sql: &str) -> PreprocessedSql {
     params.sort_by(|a, b| a.1.cmp(&b.1));
 
     PreprocessedSql {
-        sql: processed_sql,
+        sql: processed_sql.to_string(),
         param_names: params.iter().map(|(k, _)| k.into()).collect(),
     }
 }
 
-fn handle_numbered_params(sql: &str) -> PreprocessedSql {
+fn handle_numbered_params(sql: String) -> PreprocessedSql {
     let mut param_names: Vec<String> = NUMBERED_PARAM
-        .find_iter(sql)
+        .find_iter(&sql)
         .map(|m| String::from(m.as_str()))
         .collect();
     param_names.sort();
 
-    PreprocessedSql {
-        sql: Cow::Borrowed(sql),
-        param_names,
-    }
+    PreprocessedSql { sql, param_names }
 }
 
 #[test]
 fn test_preprocess_sql() {
-    let fail = preprocess_sql("SELECT ${foo} $1");
+    let fail = preprocess_sql("SELECT ${foo} $1".to_string());
     assert!(fail.is_err());
 
-    let named = preprocess_sql("SELECT ${foo} :bar ${baz}::integer").unwrap();
+    let named = preprocess_sql("SELECT ${foo} :bar ${baz}::integer".to_string()).unwrap();
     assert_eq!(named.sql, "SELECT $1 $2 $3::integer");
     assert_eq!(named.param_names, ["foo", "bar", "baz"]);
 
-    let numbered = preprocess_sql("SELECT $2 $1::integer").unwrap();
+    let numbered = preprocess_sql("SELECT $2 $1::integer".to_string()).unwrap();
     assert_eq!(numbered.sql, "SELECT $2 $1::integer");
     assert_eq!(numbered.param_names, ["$1", "$2"]);
 }

@@ -1,11 +1,10 @@
 pub use crate::infer::AnalyzeStatus;
 use postgres_types::Oid;
 use serde::Serialize;
-use std::borrow::Cow;
 
 #[derive(Debug, Serialize)]
-pub struct StatementDescription<'a> {
-    pub sql: Cow<'a, str>,
+pub struct StatementDescription {
+    pub sql: String,
     pub params: Vec<Type>,
     pub columns: Vec<Field>,
     pub row_count: RowCount,

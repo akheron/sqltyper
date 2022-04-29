@@ -12,6 +12,9 @@ path = "src-rs/main.rs"
 
 [dependencies]
 async-recursion = "1.0.0"
+clap = { version = "3.1.12", features = ["env", "derive"] }
+deadpool-postgres = "0.10.2"
+futures = "0.3.21"
 lazy_static = "1.4.0"
 log = "0.4.14"
 nom = "7.0.0"
