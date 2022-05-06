@@ -1,13 +1,16 @@
+use crate::infer::columns::Columns;
+use crate::infer::context::Context;
+use crate::infer::db::SchemaClient;
 use crate::types::Kind;
 use crate::{parser::parse_sql, types::StatementDescription, RowCount};
 use serde::Serialize;
-use tokio_postgres::GenericClient;
+use tokio_postgres::Transaction;
 
 use self::columns::infer_column_nullability;
 pub use self::error::Error;
 use self::param::{infer_param_nullability, NullableParams};
 use self::rowcount::infer_row_count;
-use self::source_columns::{Column, ValueNullability};
+use self::source_columns::ValueNullability;
 
 mod columns;
 mod context;
@@ -28,11 +31,12 @@ pub enum AnalyzeStatus {
     Error { error: Error },
 }
 
-pub async fn analyze_statement<'a, C: GenericClient + Sync>(
-    client: &C,
+pub async fn analyze_statement(
+    tx: &Transaction<'_>,
     mut statement: StatementDescription,
 ) -> StatementDescription {
-    match do_analyze(client, &statement.sql).await {
+    let schema_client = SchemaClient::new(tx);
+    match do_analyze(&schema_client, &statement.sql).await {
         Ok(output) => {
             output.update_statement(&mut statement);
             statement.analyze_status = AnalyzeStatus::Success;
@@ -42,15 +46,14 @@ pub async fn analyze_statement<'a, C: GenericClient + Sync>(
     statement
 }
 
-async fn do_analyze<C: GenericClient + Sync>(
-    client: &C,
-    sql: &str,
-) -> Result<AnalyzeOutput, Error> {
+async fn do_analyze(client: &SchemaClient<'_>, sql: &str) -> Result<AnalyzeOutput, Error> {
     let ast = parse_sql(sql)?;
 
     let row_count = infer_row_count(&ast);
     let params = infer_param_nullability(client, &ast).await?;
-    let columns = infer_column_nullability(client, &params, &ast).await?;
+
+    let context = Context::new(client, &params);
+    let columns = infer_column_nullability(&context, &ast).await?;
 
     Ok(AnalyzeOutput {
         row_count,
@@ -62,7 +65,7 @@ async fn do_analyze<C: GenericClient + Sync>(
 pub struct AnalyzeOutput {
     row_count: RowCount,
     params: NullableParams,
-    columns: Vec<Column>,
+    columns: Columns,
 }
 
 impl AnalyzeOutput {

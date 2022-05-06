@@ -4,58 +4,55 @@ use crate::utils::builtin_properties::{
     builtin_function_null_safety, operator_null_safety, NullSafety,
 };
 
-pub enum NonNullExpressions<'a> {
-    Root,
-    Derived {
-        parent: &'a NonNullExpressions<'a>,
-        exprs: Vec<&'a ast::Expression<'a>>,
-    },
+pub struct NonNullExpressions<'a> {
+    parent: Option<&'a NonNullExpressions<'a>>,
+    exprs: Vec<&'a ast::Expression<'a>>,
 }
 
 impl<'a> NonNullExpressions<'a> {
-    pub fn has(&self, expression: &ast::Expression<'_>) -> bool {
-        match self {
-            NonNullExpressions::Root => false,
-            NonNullExpressions::Derived { parent, exprs } => {
-                exprs.iter().any(|non_null| *non_null == expression) || parent.has(expression)
-            }
+    // Given a row condition (a boolean expression), return a collection of expressions that
+    // are certainly non-null.
+    //
+    // A row is present in the output only if the condition evaluates to true. So
+    // here we can assume that the expression evaluates to true, and with that
+    // information find a list of expressions that are certainly not null.
+    //
+    pub fn from_row_conditions(
+        parent: Option<&'a Self>,
+        row_conditions: &[Option<&'a ast::Expression<'a>>],
+    ) -> NonNullExpressions<'a> {
+        Self {
+            parent,
+            exprs: row_conditions
+                .iter()
+                .filter_map(|expr_opt| *expr_opt)
+                .flat_map(|expr| get_non_null_sub_expressions_from_row_cond(expr, false))
+                .collect(),
         }
+    }
+
+    pub fn has(&self, expression: &ast::Expression<'_>) -> bool {
+        self.exprs.iter().any(|non_null| *non_null == expression) || self.parent_has(expression)
+    }
+
+    fn parent_has(&self, expression: &ast::Expression<'_>) -> bool {
+        self.parent.map(|p| p.has(expression)).unwrap_or(false)
     }
 
     pub fn has_source_column(&self, source_column: &SourceColumn) -> bool {
-        match self {
-            NonNullExpressions::Root => false,
-            NonNullExpressions::Derived { parent, exprs } => {
-                exprs.iter().any(|expr| match expr {
-                    ast::Expression::TableColumnRef { table, column } => {
-                        source_column.table_alias == *table && source_column.column_name == *column
-                    }
-                    ast::Expression::ColumnRef(column) => source_column.column_name == *column,
-                    _ => false,
-                }) || parent.has_source_column(source_column)
+        self.exprs.iter().any(|expr| match expr {
+            ast::Expression::TableColumnRef { table, column } => {
+                source_column.table_alias == *table && source_column.column_name == *column
             }
-        }
+            ast::Expression::ColumnRef(column) => source_column.column_name == *column,
+            _ => false,
+        }) || self.parent_has_source_column(source_column)
     }
-}
 
-// Given a row condition (a boolean expression), return a collection of expressions that
-// are certainly non-null.
-//
-// A row is present in the output only if the condition evaluates to true. So
-// here we can assume that the expression evaluates to true, and with that
-// information find a list of expressions that are certainly not null.
-//
-pub fn non_null_expressions_from_row_conditions<'a>(
-    parent: &'a NonNullExpressions<'a>,
-    row_conditions: &[Option<&'a ast::Expression<'a>>],
-) -> NonNullExpressions<'a> {
-    NonNullExpressions::Derived {
-        parent,
-        exprs: row_conditions
-            .iter()
-            .filter_map(|expr_opt| *expr_opt)
-            .flat_map(|expr| get_non_null_sub_expressions_from_row_cond(expr, false))
-            .collect(),
+    fn parent_has_source_column(&self, source_column: &SourceColumn) -> bool {
+        self.parent
+            .map(|p| p.has_source_column(source_column))
+            .unwrap_or(false)
     }
 }
 

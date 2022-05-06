@@ -4,7 +4,6 @@ use futures::future::join_all;
 use serde::Serialize;
 use sqltyper::types::StatementDescription;
 use std::fs;
-use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio_postgres::NoTls;
@@ -21,7 +20,7 @@ struct Cli {
     pool_size: usize,
 }
 
-fn make_connection_pool(cli: &Cli) -> Result<deadpool_postgres::Pool, tokio_postgres::Error> {
+fn make_connection_pool(cli: &Cli) -> Result<Pool, tokio_postgres::Error> {
     let cfg = tokio_postgres::Config::from_str(&cli.database)?;
     let mgr = Manager::from_config(
         cfg,
@@ -51,8 +50,9 @@ async fn run(cli: Cli) -> Result<Vec<FileOutput>, deadpool_postgres::PoolError> 
         let pool = pool.clone();
 
         tasks.push(tokio::spawn(async move {
-            let client = pool.get().await.unwrap();
-            sqltyper::analyze(client.deref().deref(), sql).await
+            let mut client = pool.get().await.unwrap();
+            let tx = client.transaction().await.unwrap();
+            sqltyper::analyze(&tx, sql).await
         }));
     }
 

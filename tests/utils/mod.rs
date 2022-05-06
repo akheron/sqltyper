@@ -23,7 +23,7 @@ pub async fn test(
     let statement = get_statement(init_sql, sql).await;
     assert_statement(statement, row_count, params, columns);
 }
-async fn get_statement<'a>(init_sql: Option<&str>, sql: &'a str) -> StatementDescription<'a> {
+async fn get_statement(init_sql: Option<&str>, sql: &str) -> StatementDescription {
     // Run in transaction to rollback all changes automatically
     let mut client = connect().await.unwrap();
     let tx = client.transaction().await.unwrap();
@@ -31,7 +31,7 @@ async fn get_statement<'a>(init_sql: Option<&str>, sql: &'a str) -> StatementDes
     if let Some(init) = init_sql {
         tx.batch_execute(init).await.unwrap();
     }
-    analyze(&tx, sql).await.unwrap()
+    analyze(&tx, sql.to_string()).await.unwrap()
 }
 
 async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {

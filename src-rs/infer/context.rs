@@ -1,70 +1,109 @@
+use async_recursion::async_recursion;
 use std::collections::HashMap;
 
-use tokio_postgres::GenericClient;
-
 use crate::ast;
-use crate::infer::columns::get_output_columns;
+use crate::infer::columns::{infer_column_nullability, Column, Columns};
+use crate::infer::db::SchemaClient;
 use crate::infer::error::Error;
 use crate::infer::param::NullableParams;
-use crate::infer::source_columns::Column;
 
-pub enum Context<'a> {
-    Root,
-    Derived {
-        parent: &'a Context<'a>,
-        virtual_tables: Option<HashMap<String, Vec<Column>>>,
-    },
+pub struct Context<'a> {
+    pub client: &'a SchemaClient<'a>,
+    pub param_nullability: &'a NullableParams,
+    env: Env<'a>,
 }
 
 impl<'a> Context<'a> {
-    pub fn root() -> Context<'a> {
-        Context::Root
+    pub fn new(client: &'a SchemaClient<'a>, param_nullability: &'a NullableParams) -> Self {
+        Self {
+            env: Env::new(),
+            client,
+            param_nullability,
+        }
     }
 
-    pub fn derive<'b>(parent: &'b Context<'b>) -> Context<'b> {
-        Context::Derived {
-            parent,
+    #[async_recursion]
+    pub async fn for_ctes(
+        parent: &'a Self,
+        ctes_opt: &Option<Vec<ast::WithQuery<'_>>>,
+    ) -> Result<Option<Self>, Error> {
+        if let Some(ctes) = ctes_opt {
+            let mut new_context = parent.derive();
+            for cte in ctes {
+                // "Virtual tables" from previous WITH queries are available
+                let columns = infer_column_nullability(&new_context, cte.query.as_ref()).await?;
+                new_context.env.borrow_mut().add_cte(cte, columns);
+            }
+            Ok(Some(new_context))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn get_table(&self, table: &ast::TableRef) -> Option<&Columns> {
+        self.env.get_table(table)
+    }
+
+    fn derive(&'a self) -> Self {
+        Self {
+            env: self.env.derive(),
+            ..*self
+        }
+    }
+}
+
+pub struct Env<'a> {
+    parent: Option<&'a Env<'a>>,
+    virtual_tables: Option<HashMap<String, Columns>>,
+}
+
+impl<'a> Env<'a> {
+    pub fn new() -> Self {
+        Self {
+            parent: None,
             virtual_tables: None,
         }
     }
 
-    pub fn get_table(&self, table: &ast::TableRef) -> Option<&Vec<Column>> {
-        match self {
-            Context::Root => None,
-            Context::Derived {
-                parent,
-                virtual_tables,
-            } => match table.schema {
-                Some(_) => None,
-                None => match virtual_tables {
-                    None => parent.get_table(table),
-                    Some(v) => v.get(table.table).or_else(|| parent.get_table(table)),
-                },
+    pub fn derive(&'a self) -> Self {
+        Self {
+            parent: Some(self),
+            virtual_tables: None,
+        }
+    }
+
+    fn get_table_from_parent(&self, table: &ast::TableRef) -> Option<&Columns> {
+        self.parent.and_then(|p| p.get_table(table))
+    }
+
+    pub fn get_table(&self, table: &ast::TableRef) -> Option<&Columns> {
+        match table.schema {
+            Some(_) => None,
+            None => match &self.virtual_tables {
+                None => self.get_table_from_parent(table),
+                Some(v) => v
+                    .get(table.table)
+                    .or_else(|| self.get_table_from_parent(table)),
             },
         }
     }
 
-    fn borrow_mut(&mut self) -> Option<ContextMutRef> {
-        match self {
-            Context::Root => None,
-            Context::Derived { virtual_tables, .. } => Some(ContextMutRef(
-                virtual_tables.get_or_insert_with(HashMap::new),
-            )),
-        }
+    fn borrow_mut(&mut self) -> EnvMutRef {
+        EnvMutRef(self.virtual_tables.get_or_insert_with(HashMap::new))
     }
 }
 
-struct ContextMutRef<'a>(&'a mut HashMap<String, Vec<Column>>);
+struct EnvMutRef<'a>(&'a mut HashMap<String, Columns>);
 
-impl<'a> ContextMutRef<'a> {
-    fn add_cte(&mut self, cte: &ast::WithQuery, columns: &[Column]) {
+impl<'a> EnvMutRef<'a> {
+    fn add_cte(&mut self, cte: &ast::WithQuery, columns: Columns) {
         self.0.insert(
             cte.as_.to_string(),
             match cte.column_names {
                 None => columns
-                    .iter()
-                    .map(|column| Column {
-                        name: column.name.to_string(),
+                    .into_iter()
+                    .map(|mut column| Column {
+                        name: std::mem::take(&mut column.name),
                         nullability: column.nullability,
                     })
                     .collect(),
@@ -78,25 +117,5 @@ impl<'a> ContextMutRef<'a> {
                     .collect(),
             },
         );
-    }
-}
-
-pub async fn get_context_for_ctes<'a, C: GenericClient + Sync>(
-    client: &C,
-    param_nullability: &NullableParams,
-    parent: &'a Context<'a>,
-    ctes_opt: &Option<Vec<ast::WithQuery<'_>>>,
-) -> Result<Option<Context<'a>>, Error> {
-    if let Some(ctes) = ctes_opt {
-        let mut result = Context::derive(parent);
-        for cte in ctes {
-            // "Virtual tables" from previous WITH queries are available
-            let columns =
-                get_output_columns(client, &result, param_nullability, cte.query.as_ref()).await?;
-            result.borrow_mut().unwrap().add_cte(cte, &columns);
-        }
-        Ok(Some(result))
-    } else {
-        Ok(None)
     }
 }

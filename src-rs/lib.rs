@@ -6,7 +6,7 @@ pub mod types;
 mod utils;
 
 use serde::Serialize;
-use tokio_postgres::{Client, GenericClient, NoTls};
+use tokio_postgres::{Client, GenericClient, NoTls, Transaction};
 
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
 pub use crate::types::{AnalyzeStatus, Field, RowCount, StatementDescription, Type};
@@ -76,13 +76,10 @@ async fn describe_statement<'a, C: GenericClient + Sync>(
     })
 }
 
-pub async fn analyze<'a, C: GenericClient + Sync>(
-    client: &C,
-    sql: String,
-) -> Result<StatementDescription, Error> {
+pub async fn analyze(tx: &Transaction<'_>, sql: String) -> Result<StatementDescription, Error> {
     let preprocessed = preprocess_sql(sql)?;
-    let statement_description = describe_statement(client, preprocessed).await?;
-    Ok(analyze_statement(client, statement_description).await)
+    let statement_description = describe_statement(tx, preprocessed).await?;
+    Ok(analyze_statement(tx, statement_description).await)
 }
 
 pub async fn connect_to_database(config: &str) -> Result<Client, tokio_postgres::Error> {

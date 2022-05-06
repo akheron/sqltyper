@@ -1,17 +1,13 @@
 use std::borrow::Borrow;
-use std::collections::HashSet;
 use std::slice::Iter;
 
 use async_recursion::async_recursion;
-use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::ast::{JoinCondition, JoinType};
 use crate::infer::columns::get_subquery_select_output_columns;
 use crate::infer::context::Context;
-use crate::infer::db::get_table_columns;
 use crate::infer::error::Error;
-use crate::infer::param::NullableParams;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ValueNullability {
@@ -103,11 +99,6 @@ impl ValueNullability {
 }
 
 #[derive(Debug)]
-pub struct Column {
-    pub name: String,
-    pub nullability: ValueNullability,
-}
-
 pub struct SourceColumn {
     pub table_alias: String,
     pub column_name: String,
@@ -131,11 +122,12 @@ impl SourceColumn {
     }
 }
 
+#[derive(Debug)]
 pub struct SourceColumns(Vec<SourceColumn>);
 
 impl SourceColumns {
-    fn new() -> SourceColumns {
-        SourceColumns(Vec::new())
+    fn new() -> Self {
+        Self(Vec::new())
     }
 
     pub fn iter(&self) -> Iter<SourceColumn> {
@@ -161,15 +153,160 @@ impl SourceColumns {
         result
     }
 
-    pub fn into_nullable(self) -> SourceColumns {
-        SourceColumns(self.into_iter().map(|col| col.into_nullable()).collect())
+    pub async fn for_table(
+        context: &Context<'_>,
+        table: &ast::TableRef<'_>,
+        as_: &Option<&str>,
+    ) -> Result<Self, Error> {
+        // Try to find a matching CTE
+        if let Some(tbl) = context.get_table(table) {
+            return Ok(Self(
+                tbl.iter()
+                    .map(|col| SourceColumn {
+                        table_alias: as_.unwrap_or(table.table).to_string(),
+                        column_name: col.name.to_string(),
+                        nullability: col.nullability,
+                        hidden: false,
+                    })
+                    .collect(),
+            ));
+        }
+
+        // No matching CTE, try to find a database table
+        let db_columns = context.client.get_table_columns(table).await?;
+        Ok(Self(
+            db_columns
+                .into_iter()
+                .map(|col| SourceColumn {
+                    table_alias: as_.unwrap_or(table.table).to_string(),
+                    column_name: col.name,
+                    nullability: ValueNullability::Scalar {
+                        nullable: col.nullable,
+                    },
+                    hidden: col.hidden,
+                })
+                .collect(),
+        ))
+    }
+
+    async fn for_subquery(
+        context: &Context<'_>,
+        query: &ast::SubquerySelect<'_>,
+        as_: &str,
+    ) -> Result<Self, Error> {
+        let columns = get_subquery_select_output_columns(context, query).await?;
+        Ok(Self(
+            columns
+                .into_iter()
+                .map(|col| SourceColumn {
+                    table_alias: as_.to_string(),
+                    column_name: col.name.to_string(),
+                    nullability: col.nullability,
+                    hidden: false,
+                })
+                .collect(),
+        ))
+    }
+
+    #[async_recursion]
+    pub async fn for_table_expr(
+        context: &Context<'_>,
+        table_expr_opt: Option<&'async_recursion ast::TableExpression<'async_recursion>>,
+    ) -> Result<Self, Error> {
+        Ok(match table_expr_opt {
+            None => Self::new(),
+            Some(table_expr) => match table_expr {
+                ast::TableExpression::Table { table, as_ } => {
+                    Self::for_table(context, table, as_).await?
+                }
+                ast::TableExpression::SubQuery { query, as_ } => {
+                    Self::for_subquery(context, query.as_ref(), as_).await?
+                }
+                ast::TableExpression::CrossJoin { left, right } => SourceColumns::cross_join(
+                    Self::for_table_expr(context, Some(left.borrow())).await?,
+                    Self::for_table_expr(context, Some(right.borrow())).await?,
+                ),
+                ast::TableExpression::QualifiedJoin {
+                    left,
+                    join_type,
+                    right,
+                    condition,
+                } => SourceColumns::qualified_join(
+                    Self::for_table_expr(context, Some(left.borrow())).await?,
+                    Self::for_table_expr(context, Some(right.borrow())).await?,
+                    join_type,
+                    condition,
+                ),
+            },
+        })
+    }
+
+    pub fn cross_join(mut left: Self, right: Self) -> Self {
+        left.append(right);
+        left
+    }
+
+    fn qualified_join(
+        left: Self,
+        right: Self,
+        join_type: &JoinType,
+        join_condition: &JoinCondition,
+    ) -> Self {
+        let (left, right) = match join_type {
+            JoinType::Inner => (left, right),
+            JoinType::Left => (left, right.into_nullable()),
+            JoinType::Right => (left.into_nullable(), right),
+            JoinType::Full => (left.into_nullable(), right.into_nullable()),
+        };
+
+        match join_condition {
+            JoinCondition::On(_) => SourceColumns::cross_join(left, right),
+            JoinCondition::Using(join_columns) => {
+                // No need to check that all join_columns exist on both sides, because Postgres
+                // already has.
+                let mut result = SourceColumns::new();
+                for col in left {
+                    if join_columns.contains(&(&col.column_name as &str)) {
+                        result.push(col.into_non_nullable());
+                    } else {
+                        result.push(col);
+                    }
+                }
+                for col in right {
+                    if !join_columns.contains(&(&col.column_name as &str)) {
+                        result.push(col);
+                    }
+                }
+                result
+            }
+            JoinCondition::Natural => {
+                let mut result = SourceColumns::new();
+                for col in left {
+                    if right.find_column(&col.column_name).is_some() {
+                        result.push(col.into_non_nullable());
+                    } else {
+                        result.push(col);
+                    }
+                }
+                for col in right {
+                    if result.find_column(&col.column_name).is_none() {
+                        result.push(col);
+                    }
+                }
+                result
+            }
+        }
+    }
+
+    fn into_nullable(self) -> Self {
+        Self(self.into_iter().map(|col| col.into_nullable()).collect())
     }
 
     fn push(&mut self, item: SourceColumn) {
         self.0.push(item);
     }
 
-    fn append(&mut self, mut other: SourceColumns) {
+    fn append(&mut self, mut other: Self) {
         self.0.append(&mut other.0);
     }
 }
@@ -181,197 +318,4 @@ impl IntoIterator for SourceColumns {
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
-}
-
-pub async fn get_source_columns_for_table<C: GenericClient + Sync>(
-    client: &C,
-    context: &Context<'_>,
-    table: &ast::TableRef<'_>,
-    as_: &Option<&str>,
-) -> Result<SourceColumns, Error> {
-    // Try to find a matching CTE
-    if let Some(tbl) = context.get_table(table) {
-        return Ok(SourceColumns(
-            tbl.iter()
-                .map(|col| SourceColumn {
-                    table_alias: as_.unwrap_or(table.table).to_string(),
-                    column_name: col.name.to_string(),
-                    nullability: col.nullability,
-                    hidden: false,
-                })
-                .collect(),
-        ));
-    }
-
-    // No matching CTE, try to find a database table
-    let db_columns = get_table_columns(client, table).await?;
-    Ok(SourceColumns(
-        db_columns
-            .into_iter()
-            .map(|col| SourceColumn {
-                table_alias: as_.unwrap_or(table.table).to_string(),
-                column_name: col.name,
-                nullability: ValueNullability::Scalar {
-                    nullable: col.nullable,
-                },
-                hidden: col.hidden,
-            })
-            .collect(),
-    ))
-}
-
-#[async_recursion]
-pub async fn get_source_columns_for_table_expr<C: GenericClient + Sync>(
-    client: &C,
-    context: &Context,
-    param_nullability: &NullableParams,
-    table_expr_opt: Option<&'async_recursion ast::TableExpression<'async_recursion>>,
-) -> Result<SourceColumns, Error> {
-    Ok(match table_expr_opt {
-        None => SourceColumns(Vec::new()),
-        Some(table_expr) => match table_expr {
-            ast::TableExpression::Table { table, as_ } => {
-                get_source_columns_for_table(client, context, table, as_).await?
-            }
-            ast::TableExpression::SubQuery { query, as_ } => {
-                get_source_columns_for_subquery(
-                    client,
-                    context,
-                    param_nullability,
-                    query.as_ref(),
-                    as_,
-                )
-                .await?
-            }
-            ast::TableExpression::CrossJoin { left, right } => cross_join(
-                get_source_columns_for_table_expr(
-                    client,
-                    context,
-                    param_nullability,
-                    Some(left.borrow()),
-                )
-                .await?,
-                get_source_columns_for_table_expr(
-                    client,
-                    context,
-                    param_nullability,
-                    Some(right.borrow()),
-                )
-                .await?,
-            ),
-            ast::TableExpression::QualifiedJoin {
-                left,
-                join_type,
-                right,
-                condition,
-            } => qualified_join(
-                get_source_columns_for_table_expr(
-                    client,
-                    context,
-                    param_nullability,
-                    Some(left.borrow()),
-                )
-                .await?,
-                get_source_columns_for_table_expr(
-                    client,
-                    context,
-                    param_nullability,
-                    Some(right.borrow()),
-                )
-                .await?,
-                join_type,
-                condition,
-            ),
-        },
-    })
-}
-
-async fn get_source_columns_for_subquery<C: GenericClient + Sync>(
-    client: &C,
-    context: &Context<'_>,
-    param_nullability: &NullableParams,
-    query: &ast::SubquerySelect<'_>,
-    as_: &str,
-) -> Result<SourceColumns, Error> {
-    let columns =
-        get_subquery_select_output_columns(client, context, param_nullability, query).await?;
-    Ok(SourceColumns(
-        columns
-            .into_iter()
-            .map(|col| SourceColumn {
-                table_alias: as_.to_string(),
-                column_name: col.name.to_string(),
-                nullability: col.nullability,
-                hidden: false,
-            })
-            .collect(),
-    ))
-}
-
-pub fn cross_join(mut left: SourceColumns, right: SourceColumns) -> SourceColumns {
-    left.append(right);
-    left
-}
-
-fn qualified_join(
-    left: SourceColumns,
-    right: SourceColumns,
-    join_type: &JoinType,
-    join_condition: &JoinCondition,
-) -> SourceColumns {
-    let (left, right) = match join_type {
-        JoinType::Inner => (left, right),
-        JoinType::Left => (left, right.into_nullable()),
-        JoinType::Right => (left.into_nullable(), right),
-        JoinType::Full => (left.into_nullable(), right.into_nullable()),
-    };
-
-    match join_condition {
-        JoinCondition::On(_) => cross_join(left, right),
-        JoinCondition::Using(join_columns) => {
-            // No need to check that all join_columns exist on both sides, because Postgres
-            // already has.
-            let mut join_cols = HashSet::new();
-            for col in join_columns {
-                join_cols.insert(col.to_string());
-            }
-            join_using(left, right, &join_cols)
-        }
-        JoinCondition::Natural => {
-            let mut left_cols = HashSet::new();
-            for col in left.iter() {
-                if !col.hidden {
-                    left_cols.insert(col.column_name.clone());
-                }
-            }
-            let mut join_cols = HashSet::new();
-            for col in right.iter() {
-                if !col.hidden && left_cols.contains(&col.column_name) {
-                    join_cols.insert(col.column_name.clone());
-                }
-            }
-            join_using(left, right, &join_cols)
-        }
-    }
-}
-
-fn join_using(
-    left: SourceColumns,
-    right: SourceColumns,
-    join_cols: &HashSet<String>,
-) -> SourceColumns {
-    let mut result = SourceColumns::new();
-    for col in left {
-        if join_cols.contains(&col.column_name) {
-            result.push(col.into_non_nullable());
-        } else {
-            result.push(col);
-        }
-    }
-    for col in right {
-        if !join_cols.contains(&col.column_name) {
-            result.push(col);
-        }
-    }
-    result
 }

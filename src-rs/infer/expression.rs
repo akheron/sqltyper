@@ -1,35 +1,48 @@
 use async_recursion::async_recursion;
-use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::ast::SubquerySelect;
 use crate::infer::columns::get_subquery_select_output_columns;
 use crate::infer::context::Context;
 use crate::infer::error::Error;
-use crate::infer::non_null_expressions::{
-    non_null_expressions_from_row_conditions, NonNullExpressions,
-};
-use crate::infer::param::NullableParams;
+use crate::infer::non_null_expressions::NonNullExpressions;
 use crate::infer::source_columns::{SourceColumns, ValueNullability};
 use crate::utils::builtin_properties::{
     builtin_function_null_safety, operator_null_safety, NullSafety,
 };
 
+pub struct ExprContext<'a> {
+    pub context: &'a Context<'a>,
+    pub source_columns: &'a SourceColumns,
+    pub non_null_expressions: &'a NonNullExpressions<'a>,
+}
+
+impl<'a> ExprContext<'a> {
+    pub fn new(
+        context: &'a Context<'a>,
+        source_columns: &'a SourceColumns,
+        non_null_expressions: &'a NonNullExpressions<'a>,
+    ) -> Self {
+        Self {
+            context,
+            source_columns,
+            non_null_expressions,
+        }
+    }
+}
+
 #[async_recursion]
-pub async fn infer_expression_nullability<C: GenericClient + Sync>(
-    client: &C,
-    context: &Context<'_>,
-    source_columns: &SourceColumns,
-    param_nullability: &NullableParams,
-    non_null_expressions: &NonNullExpressions<'_>,
+pub async fn infer_expression_nullability(
+    expr_context: &ExprContext<'_>,
     expression: &ast::Expression<'_>,
 ) -> Result<ValueNullability, Error> {
-    if non_null_expressions.has(expression) {
+    if expr_context.non_null_expressions.has(expression) {
         return Ok(ValueNullability::Scalar { nullable: false });
     }
 
     match expression {
-        ast::Expression::TableColumnRef { table, column } => source_columns
+        ast::Expression::TableColumnRef { table, column } => expr_context
+            .source_columns
             .find_table_column(table, column)
             .map(|source_column| source_column.nullability)
             .ok_or_else(|| Error::TableColumnNotFound {
@@ -37,7 +50,8 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
                 column: column.to_string(),
             }),
 
-        ast::Expression::ColumnRef(column) => source_columns
+        ast::Expression::ColumnRef(column) => expr_context
+            .source_columns
             .find_column(column)
             .map(|source_column| source_column.nullability)
             .ok_or_else(|| Error::ColumnNotFound {
@@ -47,15 +61,7 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
         ast::Expression::UnaryOp { op, expr } => match operator_null_safety(op) {
             NullSafety::Safe => {
                 // Returns NULL if and only if the argument is NULL
-                infer_expression_nullability(
-                    client,
-                    context,
-                    source_columns,
-                    param_nullability,
-                    non_null_expressions,
-                    expr,
-                )
-                .await
+                infer_expression_nullability(expr_context, expr).await
             }
             NullSafety::Unsafe => {
                 // Can return NULL even if the argument is non-NULL
@@ -83,24 +89,8 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
                 NullSafety::Safe => {
                     // Returns NULL if and only if one of the arguments is NULL
                     Ok(ValueNullability::disjunction(
-                        infer_expression_nullability(
-                            client,
-                            context,
-                            source_columns,
-                            param_nullability,
-                            non_null_expressions,
-                            lhs,
-                        )
-                        .await?,
-                        infer_expression_nullability(
-                            client,
-                            context,
-                            source_columns,
-                            param_nullability,
-                            non_null_expressions,
-                            rhs,
-                        )
-                        .await?,
+                        infer_expression_nullability(expr_context, lhs).await?,
+                        infer_expression_nullability(expr_context, rhs).await?,
                     ))
                 }
                 NullSafety::Unsafe => {
@@ -122,33 +112,9 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
         } => match operator_null_safety(op) {
             NullSafety::Safe => Ok(ValueNullability::disjunction3(
                 // Returns NULL if and only if one of the arguments is NULL
-                infer_expression_nullability(
-                    client,
-                    context,
-                    source_columns,
-                    param_nullability,
-                    non_null_expressions,
-                    lhs,
-                )
-                .await?,
-                infer_expression_nullability(
-                    client,
-                    context,
-                    source_columns,
-                    param_nullability,
-                    non_null_expressions,
-                    rhs1,
-                )
-                .await?,
-                infer_expression_nullability(
-                    client,
-                    context,
-                    source_columns,
-                    param_nullability,
-                    non_null_expressions,
-                    rhs2,
-                )
-                .await?,
+                infer_expression_nullability(expr_context, lhs).await?,
+                infer_expression_nullability(expr_context, rhs1).await?,
+                infer_expression_nullability(expr_context, rhs2).await?,
             )),
             NullSafety::Unsafe => {
                 // Can return NULL even if the argument is non-NULL
@@ -166,46 +132,16 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
             // if expr is NULL, or if there's no match and any value produced by the
             // subquery is NULL
             Ok(ValueNullability::disjunction(
-                infer_expression_nullability(
-                    client,
-                    context,
-                    source_columns,
-                    param_nullability,
-                    non_null_expressions,
-                    lhs,
-                )
-                .await?,
-                infer_scalar_subquery_nullability(
-                    client,
-                    context,
-                    param_nullability,
-                    subquery.as_ref(),
-                )
-                .await?,
+                infer_expression_nullability(expr_context, lhs).await?,
+                infer_scalar_subquery_nullability(expr_context, subquery.as_ref()).await?,
             ))
         }
 
         ast::Expression::AnySomeAllArray { lhs, rhs, .. } => {
             // expr op ANY/SOME/ALL (array_expr) returns NULL if expr is NULL, array_expr is
             // NULL, or if there's no match and any value in the array is NULL
-            let lhs_nullability = infer_expression_nullability(
-                client,
-                context,
-                source_columns,
-                param_nullability,
-                non_null_expressions,
-                lhs,
-            )
-            .await?;
-            let rhs_nullability = infer_expression_nullability(
-                client,
-                context,
-                source_columns,
-                param_nullability,
-                non_null_expressions,
-                rhs,
-            )
-            .await?;
+            let lhs_nullability = infer_expression_nullability(expr_context, lhs).await?;
+            let rhs_nullability = infer_expression_nullability(expr_context, rhs).await?;
             Ok(
                 if lhs_nullability.is_nullable() || rhs_nullability.is_nullable() {
                     ValueNullability::Scalar { nullable: true }
@@ -223,28 +159,12 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
         ast::Expression::InExprList { lhs, expr_list, .. } => {
             // expr IN (expr_list) returns NULL if any expr in expr_list is NULL and there
             // is no match
-            let lhs_nullability = infer_expression_nullability(
-                client,
-                context,
-                source_columns,
-                param_nullability,
-                non_null_expressions,
-                lhs.as_ref(),
-            )
-            .await?;
+            let lhs_nullability = infer_expression_nullability(expr_context, lhs.as_ref()).await?;
             if lhs_nullability.is_nullable() {
                 return Ok(lhs_nullability);
             }
             for expr in expr_list {
-                let nullability = infer_expression_nullability(
-                    client,
-                    context,
-                    source_columns,
-                    param_nullability,
-                    non_null_expressions,
-                    expr,
-                )
-                .await?;
+                let nullability = infer_expression_nullability(expr_context, expr).await?;
                 if nullability.is_nullable() {
                     return Ok(nullability);
                 };
@@ -266,15 +186,7 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
                 NullSafety::Safe => {
                     // Returns NULL if and only if one of the arguments is NULL
                     for arg in arg_list {
-                        let nullability = infer_expression_nullability(
-                            client,
-                            context,
-                            source_columns,
-                            param_nullability,
-                            non_null_expressions,
-                            arg,
-                        )
-                        .await?;
+                        let nullability = infer_expression_nullability(expr_context, arg).await?;
                         if nullability.is_nullable() {
                             return Ok(nullability);
                         };
@@ -295,13 +207,8 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
         ast::Expression::ArraySubquery(subquery) => {
             // ARRAY(subquery) is never null as a whole. The nullability of
             // the inside depends on the inside select list expression
-            let elem_nullability = infer_scalar_subquery_nullability(
-                client,
-                context,
-                param_nullability,
-                subquery.as_ref(),
-            )
-            .await?;
+            let elem_nullability =
+                infer_scalar_subquery_nullability(expr_context, subquery.as_ref()).await?;
             Ok(ValueNullability::Array {
                 nullable: false,
                 elem_nullable: elem_nullability.is_nullable(),
@@ -310,13 +217,7 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
 
         ast::Expression::ScalarSubquery(subquery) => {
             // (subquery) is nullable if the single output column of the subquery is nullable
-            Ok(infer_scalar_subquery_nullability(
-                client,
-                context,
-                param_nullability,
-                subquery.as_ref(),
-            )
-            .await?)
+            Ok(infer_scalar_subquery_nullability(expr_context, subquery.as_ref()).await?)
         }
 
         ast::Expression::Case { branches, else_ } => {
@@ -326,27 +227,18 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
                     Ok(ValueNullability::Scalar { nullable: true })
                 }
                 Some(els) => {
-                    let mut result = infer_expression_nullability(
-                        client,
-                        context,
-                        source_columns,
-                        param_nullability,
-                        non_null_expressions,
-                        els,
-                    )
-                    .await?;
+                    let mut result = infer_expression_nullability(expr_context, els).await?;
                     for branch in branches {
                         result = ValueNullability::disjunction(
                             result,
                             infer_expression_nullability(
-                                client,
-                                context,
-                                source_columns,
-                                param_nullability,
-                                &non_null_expressions_from_row_conditions(
-                                    non_null_expressions,
-                                    &[Some(&branch.condition)],
-                                ),
+                                &ExprContext {
+                                    non_null_expressions: &NonNullExpressions::from_row_conditions(
+                                        Some(expr_context.non_null_expressions),
+                                        &[Some(&branch.condition)],
+                                    ),
+                                    ..*expr_context
+                                },
                                 &branch.result,
                             )
                             .await?,
@@ -359,15 +251,7 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
 
         ast::Expression::TypeCast { lhs, .. } => {
             // A type cast evaluates to NULL if the expression to be casted is NULL
-            infer_expression_nullability(
-                client,
-                context,
-                source_columns,
-                param_nullability,
-                non_null_expressions,
-                lhs.as_ref(),
-            )
-            .await
+            infer_expression_nullability(expr_context, lhs.as_ref()).await
         }
 
         ast::Expression::Constant(constant) => Ok(match constant {
@@ -380,20 +264,17 @@ pub async fn infer_expression_nullability<C: GenericClient + Sync>(
             // By default, a parameter is non-nullable, but param
             // nullability inferring may have overridden the default.
             Ok(ValueNullability::Scalar {
-                nullable: param_nullability.is_nullable(*index),
+                nullable: expr_context.context.param_nullability.is_nullable(*index),
             })
         }
     }
 }
 
-async fn infer_scalar_subquery_nullability<C: GenericClient + Sync>(
-    client: &C,
-    context: &Context<'_>,
-    param_nullability: &NullableParams,
+async fn infer_scalar_subquery_nullability(
+    expr_context: &ExprContext<'_>,
     subquery: &SubquerySelect<'_>,
 ) -> Result<ValueNullability, Error> {
-    let columns =
-        get_subquery_select_output_columns(client, context, param_nullability, subquery).await?;
+    let columns = get_subquery_select_output_columns(expr_context.context, subquery).await?;
     if columns.len() == 1 {
         Ok(ValueNullability::Scalar {
             nullable: columns[0].nullability.is_nullable(),

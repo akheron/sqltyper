@@ -1,9 +1,8 @@
 use std::collections::HashSet;
-use tokio_postgres::GenericClient;
 
 use crate::ast;
 use crate::ast::UpdateValue;
-use crate::infer::db::{get_table_columns, Column};
+use crate::infer::db::{DatabaseColumn, SchemaClient};
 use crate::infer::error::Error;
 
 #[derive(Debug, PartialEq)]
@@ -13,14 +12,46 @@ impl NullableParams {
     pub fn is_nullable(&self, param: usize) -> bool {
         self.0.contains(&param)
     }
+}
 
-    fn extend(&mut self, other: &NullableParams) {
+impl NullableParams {
+    fn from_values(
+        target_columns: &[DatabaseColumn],
+        values: &[Vec<ast::ValuesValue<'_>>],
+    ) -> Self {
+        let values_list_params = find_params_from_values(values);
+
+        let mut result: HashSet<usize> = HashSet::new();
+        for values_params in values_list_params {
+            for i in 0..values_params.len() {
+                if let Some(param_index) = values_params[i] {
+                    let target_column = &target_columns[i];
+                    if target_column.nullable {
+                        result.insert(param_index);
+                    }
+                }
+            }
+        }
+        Self(result)
+    }
+
+    fn from_updates(db_columns: &[DatabaseColumn], updates: &[ast::UpdateAssignment<'_>]) -> Self {
+        let mut result: HashSet<usize> = HashSet::new();
+        for update in updates {
+            if let Some(param) = update_to_param_nullability(db_columns, update) {
+                result.insert(param);
+            }
+        }
+        Self(result)
+    }
+
+    fn extend(&mut self, other: Self) {
         self.0.extend(other.0.iter());
     }
 }
 
-pub async fn infer_param_nullability<C: GenericClient + Sync>(
-    client: &C,
+pub async fn infer_param_nullability(
+    client: &SchemaClient<'_>,
     ast: &ast::Ast<'_>,
 ) -> Result<NullableParams, Error> {
     match &ast.query {
@@ -36,21 +67,18 @@ pub async fn infer_param_nullability<C: GenericClient + Sync>(
             match values {
                 ast::Values::Default => {}
                 ast::Values::Expression(values) => {
-                    let table_columns = get_table_columns(client, table).await?;
+                    let table_columns = client.get_table_columns(table).await?;
                     let target_columns = find_insert_columns(columns, table_columns)?;
-                    let values_list_params = find_params_from_values(values);
-                    let mut nullable_params =
-                        combine_param_nullability(&target_columns, &values_list_params);
+                    let mut nullable_params = NullableParams::from_values(&target_columns, values);
 
                     if let Some(ast::OnConflict {
                         conflict_action: ast::ConflictAction::DoUpdate(update_assignments),
                         ..
                     }) = on_conflict
                     {
-                        nullable_params.extend(&find_param_nullability_from_updates(
-                            &target_columns,
-                            update_assignments,
-                        ));
+                        let updates =
+                            NullableParams::from_updates(&target_columns, update_assignments);
+                        nullable_params.extend(updates);
                     }
 
                     return Ok(nullable_params);
@@ -60,8 +88,8 @@ pub async fn infer_param_nullability<C: GenericClient + Sync>(
         }
         ast::Query::Update(update) => {
             let ast::Update { table, updates, .. } = update.as_ref();
-            let table_columns = get_table_columns(client, table).await?;
-            return Ok(find_param_nullability_from_updates(&table_columns, updates));
+            let table_columns = client.get_table_columns(table).await?;
+            return Ok(NullableParams::from_updates(&table_columns, updates));
         }
         ast::Query::Delete(_) => {}
     }
@@ -70,15 +98,15 @@ pub async fn infer_param_nullability<C: GenericClient + Sync>(
 
 fn find_insert_columns(
     target_columns: &Option<Vec<&str>>,
-    mut table_columns: Vec<Column>,
-) -> Result<Vec<Column>, Error> {
+    mut table_columns: Vec<DatabaseColumn>,
+) -> Result<Vec<DatabaseColumn>, Error> {
     match target_columns {
         None => Ok(table_columns
             .into_iter()
             .filter(|col| !col.hidden)
             .collect()),
         Some(column_names) => {
-            let mut result: Vec<Column> = Vec::with_capacity(column_names.len());
+            let mut result: Vec<DatabaseColumn> = Vec::with_capacity(column_names.len());
             for column_name in column_names {
                 if let Some(i) = table_columns
                     .iter()
@@ -118,39 +146,8 @@ fn param_index_from_expr(expr: &ast::Expression<'_>) -> Option<usize> {
     }
 }
 
-fn combine_param_nullability(
-    target_columns: &[Column],
-    values_list_params: &[Vec<Option<usize>>],
-) -> NullableParams {
-    let mut result: HashSet<usize> = HashSet::new();
-    for values_params in values_list_params {
-        for i in 0..values_params.len() {
-            if let Some(param_index) = values_params[i] {
-                let target_column = &target_columns[i];
-                if target_column.nullable {
-                    result.insert(param_index);
-                }
-            }
-        }
-    }
-    NullableParams(result)
-}
-
-fn find_param_nullability_from_updates(
-    db_columns: &[Column],
-    updates: &[ast::UpdateAssignment<'_>],
-) -> NullableParams {
-    let mut result: HashSet<usize> = HashSet::new();
-    for update in updates {
-        if let Some(param) = update_to_param_nullability(db_columns, update) {
-            result.insert(param);
-        }
-    }
-    NullableParams(result)
-}
-
 fn update_to_param_nullability(
-    db_table: &[Column],
+    db_table: &[DatabaseColumn],
     update: &ast::UpdateAssignment<'_>,
 ) -> Option<usize> {
     let param_index = match &update.value {
@@ -171,14 +168,14 @@ mod test {
     use std::iter::FromIterator;
 
     use crate::ast;
-    use crate::infer::db::Column;
-    use crate::infer::param::{find_param_nullability_from_updates, NullableParams};
+    use crate::infer::db::DatabaseColumn;
+    use crate::infer::param::NullableParams;
 
     use super::find_insert_columns;
     use super::find_params_from_values;
 
-    fn col(name: &str) -> Column {
-        Column {
+    fn col(name: &str) -> DatabaseColumn {
+        DatabaseColumn {
             nullable: false,
             name: name.to_string(),
             hidden: false,
@@ -186,8 +183,8 @@ mod test {
         }
     }
 
-    fn nullablecol(name: &str) -> Column {
-        Column {
+    fn nullable_col(name: &str) -> DatabaseColumn {
+        DatabaseColumn {
             nullable: true,
             ..col(name)
         }
@@ -230,8 +227,8 @@ mod test {
     #[test]
     fn test_find_param_nullability_from_updates() {
         assert_eq!(
-            find_param_nullability_from_updates(
-                &[nullablecol("foo"), col("bar"), col("baz"), col("quux")],
+            NullableParams::from_updates(
+                &[nullable_col("foo"), col("bar"), col("baz"), col("quux")],
                 &[
                     ast::UpdateAssignment {
                         column: "bar",

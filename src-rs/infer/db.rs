@@ -2,28 +2,35 @@ use crate::ast;
 use crate::infer::error::Error;
 use serde::Deserialize;
 use tokio_postgres::types::{Json, Oid};
-use tokio_postgres::{GenericClient, Row};
+use tokio_postgres::{Row, Transaction};
 
 #[derive(Debug, PartialEq)]
-pub struct Column {
+pub struct DatabaseColumn {
     pub hidden: bool,
     pub name: String,
     pub nullable: bool,
     pub type_: Oid,
 }
 
-pub async fn get_table_columns<C: GenericClient + Sync>(
-    client: &C,
-    table: &ast::TableRef<'_>,
-) -> Result<Vec<Column>, Error> {
-    let schema_search_order = match table.schema {
-        None => get_schema_search_order(client).await?,
-        Some(schema) => vec![schema.to_string()],
-    };
+pub struct SchemaClient<'a>(&'a Transaction<'a>);
 
-    let rows = client
-        .query(
-            "\
+impl<'a> SchemaClient<'a> {
+    pub fn new(tx: &'a Transaction<'a>) -> Self {
+        SchemaClient(tx)
+    }
+
+    pub async fn get_table_columns(
+        &self,
+        table: &ast::TableRef<'_>,
+    ) -> Result<Vec<DatabaseColumn>, Error> {
+        let schema_search_order = match table.schema {
+            None => self.get_schema_search_order().await?,
+            Some(schema) => vec![schema.to_string()],
+        };
+
+        let rows = self.0
+            .query(
+                "\
 SELECT schema, json_agg(json_build_object('num', num, 'name', name, 'type_id', type_id, 'not_null', not_null))
 FROM (
   SELECT
@@ -43,24 +50,33 @@ FROM (
 ) tables
 GROUP BY schema;
 ",
-            &[&schema_search_order, &table.table],
-        )
-        .await?;
+                &[&schema_search_order, &table.table],
+            )
+            .await?;
 
-    if let Some(columns) = find_table(&schema_search_order, &rows) {
-        Ok(columns
-            .into_iter()
-            .map(|column| Column {
-                hidden: column.num < 0,
-                name: column.name,
-                nullable: !column.not_null,
-                type_: column.type_id,
+        if let Some(columns) = find_table(&schema_search_order, &rows) {
+            Ok(columns
+                .into_iter()
+                .map(|column| DatabaseColumn {
+                    hidden: column.num < 0,
+                    name: column.name,
+                    nullable: !column.not_null,
+                    type_: column.type_id,
+                })
+                .collect())
+        } else {
+            Err(Error::TableNotFound {
+                table: format!("{}", table),
             })
-            .collect())
-    } else {
-        Err(Error::TableNotFound {
-            table: format!("{}", table),
-        })
+        }
+    }
+
+    async fn get_schema_search_order(&self) -> Result<Vec<String>, Error> {
+        Ok(self
+            .0
+            .query_one("SELECT current_schemas(true)", &[])
+            .await?
+            .get(0))
     }
 }
 
@@ -84,13 +100,4 @@ fn find_table(schema_search_order: &[String], rows: &[Row]) -> Option<Vec<Column
         }
     }
     None
-}
-
-async fn get_schema_search_order<C: GenericClient + Sync>(
-    client: &C,
-) -> Result<Vec<String>, Error> {
-    Ok(client
-        .query_one("SELECT current_schemas(true)", &[])
-        .await?
-        .get(0))
 }
