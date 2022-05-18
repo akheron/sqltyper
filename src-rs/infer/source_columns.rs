@@ -5,8 +5,9 @@ use async_recursion::async_recursion;
 
 use crate::ast;
 use crate::ast::{JoinCondition, JoinType};
-use crate::infer::columns::get_subquery_select_output_columns;
+use crate::infer::columns::{get_subquery_select_output_columns, Column};
 use crate::infer::context::Context;
+use crate::infer::db::DatabaseColumn;
 use crate::infer::error::Error;
 
 #[derive(Clone, Copy, Debug)]
@@ -107,6 +108,26 @@ pub struct SourceColumn {
 }
 
 impl SourceColumn {
+    fn from_database_column<S: Into<String>>(table_alias: S, col: &DatabaseColumn) -> Self {
+        Self {
+            table_alias: table_alias.into(),
+            column_name: col.name.clone(),
+            nullability: ValueNullability::Scalar {
+                nullable: col.nullable,
+            },
+            hidden: col.hidden,
+        }
+    }
+
+    fn from_cte_column<S: Into<String>>(table_alias: S, col: &Column) -> Self {
+        Self {
+            table_alias: table_alias.into(),
+            column_name: col.name.to_string(),
+            nullability: col.nullability,
+            hidden: false,
+        }
+    }
+
     fn into_non_nullable(self) -> SourceColumn {
         SourceColumn {
             nullability: self.nullability.to_non_nullable(),
@@ -162,12 +183,7 @@ impl SourceColumns {
         if let Some(tbl) = context.get_table(table) {
             return Ok(Self(
                 tbl.iter()
-                    .map(|col| SourceColumn {
-                        table_alias: as_.unwrap_or(table.table).to_string(),
-                        column_name: col.name.to_string(),
-                        nullability: col.nullability,
-                        hidden: false,
-                    })
+                    .map(|col| SourceColumn::from_cte_column(as_.unwrap_or(table.table), col))
                     .collect(),
             ));
         }
@@ -176,15 +192,8 @@ impl SourceColumns {
         let db_columns = context.client.get_table_columns(table).await?;
         Ok(Self(
             db_columns
-                .into_iter()
-                .map(|col| SourceColumn {
-                    table_alias: as_.unwrap_or(table.table).to_string(),
-                    column_name: col.name,
-                    nullability: ValueNullability::Scalar {
-                        nullable: col.nullable,
-                    },
-                    hidden: col.hidden,
-                })
+                .iter()
+                .map(|col| SourceColumn::from_database_column(as_.unwrap_or(table.table), col))
                 .collect(),
         ))
     }

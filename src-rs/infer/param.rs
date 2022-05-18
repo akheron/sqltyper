@@ -1,52 +1,17 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
+use std::sync::Arc;
 
 use crate::ast;
-use crate::ast::UpdateValue;
 use crate::infer::db::{DatabaseColumn, SchemaClient};
 use crate::infer::error::Error;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct NullableParams(HashSet<usize>);
 
 impl NullableParams {
     pub fn is_nullable(&self, param: usize) -> bool {
         self.0.contains(&param)
-    }
-}
-
-impl NullableParams {
-    fn from_values(
-        target_columns: &[DatabaseColumn],
-        values: &[Vec<ast::ValuesValue<'_>>],
-    ) -> Self {
-        let values_list_params = find_params_from_values(values);
-
-        let mut result: HashSet<usize> = HashSet::new();
-        for values_params in values_list_params {
-            for i in 0..values_params.len() {
-                if let Some(param_index) = values_params[i] {
-                    let target_column = &target_columns[i];
-                    if target_column.nullable {
-                        result.insert(param_index);
-                    }
-                }
-            }
-        }
-        Self(result)
-    }
-
-    fn from_updates(db_columns: &[DatabaseColumn], updates: &[ast::UpdateAssignment<'_>]) -> Self {
-        let mut result: HashSet<usize> = HashSet::new();
-        for update in updates {
-            if let Some(param) = update_to_param_nullability(db_columns, update) {
-                result.insert(param);
-            }
-        }
-        Self(result)
-    }
-
-    fn extend(&mut self, other: Self) {
-        self.0.extend(other.0.iter());
     }
 }
 
@@ -68,17 +33,20 @@ pub async fn infer_param_nullability(
                 ast::Values::Default => {}
                 ast::Values::Expression(values) => {
                     let table_columns = client.get_table_columns(table).await?;
-                    let target_columns = find_insert_columns(columns, table_columns)?;
-                    let mut nullable_params = NullableParams::from_values(&target_columns, values);
+                    let insert_columns = match columns {
+                        None => Ok(TargetColumns::visible_table_columns(table_columns)),
+                        Some(column_names) => {
+                            TargetColumns::pick_named_columns(table_columns, column_names)
+                        }
+                    }?;
+                    let mut nullable_params = NullableParams::from_values(&insert_columns, values);
 
                     if let Some(ast::OnConflict {
                         conflict_action: ast::ConflictAction::DoUpdate(update_assignments),
                         ..
                     }) = on_conflict
                     {
-                        let updates =
-                            NullableParams::from_updates(&target_columns, update_assignments);
-                        nullable_params.extend(updates);
+                        nullable_params.extend_with_updates(&insert_columns, update_assignments);
                     }
 
                     return Ok(nullable_params);
@@ -89,38 +57,117 @@ pub async fn infer_param_nullability(
         ast::Query::Update(update) => {
             let ast::Update { table, updates, .. } = update.as_ref();
             let table_columns = client.get_table_columns(table).await?;
-            return Ok(NullableParams::from_updates(&table_columns, updates));
+            let target_columns = TargetColumns::visible_table_columns(table_columns);
+            return Ok(NullableParams::from_updates(&target_columns, updates));
         }
         ast::Query::Delete(_) => {}
     }
     Ok(NullableParams(HashSet::new()))
 }
 
-fn find_insert_columns(
-    target_columns: &Option<Vec<&str>>,
-    mut table_columns: Vec<DatabaseColumn>,
-) -> Result<Vec<DatabaseColumn>, Error> {
-    match target_columns {
-        None => Ok(table_columns
-            .into_iter()
-            .filter(|col| !col.hidden)
-            .collect()),
-        Some(column_names) => {
-            let mut result: Vec<DatabaseColumn> = Vec::with_capacity(column_names.len());
-            for column_name in column_names {
-                if let Some(i) = table_columns
+#[derive(Debug)]
+struct TargetColumns {
+    table_columns: Arc<Vec<DatabaseColumn>>,
+    order: Vec<usize>,
+}
+
+impl TargetColumns {
+    fn visible_table_columns(table_columns: Arc<Vec<DatabaseColumn>>) -> Self {
+        let order = table_columns
+            .iter()
+            .enumerate()
+            .filter_map(|(i, col)| if col.hidden { None } else { Some(i) })
+            .collect();
+        Self {
+            table_columns,
+            order,
+        }
+    }
+
+    fn pick_named_columns(
+        table_columns: Arc<Vec<DatabaseColumn>>,
+        column_names: &[&str],
+    ) -> Result<Self, Error> {
+        let mut order = Vec::new();
+        for column_name in column_names {
+            let column_index =
+                table_columns
                     .iter()
-                    .position(|col| col.name == *column_name)
-                {
-                    result.push(table_columns.swap_remove(i));
-                } else {
-                    return Err(Error::ColumnNotFound {
-                        column: column_name.to_string(),
+                    .enumerate()
+                    .find_map(|(column_index, column)| {
+                        if column.name == *column_name {
+                            Some(column_index)
+                        } else {
+                            None
+                        }
                     });
+
+            if let Some(i) = column_index {
+                order.push(i);
+            } else {
+                return Err(Error::ColumnNotFound {
+                    column: column_name.to_string(),
+                });
+            }
+        }
+        Ok(Self {
+            table_columns,
+            order,
+        })
+    }
+
+    fn is_nullable_by_index(&self, i: usize) -> Option<bool> {
+        self.order
+            .get(i)
+            .and_then(|column_index| self.table_columns.get(*column_index))
+            .map(|column| column.nullable)
+    }
+
+    fn is_nullable_by_name(&self, name: &str) -> Option<bool> {
+        self.table_columns
+            .iter()
+            .find(|column| column.name == name)
+            .map(|column| column.nullable)
+    }
+}
+
+impl NullableParams {
+    fn new() -> Self {
+        Self(HashSet::new())
+    }
+
+    fn from_values(insert_columns: &TargetColumns, values: &[Vec<ast::ValuesValue<'_>>]) -> Self {
+        let values_list_params = find_params_from_values(values);
+
+        let mut result: HashSet<usize> = HashSet::new();
+        for values_params in values_list_params {
+            for (i, values_param) in values_params.into_iter().enumerate() {
+                if let Some(param_index) = values_param {
+                    if let Some(true) = insert_columns.is_nullable_by_index(i) {
+                        result.insert(param_index);
+                    }
                 }
             }
-            Ok(result)
         }
+        Self(result)
+    }
+
+    fn from_updates(insert_columns: &TargetColumns, updates: &[ast::UpdateAssignment<'_>]) -> Self {
+        let mut self_ = Self::new();
+        self_.extend_with_updates(insert_columns, updates);
+        self_
+    }
+
+    fn extend_with_updates(
+        &mut self,
+        insert_columns: &TargetColumns,
+        updates: &[ast::UpdateAssignment<'_>],
+    ) {
+        self.0.extend(
+            updates
+                .iter()
+                .filter_map(|update| update_to_param_nullability(insert_columns, update)),
+        )
     }
 }
 
@@ -147,31 +194,28 @@ fn param_index_from_expr(expr: &ast::Expression<'_>) -> Option<usize> {
 }
 
 fn update_to_param_nullability(
-    db_table: &[DatabaseColumn],
+    insert_columns: &TargetColumns,
     update: &ast::UpdateAssignment<'_>,
 ) -> Option<usize> {
     let param_index = match &update.value {
-        UpdateValue::Value(expr) => param_index_from_expr(expr),
-        UpdateValue::Default => None,
+        ast::UpdateValue::Value(expr) => param_index_from_expr(expr),
+        ast::UpdateValue::Default => None,
     }?;
-    for column in db_table {
-        if column.nullable && column.name == update.column {
-            return Some(param_index);
-        }
-    }
-    None
+    insert_columns
+        .is_nullable_by_name(update.column)
+        .and_then(|nullable| if nullable { Some(param_index) } else { None })
 }
 
 #[cfg(test)]
 mod test {
     use std::collections::HashSet;
     use std::iter::FromIterator;
+    use std::sync::Arc;
 
     use crate::ast;
     use crate::infer::db::DatabaseColumn;
-    use crate::infer::param::NullableParams;
+    use crate::infer::param::{NullableParams, TargetColumns};
 
-    use super::find_insert_columns;
     use super::find_params_from_values;
 
     fn col(name: &str) -> DatabaseColumn {
@@ -188,23 +232,6 @@ mod test {
             nullable: true,
             ..col(name)
         }
-    }
-
-    #[test]
-    fn test_find_insert_columns() {
-        assert_eq!(
-            find_insert_columns(&None, vec![col("foo"), col("bar")]).unwrap(),
-            vec![col("foo"), col("bar")]
-        );
-        assert_eq!(
-            find_insert_columns(&Some(vec!["bar", "foo"]), vec![col("foo"), col("bar")]).unwrap(),
-            vec![col("bar"), col("foo")]
-        );
-        find_insert_columns(
-            &Some(vec!["baz", "bar", "foo"]),
-            vec![col("foo"), col("bar")],
-        )
-        .unwrap_err();
     }
 
     #[test]
@@ -225,32 +252,37 @@ mod test {
     }
 
     #[test]
-    fn test_find_param_nullability_from_updates() {
-        assert_eq!(
-            NullableParams::from_updates(
-                &[nullable_col("foo"), col("bar"), col("baz"), col("quux")],
-                &[
-                    ast::UpdateAssignment {
-                        column: "bar",
-                        value: ast::UpdateValue::Default,
-                    },
-                    ast::UpdateAssignment {
-                        column: "foo",
-                        value: ast::UpdateValue::Value(ast::Expression::Param(2)),
-                    },
-                    ast::UpdateAssignment {
-                        column: "quux",
-                        value: ast::UpdateValue::Value(ast::Expression::Constant(
-                            ast::Constant::True
-                        )),
-                    },
-                    ast::UpdateAssignment {
-                        column: "baz",
-                        value: ast::UpdateValue::Value(ast::Expression::Param(1)),
-                    },
-                ],
-            ),
-            NullableParams(HashSet::from_iter(vec![2].into_iter()))
+    fn test_nullable_params_from_updates() {
+        let insert_columns = TargetColumns::visible_table_columns(Arc::new(vec![
+            nullable_col("foo"),
+            col("bar"),
+            col("baz"),
+            col("quux"),
+        ]));
+
+        let actual = NullableParams::from_updates(
+            &insert_columns,
+            &[
+                ast::UpdateAssignment {
+                    column: "bar",
+                    value: ast::UpdateValue::Default,
+                },
+                ast::UpdateAssignment {
+                    column: "foo",
+                    value: ast::UpdateValue::Value(ast::Expression::Param(2)),
+                },
+                ast::UpdateAssignment {
+                    column: "quux",
+                    value: ast::UpdateValue::Value(ast::Expression::Constant(ast::Constant::True)),
+                },
+                ast::UpdateAssignment {
+                    column: "baz",
+                    value: ast::UpdateValue::Value(ast::Expression::Param(1)),
+                },
+            ],
         );
+        let expected = NullableParams(HashSet::from_iter(vec![2].into_iter()));
+
+        assert_eq!(actual.0, expected.0);
     }
 }

@@ -35,8 +35,7 @@ pub async fn analyze_statement(
     tx: &Transaction<'_>,
     mut statement: StatementDescription,
 ) -> StatementDescription {
-    let schema_client = SchemaClient::new(tx);
-    match do_analyze(&schema_client, &statement.sql).await {
+    match do_analyze(tx, &statement.sql).await {
         Ok(output) => {
             output.update_statement(&mut statement);
             statement.analyze_status = AnalyzeStatus::Success;
@@ -46,13 +45,14 @@ pub async fn analyze_statement(
     statement
 }
 
-async fn do_analyze(client: &SchemaClient<'_>, sql: &str) -> Result<AnalyzeOutput, Error> {
+async fn do_analyze(tx: &Transaction<'_>, sql: &str) -> Result<AnalyzeOutput, Error> {
+    let client = SchemaClient::new(tx).await?;
     let ast = parse_sql(sql)?;
 
     let row_count = infer_row_count(&ast);
-    let params = infer_param_nullability(client, &ast).await?;
+    let params = infer_param_nullability(&client, &ast).await?;
 
-    let context = Context::new(client, &params);
+    let context = Context::new(&client, &params);
     let columns = infer_column_nullability(&context, &ast).await?;
 
     Ok(AnalyzeOutput {
