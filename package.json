@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "buffer-writer": "^2.0.0",
-    "camelcase": "^6.0.0",
+    "camelcase": "^7.0.0",
     "fp-ts": "^2.5.3",
     "node-watch": "^0.7.1",
     "packet-reader": "^1.0.0",
