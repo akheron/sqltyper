@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::ast;
-use crate::infer::db::{DatabaseColumn, SchemaClient};
 use crate::infer::error::Error;
+use crate::infer::schema_client::{DatabaseColumn, SchemaClient};
 
 #[derive(Debug)]
 pub struct NullableParams(HashSet<usize>);
@@ -213,8 +213,8 @@ mod test {
     use std::sync::Arc;
 
     use crate::ast;
-    use crate::infer::db::DatabaseColumn;
     use crate::infer::param::{NullableParams, TargetColumns};
+    use crate::infer::schema_client::DatabaseColumn;
 
     use super::find_params_from_values;
 

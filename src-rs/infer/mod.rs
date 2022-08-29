@@ -1,10 +1,9 @@
 use crate::infer::columns::Columns;
 use crate::infer::context::Context;
-use crate::infer::db::SchemaClient;
+pub use crate::infer::schema_client::SchemaClient;
 use crate::types::Kind;
 use crate::{parser::parse_sql, types::StatementDescription, RowCount};
 use serde::Serialize;
-use tokio_postgres::Transaction;
 
 use self::columns::infer_column_nullability;
 pub use self::error::Error;
@@ -12,14 +11,16 @@ use self::param::{infer_param_nullability, NullableParams};
 use self::rowcount::infer_row_count;
 use self::source_columns::ValueNullability;
 
+mod cache;
 mod columns;
 mod context;
-mod db;
 mod error;
 mod expression;
 mod non_null_expressions;
 mod param;
+mod pg_client;
 mod rowcount;
+mod schema_client;
 mod select_list;
 mod source_columns;
 
@@ -32,10 +33,10 @@ pub enum AnalyzeStatus {
 }
 
 pub async fn analyze_statement(
-    tx: &Transaction<'_>,
+    client: &SchemaClient<'_>,
     mut statement: StatementDescription,
 ) -> StatementDescription {
-    match do_analyze(tx, &statement.sql).await {
+    match do_analyze(client, &statement.sql).await {
         Ok(output) => {
             output.update_statement(&mut statement);
             statement.analyze_status = AnalyzeStatus::Success;
@@ -45,15 +46,16 @@ pub async fn analyze_statement(
     statement
 }
 
-async fn do_analyze(tx: &Transaction<'_>, sql: &str) -> Result<AnalyzeOutput, Error> {
-    let client = SchemaClient::new(tx).await?;
+async fn do_analyze(client: &SchemaClient<'_>, sql: &str) -> Result<AnalyzeOutput, Error> {
     let ast = parse_sql(sql)?;
 
     let row_count = infer_row_count(&ast);
-    let params = infer_param_nullability(&client, &ast).await?;
+    let params = infer_param_nullability(client, &ast).await?;
 
-    let context = Context::new(&client, &params);
-    let columns = infer_column_nullability(&context, &ast).await?;
+    let columns = {
+        let context = Context::new(client, &params);
+        infer_column_nullability(&context, &ast).await?
+    };
 
     Ok(AnalyzeOutput {
         row_count,

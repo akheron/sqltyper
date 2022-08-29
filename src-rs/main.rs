@@ -3,6 +3,7 @@ use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use futures::future::join_all;
 use serde::Serialize;
 use sqltyper::types::StatementDescription;
+use sqltyper::SchemaClient;
 use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -39,20 +40,19 @@ struct FileOutput {
 }
 
 async fn run(cli: Cli) -> Result<Vec<FileOutput>, deadpool_postgres::PoolError> {
-    let pool = Arc::new(make_connection_pool(&cli)?);
+    let pool = make_connection_pool(&cli)?;
 
     // Make sure we can connect to Postgres with the given config
     drop(pool.get().await?);
 
+    let schema_client = Arc::new(SchemaClient::from_pool(pool).await?);
+
     let mut tasks = Vec::new();
     for filename in &cli.files {
         let sql = fs::read_to_string(filename).unwrap();
-        let pool = pool.clone();
-
+        let schema_client = schema_client.clone();
         tasks.push(tokio::spawn(async move {
-            let mut client = pool.get().await.unwrap();
-            let tx = client.transaction().await.unwrap();
-            sqltyper::analyze(&tx, sql).await
+            sqltyper::analyze(&schema_client, sql).await
         }));
     }
 

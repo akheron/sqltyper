@@ -11,7 +11,7 @@ use nom::sequence::{delimited, terminated, tuple};
 use nom::{error, Finish, IResult, Parser};
 
 use sqltyper::types::{AnalyzeStatus, Field, Kind, RowCount, StatementDescription, Type};
-use sqltyper::{analyze, connect_to_database};
+use sqltyper::{analyze, connect_to_database, SchemaClient};
 
 pub async fn test(
     init_sql: Option<&str>,
@@ -31,7 +31,9 @@ async fn get_statement(init_sql: Option<&str>, sql: &str) -> StatementDescriptio
     if let Some(init) = init_sql {
         tx.batch_execute(init).await.unwrap();
     }
-    analyze(&tx, sql.to_string()).await.unwrap()
+
+    let schema_client = SchemaClient::from_tx(tx).await.unwrap();
+    analyze(&schema_client, sql.to_string()).await.unwrap()
 }
 
 async fn connect() -> Result<tokio_postgres::Client, tokio_postgres::Error> {

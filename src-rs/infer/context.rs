@@ -3,9 +3,9 @@ use std::collections::HashMap;
 
 use crate::ast;
 use crate::infer::columns::{infer_column_nullability, Column, Columns};
-use crate::infer::db::SchemaClient;
 use crate::infer::error::Error;
 use crate::infer::param::NullableParams;
+use crate::infer::schema_client::SchemaClient;
 
 pub struct Context<'a> {
     pub client: &'a SchemaClient<'a>,

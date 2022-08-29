@@ -6,8 +6,9 @@ pub mod types;
 mod utils;
 
 use serde::Serialize;
-use tokio_postgres::{Client, GenericClient, NoTls, Transaction};
+use tokio_postgres::{Client, NoTls};
 
+pub use crate::infer::SchemaClient;
 use crate::preprocess::{preprocess_sql, PreprocessedSql};
 pub use crate::types::{AnalyzeStatus, Field, RowCount, StatementDescription, Type};
 use infer::analyze_statement;
@@ -50,11 +51,11 @@ impl From<tokio_postgres::Error> for Error {
     }
 }
 
-async fn describe_statement<'a, C: GenericClient + Sync>(
-    client: &C,
+async fn describe_statement(
+    client: &SchemaClient<'_>,
     preprocessed: PreprocessedSql,
 ) -> Result<StatementDescription, Error> {
-    let statement = client.prepare(&preprocessed.sql).await?;
+    let statement = client.pg_client.prepare(&preprocessed.sql).await?;
 
     Ok(StatementDescription {
         sql: preprocessed.sql,
@@ -76,10 +77,13 @@ async fn describe_statement<'a, C: GenericClient + Sync>(
     })
 }
 
-pub async fn analyze(tx: &Transaction<'_>, sql: String) -> Result<StatementDescription, Error> {
+pub async fn analyze(
+    client: &SchemaClient<'_>,
+    sql: String,
+) -> Result<StatementDescription, Error> {
     let preprocessed = preprocess_sql(sql)?;
-    let statement_description = describe_statement(tx, preprocessed).await?;
-    Ok(analyze_statement(tx, statement_description).await)
+    let statement_description = describe_statement(client, preprocessed).await?;
+    Ok(analyze_statement(client, statement_description).await)
 }
 
 pub async fn connect_to_database(config: &str) -> Result<Client, tokio_postgres::Error> {

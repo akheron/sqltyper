@@ -7,8 +7,8 @@ use crate::ast;
 use crate::ast::{JoinCondition, JoinType};
 use crate::infer::columns::{get_subquery_select_output_columns, Column};
 use crate::infer::context::Context;
-use crate::infer::db::DatabaseColumn;
 use crate::infer::error::Error;
+use crate::infer::schema_client::DatabaseColumn;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ValueNullability {
