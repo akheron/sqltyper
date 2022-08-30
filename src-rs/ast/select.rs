@@ -20,7 +20,7 @@ pub struct SelectBody<'a> {
     pub window: Vec<NamedWindowDefinition<'a>>,
 }
 
-#[derive(Clone, Debug, PartialEq, strum_macros::IntoStaticStr)]
+#[derive(Clone, Debug, PartialEq, Eq, strum_macros::IntoStaticStr)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum SelectOpType {
     Union,

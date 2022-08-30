@@ -2,7 +2,7 @@ use crate::ast::SubquerySelect;
 
 use super::{Expression, TableRef};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum JoinType {
     Inner,
     Left,

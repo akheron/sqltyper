@@ -45,7 +45,7 @@ async fn infer_select_list_item_output(
         }
         ast::SelectListItem::SelectListExpression { expression, as_ } => Ok(Columns::single(
             as_.unwrap_or_else(|| infer_expression_name(expression)),
-            infer_expression_nullability(&expr_context, expression).await?,
+            infer_expression_nullability(expr_context, expression).await?,
         )),
     }
 }
