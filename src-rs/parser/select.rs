@@ -15,11 +15,11 @@ use nom::multi::many0;
 
 fn distinct(input: &str) -> Result<ast::Distinct> {
     alt((
-        map(keyword(Keyword::ALL), |_| ast::Distinct::All),
+        map(keyword(Keyword::All), |_| ast::Distinct::All),
         map(
             prefixed(
-                Keyword::DISTINCT,
-                opt(prefixed(Keyword::ON, list_of1(expression))),
+                Keyword::Distinct,
+                opt(prefixed(Keyword::On, list_of1(expression))),
             ),
             |on| match on {
                 None => ast::Distinct::Distinct,
@@ -30,16 +30,16 @@ fn distinct(input: &str) -> Result<ast::Distinct> {
 }
 
 fn group_by(input: &str) -> Result<Vec<ast::Expression>> {
-    prefixed_(&[Keyword::GROUP, Keyword::BY], sep_by1(",", expression))(input)
+    prefixed_(&[Keyword::Group, Keyword::By], sep_by1(",", expression))(input)
 }
 
 fn having(input: &str) -> Result<ast::Expression> {
-    prefixed(Keyword::HAVING, expression)(input)
+    prefixed(Keyword::Having, expression)(input)
 }
 
 fn select_body(input: &str) -> Result<ast::SelectBody> {
     prefixed(
-        Keyword::SELECT,
+        Keyword::Select,
         seq(
             (
                 opt(distinct),
@@ -68,7 +68,7 @@ pub fn window_definition(input: &str) -> Result<ast::WindowDefinition> {
         (
             opt(identifier),
             opt(prefixed_(
-                &[Keyword::PARTITION, Keyword::BY],
+                &[Keyword::Partition, Keyword::By],
                 sep_by1(",", expression),
             )),
             opt(order_by),
@@ -83,18 +83,18 @@ pub fn window_definition(input: &str) -> Result<ast::WindowDefinition> {
 
 fn order(input: &str) -> Result<ast::Order> {
     alt((
-        keyword_to(Keyword::ASC, ast::Order::Asc),
-        keyword_to(Keyword::DESC, ast::Order::Desc),
-        map(prefixed(Keyword::USING, any_operator), ast::Order::Using),
+        keyword_to(Keyword::Asc, ast::Order::Asc),
+        keyword_to(Keyword::Desc, ast::Order::Desc),
+        map(prefixed(Keyword::Using, any_operator), ast::Order::Using),
     ))(input)
 }
 
 fn nulls(input: &str) -> Result<ast::Nulls> {
     prefixed(
-        Keyword::NULLS,
+        Keyword::Nulls,
         alt((
-            keyword_to(Keyword::FIRST, ast::Nulls::First),
-            keyword_to(Keyword::LAST, ast::Nulls::Last),
+            keyword_to(Keyword::First, ast::Nulls::First),
+            keyword_to(Keyword::Last, ast::Nulls::Last),
         )),
     )(input)
 }
@@ -111,35 +111,35 @@ fn order_by_item(input: &str) -> Result<ast::OrderBy> {
 }
 
 fn order_by(input: &str) -> Result<Vec<ast::OrderBy>> {
-    prefixed_(&[Keyword::ORDER, Keyword::BY], sep_by1(",", order_by_item))(input)
+    prefixed_(&[Keyword::Order, Keyword::By], sep_by1(",", order_by_item))(input)
 }
 
 fn named_window_definition(input: &str) -> Result<ast::NamedWindowDefinition> {
     seq(
         (
             identifier,
-            prefixed(Keyword::AS, parenthesized(window_definition)),
+            prefixed(Keyword::As, parenthesized(window_definition)),
         ),
         |(name, window)| ast::NamedWindowDefinition { name, window },
     )(input)
 }
 
 fn window(input: &str) -> Result<Vec<ast::NamedWindowDefinition>> {
-    prefixed(Keyword::WINDOW, sep_by1(",", named_window_definition))(input)
+    prefixed(Keyword::Window, sep_by1(",", named_window_definition))(input)
 }
 
 fn select_op_type(input: &str) -> Result<ast::SelectOpType> {
     alt((
-        keyword_to(Keyword::UNION, ast::SelectOpType::Union),
-        keyword_to(Keyword::INTERSECT, ast::SelectOpType::Intersect),
-        keyword_to(Keyword::EXCEPT, ast::SelectOpType::Except),
+        keyword_to(Keyword::Union, ast::SelectOpType::Union),
+        keyword_to(Keyword::Intersect, ast::SelectOpType::Intersect),
+        keyword_to(Keyword::Except, ast::SelectOpType::Except),
     ))(input)
 }
 
 fn duplicates_type(input: &str) -> Result<ast::DuplicatesType> {
     alt((
-        keyword_to(Keyword::DISTINCT, ast::DuplicatesType::Distinct),
-        keyword_to(Keyword::ALL, ast::DuplicatesType::All),
+        keyword_to(Keyword::Distinct, ast::DuplicatesType::Distinct),
+        keyword_to(Keyword::All, ast::DuplicatesType::All),
     ))(input)
 }
 
@@ -156,11 +156,11 @@ fn select_set_ops(input: &str) -> Result<Vec<ast::SelectOp>> {
 
 fn limit(input: &str) -> Result<ast::Limit> {
     prefixed(
-        Keyword::LIMIT,
+        Keyword::Limit,
         seq(
             (
-                alt((map(keyword(Keyword::ALL), |_| None), map(expression, Some))),
-                opt(prefixed(Keyword::OFFSET, expression)),
+                alt((map(keyword(Keyword::All), |_| None), map(expression, Some))),
+                opt(prefixed(Keyword::Offset, expression)),
             ),
             |(count, offset)| ast::Limit { count, offset },
         ),

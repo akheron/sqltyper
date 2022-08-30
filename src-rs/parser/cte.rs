@@ -12,7 +12,7 @@ fn with_query(input: &str) -> Result<WithQuery> {
         (
             identifier,
             opt(identifier_list),
-            prefixed(Keyword::AS, parenthesized(statement)),
+            prefixed(Keyword::As, parenthesized(statement)),
         ),
         |(as_, column_names, query)| WithQuery {
             as_,
@@ -23,5 +23,5 @@ fn with_query(input: &str) -> Result<WithQuery> {
 }
 
 pub fn with_queries(input: &str) -> Result<Vec<WithQuery>> {
-    prefixed(Keyword::WITH, sep_by1(",", with_query))(input)
+    prefixed(Keyword::With, sep_by1(",", with_query))(input)
 }

@@ -17,14 +17,14 @@ pub fn identifier_list(input: &str) -> Result<Vec<&str>> {
 // [ AS ] identifier
 pub fn as_opt(input: &str) -> Result<&str> {
     seq(
-        (opt(keyword(Keyword::AS)), identifier),
+        (opt(keyword(Keyword::As)), identifier),
         |(_, identifier)| identifier,
     )(input)
 }
 
 // AS identifier
 pub fn as_req(input: &str) -> Result<&str> {
-    prefixed(Keyword::AS, identifier)(input)
+    prefixed(Keyword::As, identifier)(input)
 }
 
 // [ schema . ] table
@@ -51,7 +51,7 @@ fn update_assignment(input: &str) -> Result<ast::UpdateAssignment> {
             symbol("="),
             alt((
                 map(expression, UpdateValue::Value),
-                map(keyword(Keyword::DEFAULT), |_| UpdateValue::Default),
+                map(keyword(Keyword::Default), |_| UpdateValue::Default),
             )),
         ),
         |(column, _eq, value)| ast::UpdateAssignment { column, value },
@@ -59,11 +59,11 @@ fn update_assignment(input: &str) -> Result<ast::UpdateAssignment> {
 }
 
 pub fn update_assignments(input: &str) -> Result<Vec<ast::UpdateAssignment>> {
-    prefixed(Keyword::SET, sep_by1(",", update_assignment))(input)
+    prefixed(Keyword::Set, sep_by1(",", update_assignment))(input)
 }
 
 pub fn where_(input: &str) -> Result<ast::Expression> {
-    prefixed(Keyword::WHERE, expression)(input)
+    prefixed(Keyword::Where, expression)(input)
 }
 
 fn all_fields(input: &str) -> Result<ast::SelectListItem> {
@@ -92,5 +92,5 @@ pub fn select_list(input: &str) -> Result<Vec<ast::SelectListItem>> {
 }
 
 pub fn returning(input: &str) -> Result<Vec<ast::SelectListItem>> {
-    prefixed(Keyword::RETURNING, select_list)(input)
+    prefixed(Keyword::Returning, select_list)(input)
 }

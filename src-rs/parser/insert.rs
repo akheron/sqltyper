@@ -12,14 +12,14 @@ use crate::parser::utils::{list_of1, prefixed, prefixed_, sep_by1, seq};
 use super::Result;
 
 fn default_values(input: &str) -> Result<ast::Values> {
-    map(keywords(&[Keyword::DEFAULT, Keyword::VALUES]), |_| {
+    map(keywords(&[Keyword::Default, Keyword::Values]), |_| {
         ast::Values::Default
     })(input)
 }
 
 fn expression_values_list_item(input: &str) -> Result<ast::ValuesValue> {
     alt((
-        map(keyword(Keyword::DEFAULT), |_| ast::ValuesValue::Default),
+        map(keyword(Keyword::Default), |_| ast::ValuesValue::Default),
         map(expression, ast::ValuesValue::Value),
     ))(input)
 }
@@ -30,20 +30,20 @@ fn expression_values_list(input: &str) -> Result<Vec<ast::ValuesValue>> {
 
 fn values(input: &str) -> Result<ast::Values> {
     map(
-        prefixed(Keyword::VALUES, sep_by1(",", expression_values_list)),
+        prefixed(Keyword::Values, sep_by1(",", expression_values_list)),
         ast::Values::Expression,
     )(input)
 }
 
 fn insert_into(input: &str) -> Result<ast::TableRef> {
-    prefixed_(&[Keyword::INSERT, Keyword::INTO], table_ref)(input)
+    prefixed_(&[Keyword::Insert, Keyword::Into], table_ref)(input)
 }
 
 fn conflict_target(input: &str) -> Result<ast::ConflictTarget> {
     alt((
         map(identifier_list, ast::ConflictTarget::IndexColumns),
         map(
-            prefixed_(&[Keyword::ON, Keyword::CONSTRAINT], identifier),
+            prefixed_(&[Keyword::On, Keyword::Constraint], identifier),
             ast::ConflictTarget::Constraint,
         ),
     ))(input)
@@ -51,13 +51,13 @@ fn conflict_target(input: &str) -> Result<ast::ConflictTarget> {
 
 fn conflict_action(input: &str) -> Result<ast::ConflictAction> {
     prefixed(
-        Keyword::DO,
+        Keyword::Do,
         alt((
-            map(keyword(Keyword::NOTHING), |_| {
+            map(keyword(Keyword::Nothing), |_| {
                 ast::ConflictAction::DoNothing
             }),
             map(
-                prefixed(Keyword::UPDATE, update_assignments),
+                prefixed(Keyword::Update, update_assignments),
                 ast::ConflictAction::DoUpdate,
             ),
         )),
@@ -66,7 +66,7 @@ fn conflict_action(input: &str) -> Result<ast::ConflictAction> {
 
 fn on_conflict(input: &str) -> Result<ast::OnConflict> {
     prefixed_(
-        &[Keyword::ON, Keyword::CONFLICT],
+        &[Keyword::On, Keyword::Conflict],
         seq(
             (opt(conflict_target), conflict_action),
             |(conflict_target, conflict_action)| ast::OnConflict {

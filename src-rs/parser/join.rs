@@ -29,7 +29,7 @@ struct JoinSpec<'a> {
 
 fn cross_join(input: &str) -> Result<JoinSpec> {
     prefixed_(
-        &[Keyword::CROSS, Keyword::JOIN],
+        &[Keyword::Cross, Keyword::Join],
         map(table_expression, |table_expression| JoinSpec {
             join: Join::Cross,
             table_expression,
@@ -41,17 +41,17 @@ fn qualified_join_type(input: &str) -> Result<ast::JoinType> {
     seq(
         (
             opt(alt((
-                keyword_to(Keyword::INNER, ast::JoinType::Inner),
+                keyword_to(Keyword::Inner, ast::JoinType::Inner),
                 terminated(
                     alt((
-                        keyword_to(Keyword::LEFT, ast::JoinType::Left),
-                        keyword_to(Keyword::RIGHT, ast::JoinType::Right),
-                        keyword_to(Keyword::FULL, ast::JoinType::Full),
+                        keyword_to(Keyword::Left, ast::JoinType::Left),
+                        keyword_to(Keyword::Right, ast::JoinType::Right),
+                        keyword_to(Keyword::Full, ast::JoinType::Full),
                     )),
-                    opt(keyword(Keyword::OUTER)),
+                    opt(keyword(Keyword::Outer)),
                 ),
             ))),
-            keyword(Keyword::JOIN),
+            keyword(Keyword::Join),
         ),
         |(join_type, _)| join_type.unwrap_or(ast::JoinType::Inner),
     )(input)
@@ -63,9 +63,9 @@ fn qualified_join(input: &str) -> Result<JoinSpec> {
             qualified_join_type,
             table_expression,
             alt((
-                map(prefixed(Keyword::ON, expression), ast::JoinCondition::On),
+                map(prefixed(Keyword::On, expression), ast::JoinCondition::On),
                 map(
-                    prefixed(Keyword::USING, identifier_list),
+                    prefixed(Keyword::Using, identifier_list),
                     ast::JoinCondition::Using,
                 ),
             )),
@@ -81,7 +81,7 @@ fn qualified_join(input: &str) -> Result<JoinSpec> {
 }
 
 fn natural_join_type(input: &str) -> Result<ast::JoinType> {
-    prefixed(Keyword::NATURAL, qualified_join_type)(input)
+    prefixed(Keyword::Natural, qualified_join_type)(input)
 }
 
 fn natural_join(input: &str) -> Result<JoinSpec> {
@@ -144,7 +144,7 @@ fn table_expression(input: &str) -> Result<ast::TableExpression> {
 
 pub fn from(input: &str) -> Result<ast::TableExpression> {
     map(
-        prefixed(Keyword::FROM, sep_by1(",", table_expression)),
+        prefixed(Keyword::From, sep_by1(",", table_expression)),
         |table_exprs| {
             // Implicit join equals to CROSS JOIN
             table_exprs

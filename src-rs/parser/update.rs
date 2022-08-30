@@ -9,7 +9,7 @@ use nom::combinator::opt;
 pub fn update(input: &str) -> Result<ast::Update> {
     seq(
         (
-            prefixed(Keyword::UPDATE, table_ref),
+            prefixed(Keyword::Update, table_ref),
             opt(as_req),
             update_assignments,
             opt(from),

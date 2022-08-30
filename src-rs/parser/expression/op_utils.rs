@@ -69,9 +69,9 @@ fn any_some_all(input: &str) -> Result<AnySomeAll> {
     seq(
         (
             alt((
-                keyword_to(Keyword::ANY, "ANY"),
-                keyword_to(Keyword::SOME, "SOME"),
-                keyword_to(Keyword::ALL, "ALL"),
+                keyword_to(Keyword::Any, "ANY"),
+                keyword_to(Keyword::Some, "SOME"),
+                keyword_to(Keyword::All, "ALL"),
             )),
             parenthesized(alt((
                 map(subquery_select, |subquery| {

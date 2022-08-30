@@ -21,17 +21,17 @@ fn optional_interval_fields(input: &str) -> Result<()> {
     value(
         (),
         opt(alt((
-            keywords(&[Keyword::YEAR, Keyword::TO, Keyword::MONTH]),
-            keywords(&[Keyword::DAY, Keyword::TO, Keyword::HOUR]),
-            keywords(&[Keyword::DAY, Keyword::TO, Keyword::MINUTE]),
-            keywords(&[Keyword::DAY, Keyword::TO, Keyword::SECOND]),
-            keywords(&[Keyword::MINUTE, Keyword::TO, Keyword::SECOND]),
-            keyword(Keyword::YEAR),
-            keyword(Keyword::MONTH),
-            keyword(Keyword::DAY),
-            keyword(Keyword::HOUR),
-            keyword(Keyword::MINUTE),
-            keyword(Keyword::SECOND),
+            keywords(&[Keyword::Year, Keyword::To, Keyword::Month]),
+            keywords(&[Keyword::Day, Keyword::To, Keyword::Hour]),
+            keywords(&[Keyword::Day, Keyword::To, Keyword::Minute]),
+            keywords(&[Keyword::Day, Keyword::To, Keyword::Second]),
+            keywords(&[Keyword::Minute, Keyword::To, Keyword::Second]),
+            keyword(Keyword::Year),
+            keyword(Keyword::Month),
+            keyword(Keyword::Day),
+            keyword(Keyword::Hour),
+            keyword(Keyword::Minute),
+            keyword(Keyword::Second),
         ))),
     )(input)
 }
@@ -40,8 +40,8 @@ fn optional_timezone_modifier(input: &str) -> Result<()> {
     value(
         (),
         opt(alt((
-            keywords(&[Keyword::WITH, Keyword::TIME, Keyword::ZONE]),
-            keywords(&[Keyword::WITHOUT, Keyword::TIME, Keyword::ZONE]),
+            keywords(&[Keyword::With, Keyword::Time, Keyword::Zone]),
+            keywords(&[Keyword::Without, Keyword::Time, Keyword::Zone]),
         ))),
     )(input)
 }
@@ -55,27 +55,27 @@ enum Syntax {
 fn special_type_cast_target_type<'a>(syntax: Syntax) -> impl FnMut(&'a str) -> Result<'a, ()> {
     move |input: &str| {
         alt((
-            prefixed_(&[Keyword::BIT, Keyword::VARYING], optional_precision),
-            prefixed(Keyword::BIT, optional_precision),
-            prefixed_(&[Keyword::CHARACTER, Keyword::VARYING], optional_precision),
-            keywords(&[Keyword::DOUBLE, Keyword::PRECISION]),
+            prefixed_(&[Keyword::Bit, Keyword::Varying], optional_precision),
+            prefixed(Keyword::Bit, optional_precision),
+            prefixed_(&[Keyword::Character, Keyword::Varying], optional_precision),
+            keywords(&[Keyword::Double, Keyword::Precision]),
             value(
                 (),
                 tuple((
-                    alt((keyword(Keyword::NUMERIC), keyword(Keyword::DECIMAL))),
+                    alt((keyword(Keyword::Numeric), keyword(Keyword::Decimal))),
                     optional_decimal_precision,
                 )),
             ),
             value(
                 (),
                 tuple((
-                    alt((keyword(Keyword::TIME), keyword(Keyword::TIMESTAMP))),
+                    alt((keyword(Keyword::Time), keyword(Keyword::Timestamp))),
                     optional_precision,
                     optional_timezone_modifier,
                 )),
             ),
             move |input: &'a str| -> Result<()> {
-                let (input, _) = keyword(Keyword::INTERVAL).parse(input)?;
+                let (input, _) = keyword(Keyword::Interval).parse(input)?;
                 let (input, _) = match syntax {
                     Syntax::Psql => optional_interval_fields.parse(input)?,
                     _ => (input, ()),

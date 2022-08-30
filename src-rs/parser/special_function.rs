@@ -31,13 +31,13 @@ where
 
 fn overlay(input: &str) -> Result<ast::Expression> {
     special_function(
-        Keyword::OVERLAY,
+        Keyword::Overlay,
         seq(
             (
                 primary_expression,
-                prefixed(Keyword::PLACING, primary_expression),
-                prefixed(Keyword::FROM, primary_expression),
-                opt(prefixed(Keyword::FOR, primary_expression)),
+                prefixed(Keyword::Placing, primary_expression),
+                prefixed(Keyword::From, primary_expression),
+                opt(prefixed(Keyword::For, primary_expression)),
             ),
             |(str, placing, from, for_opt)| match for_opt {
                 None => vec![str, placing, from],
@@ -49,11 +49,11 @@ fn overlay(input: &str) -> Result<ast::Expression> {
 
 fn position(input: &str) -> Result<ast::Expression> {
     special_function(
-        Keyword::POSITION,
+        Keyword::Position,
         seq(
             (
                 primary_expression,
-                prefixed(Keyword::IN, primary_expression),
+                prefixed(Keyword::In, primary_expression),
             ),
             |(substring, string)| vec![substring, string],
         ),
@@ -62,12 +62,12 @@ fn position(input: &str) -> Result<ast::Expression> {
 
 fn substring(input: &str) -> Result<ast::Expression> {
     special_function(
-        Keyword::SUBSTRING,
+        Keyword::Substring,
         seq(
             (
                 primary_expression,
-                opt(prefixed(Keyword::FROM, primary_expression)),
-                opt(prefixed(Keyword::FOR, primary_expression)),
+                opt(prefixed(Keyword::From, primary_expression)),
+                opt(prefixed(Keyword::For, primary_expression)),
             ),
             |(string, start_opt, count_opt)| {
                 vec![
@@ -85,18 +85,18 @@ fn substring(input: &str) -> Result<ast::Expression> {
 // trim([leading | trailing | both] string [, characters] )
 fn trim(input: &str) -> Result<ast::Expression> {
     special_function(
-        Keyword::TRIM,
+        Keyword::Trim,
         seq(
             (
                 opt(alt((
-                    keyword_to(Keyword::LEADING, "LEADING"),
-                    keyword_to(Keyword::TRAILING, "TRAILING"),
-                    keyword_to(Keyword::BOTH, "BOTH"),
+                    keyword_to(Keyword::Leading, "LEADING"),
+                    keyword_to(Keyword::Trailing, "TRAILING"),
+                    keyword_to(Keyword::Both, "BOTH"),
                 ))),
                 alt((
                     seq(
                         (
-                            prefixed(Keyword::FROM, primary_expression),
+                            prefixed(Keyword::From, primary_expression),
                             opt(preceded(symbol(","), primary_expression)),
                         ),
                         |(str, chars)| (str, chars),
@@ -104,7 +104,7 @@ fn trim(input: &str) -> Result<ast::Expression> {
                     seq(
                         (
                             primary_expression,
-                            prefixed(Keyword::FROM, primary_expression),
+                            prefixed(Keyword::From, primary_expression),
                         ),
                         |(chars, str)| (str, Some(chars)),
                     ),

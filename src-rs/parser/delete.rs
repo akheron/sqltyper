@@ -10,7 +10,7 @@ use super::Result;
 pub fn delete(input: &str) -> Result<ast::Delete> {
     seq(
         (
-            prefixed_(&[Keyword::DELETE, Keyword::FROM], table_ref),
+            prefixed_(&[Keyword::Delete, Keyword::From], table_ref),
             opt(as_req),
             opt(where_),
             opt(returning),

@@ -22,7 +22,7 @@ use super::Result;
 
 fn array_subquery(input: &str) -> Result<ast::Expression> {
     map(
-        prefixed(Keyword::ARRAY, parenthesized(subquery_select)),
+        prefixed(Keyword::Array, parenthesized(subquery_select)),
         |select| ast::Expression::ArraySubquery(Box::new(select)),
     )(input)
 }
@@ -30,22 +30,22 @@ fn array_subquery(input: &str) -> Result<ast::Expression> {
 fn case_branch(input: &str) -> Result<ast::CaseBranch> {
     seq(
         (
-            prefixed(Keyword::WHEN, expression),
-            prefixed(Keyword::THEN, expression),
+            prefixed(Keyword::When, expression),
+            prefixed(Keyword::Then, expression),
         ),
         |(condition, result)| ast::CaseBranch { condition, result },
     )(input)
 }
 
 fn case_else(input: &str) -> Result<ast::Expression> {
-    prefixed(Keyword::ELSE, expression)(input)
+    prefixed(Keyword::Else, expression)(input)
 }
 
 fn case(input: &str) -> Result<ast::Expression> {
     map(
         prefixed(
-            Keyword::CASE,
-            tuple((many1(case_branch), opt(case_else), keyword(Keyword::END))),
+            Keyword::Case,
+            tuple((many1(case_branch), opt(case_else), keyword(Keyword::End))),
         ),
         |(branches, else_, _)| ast::Expression::Case {
             branches,
@@ -56,9 +56,9 @@ fn case(input: &str) -> Result<ast::Expression> {
 
 fn constant(input: &str) -> Result<ast::Constant> {
     alt((
-        keyword_to(Keyword::TRUE, ast::Constant::True),
-        keyword_to(Keyword::FALSE, ast::Constant::False),
-        keyword_to(Keyword::NULL, ast::Constant::Null),
+        keyword_to(Keyword::True, ast::Constant::True),
+        keyword_to(Keyword::False, ast::Constant::False),
+        keyword_to(Keyword::Null, ast::Constant::Null),
         map(number, ast::Constant::Number),
         map(string, ast::Constant::String),
     ))(input)
@@ -74,14 +74,14 @@ fn function_arguments(input: &str) -> Result<Vec<ast::Expression>> {
 
 fn window_filter(input: &str) -> Result<ast::Expression> {
     prefixed(
-        Keyword::FILTER,
-        parenthesized(preceded(keyword(Keyword::WHERE), expression)),
+        Keyword::Filter,
+        parenthesized(preceded(keyword(Keyword::Where), expression)),
     )(input)
 }
 
 fn window_over(input: &str) -> Result<ast::WindowDefinition> {
     prefixed(
-        Keyword::OVER,
+        Keyword::Over,
         alt((
             map(identifier, |existing_window_name| ast::WindowDefinition {
                 existing_window_name: Some(existing_window_name),
@@ -242,8 +242,8 @@ impl<'a> OtherRhs<'a> {
 
 fn in_op(input: &str) -> Result<&str> {
     alt((
-        keyword_to(Keyword::IN, "IN"),
-        keywords_to(&[Keyword::NOT, Keyword::IN], "NOT IN"),
+        keyword_to(Keyword::In, "IN"),
+        keywords_to(&[Keyword::Not, Keyword::In], "NOT IN"),
     ))(input)
 }
 
@@ -266,14 +266,14 @@ fn pattern_match(input: &str) -> Result<OtherRhs> {
     seq(
         (
             alt((
-                keyword_to(Keyword::LIKE, "LIKE"),
-                keyword_to(Keyword::ILIKE, "ILIKE"),
-                keywords_to(&[Keyword::NOT, Keyword::LIKE], "NOT LIKE"),
-                keywords_to(&[Keyword::NOT, Keyword::ILIKE], "NOT ILIKE"),
+                keyword_to(Keyword::Like, "LIKE"),
+                keyword_to(Keyword::ILike, "ILIKE"),
+                keywords_to(&[Keyword::Not, Keyword::Like], "NOT LIKE"),
+                keywords_to(&[Keyword::Not, Keyword::ILike], "NOT ILIKE"),
                 // TODO: SIMILAR TO a ESCAPE b
-                keywords_to(&[Keyword::SIMILAR, Keyword::TO], "SIMILAR TO"),
+                keywords_to(&[Keyword::Similar, Keyword::To], "SIMILAR TO"),
                 keywords_to(
-                    &[Keyword::NOT, Keyword::SIMILAR, Keyword::TO],
+                    &[Keyword::Not, Keyword::Similar, Keyword::To],
                     "NOT SIMILAR TO",
                 ),
             )),
@@ -291,15 +291,15 @@ fn ternary(input: &str) -> Result<OtherRhs> {
         (
             alt((
                 keywords_to(
-                    &[Keyword::NOT, Keyword::BETWEEN, Keyword::SYMMETRIC],
+                    &[Keyword::Not, Keyword::Between, Keyword::Symmetric],
                     "NOT BETWEEN SYMMETRIC",
                 ),
-                keywords_to(&[Keyword::BETWEEN, Keyword::SYMMETRIC], "BETWEEN SYMMETRIC"),
-                keywords_to(&[Keyword::NOT, Keyword::BETWEEN], "NOT BETWEEN"),
-                keyword_to(Keyword::BETWEEN, "BETWEEN"),
+                keywords_to(&[Keyword::Between, Keyword::Symmetric], "BETWEEN SYMMETRIC"),
+                keywords_to(&[Keyword::Not, Keyword::Between], "NOT BETWEEN"),
+                keyword_to(Keyword::Between, "BETWEEN"),
             )),
             other_op,
-            keyword(Keyword::AND),
+            keyword(Keyword::And),
             other_op,
         ),
         |(op, rhs1, _, rhs2)| OtherRhs::Ternary {
@@ -333,7 +333,7 @@ fn other(input: &str) -> Result<ast::Expression> {
             },
         ),
         map(
-            prefixed(Keyword::EXISTS, parenthesized(subquery_select)),
+            prefixed(Keyword::Exists, parenthesized(subquery_select)),
             |query| ast::Expression::Exists(Box::new(query)),
         ),
     ))(input)
@@ -368,17 +368,17 @@ fn is(input: &str) -> Result<ast::Expression> {
             opt(alt((
                 map(
                     alt((
-                        keywords_to(&[Keyword::IS, Keyword::NULL], "IS NULL"),
-                        keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::NULL], "IS NOT NULL"),
-                        keyword_to(Keyword::ISNULL, "ISNULL"),
-                        keyword_to(Keyword::NOTNULL, "NOTNULL"),
-                        keywords_to(&[Keyword::IS, Keyword::TRUE], "IS TRUE"),
-                        keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::TRUE], "IS NOT TRUE"),
-                        keywords_to(&[Keyword::IS, Keyword::FALSE], "IS FALSE"),
-                        keywords_to(&[Keyword::IS, Keyword::NOT, Keyword::FALSE], "IS NOT FALSE"),
-                        keywords_to(&[Keyword::IS, Keyword::UNKNOWN], "IS UNKNOWN"),
+                        keywords_to(&[Keyword::Is, Keyword::Null], "IS NULL"),
+                        keywords_to(&[Keyword::Is, Keyword::Not, Keyword::Null], "IS NOT NULL"),
+                        keyword_to(Keyword::IsNull, "ISNULL"),
+                        keyword_to(Keyword::NotNull, "NOTNULL"),
+                        keywords_to(&[Keyword::Is, Keyword::True], "IS TRUE"),
+                        keywords_to(&[Keyword::Is, Keyword::Not, Keyword::True], "IS NOT TRUE"),
+                        keywords_to(&[Keyword::Is, Keyword::False], "IS FALSE"),
+                        keywords_to(&[Keyword::Is, Keyword::Not, Keyword::False], "IS NOT FALSE"),
+                        keywords_to(&[Keyword::Is, Keyword::Unknown], "IS UNKNOWN"),
                         keywords_to(
-                            &[Keyword::IS, Keyword::NOT, Keyword::UNKNOWN],
+                            &[Keyword::Is, Keyword::Not, Keyword::Unknown],
                             "IS NOT UNKNOWN",
                         ),
                     )),
@@ -388,11 +388,11 @@ fn is(input: &str) -> Result<ast::Expression> {
                     (
                         alt((
                             keywords_to(
-                                &[Keyword::IS, Keyword::DISTINCT, Keyword::FROM],
+                                &[Keyword::Is, Keyword::Distinct, Keyword::From],
                                 "IS DISTINCT FROM",
                             ),
                             keywords_to(
-                                &[Keyword::IS, Keyword::NOT, Keyword::DISTINCT, Keyword::FROM],
+                                &[Keyword::Is, Keyword::Not, Keyword::Distinct, Keyword::From],
                                 "IS NOT DISTINCT FROM",
                             ),
                         )),
@@ -418,15 +418,15 @@ fn is(input: &str) -> Result<ast::Expression> {
 }
 
 fn not(input: &str) -> Result<ast::Expression> {
-    unop(keyword_to(Keyword::NOT, "NOT"), is)(input)
+    unop(keyword_to(Keyword::Not, "NOT"), is)(input)
 }
 
 fn and(input: &str) -> Result<ast::Expression> {
-    binop(keyword_to(Keyword::AND, "AND"), not)(input)
+    binop(keyword_to(Keyword::And, "AND"), not)(input)
 }
 
 fn or(input: &str) -> Result<ast::Expression> {
-    binop(keyword_to(Keyword::OR, "OR"), and)(input)
+    binop(keyword_to(Keyword::Or, "OR"), and)(input)
 }
 
 pub fn expression(input: &str) -> Result<ast::Expression> {
