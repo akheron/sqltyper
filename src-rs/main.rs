@@ -1,9 +1,9 @@
 use clap::Parser;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use futures::future::join_all;
-use serde::Serialize;
 use sqltyper::types::StatementDescription;
 use sqltyper::SchemaClient;
+use std::collections::HashMap;
 use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -33,13 +33,9 @@ fn make_connection_pool(cli: &Cli) -> Result<Pool, tokio_postgres::Error> {
     Ok(Pool::builder(mgr).max_size(cli.pool_size).build().unwrap())
 }
 
-#[derive(Serialize)]
-struct FileOutput {
-    path: String,
-    output: Result<StatementDescription, sqltyper::Error>,
-}
+type Output = Result<HashMap<String, StatementDescription>, HashMap<String, sqltyper::Error>>;
 
-async fn run(cli: Cli) -> Result<Vec<FileOutput>, deadpool_postgres::PoolError> {
+async fn run(cli: Cli) -> Result<Output, deadpool_postgres::PoolError> {
     let pool = make_connection_pool(&cli)?;
 
     // Make sure we can connect to Postgres with the given config
@@ -56,17 +52,40 @@ async fn run(cli: Cli) -> Result<Vec<FileOutput>, deadpool_postgres::PoolError> 
         }));
     }
 
-    let results: Vec<FileOutput> = join_all(tasks)
+    let results: Vec<(String, Result<StatementDescription, sqltyper::Error>)> = join_all(tasks)
         .await
         .into_iter()
         .zip(cli.files.into_iter())
-        .map(|(task_result, path)| FileOutput {
-            path,
-            output: task_result.unwrap(),
+        .map(|(task_result, path)| (path, task_result.unwrap()))
+        .collect();
+
+    let errors: HashMap<String, sqltyper::Error> = results
+        .iter()
+        .filter_map(|(path, result)| {
+            if let Err(error) = result {
+                Some((path.clone(), error.clone()))
+            } else {
+                None
+            }
         })
         .collect();
 
-    Ok(results)
+    let successes: HashMap<String, StatementDescription> = results
+        .into_iter()
+        .filter_map(|(path, result)| {
+            if let Ok(success) = result {
+                Some((path, success))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    Ok(if errors.is_empty() {
+        Ok(successes)
+    } else {
+        Err(errors)
+    })
 }
 
 #[tokio::main]
@@ -82,9 +101,13 @@ async fn main() {
             eprintln!("{}", err);
             std::process::exit(1);
         }
-        Ok(results) => {
-            println!("{}", serde_json::to_string(&results).unwrap());
-        }
+        Ok(results) => match results {
+            Ok(successes) => println!("{}", serde_json::to_string(&successes).unwrap()),
+            Err(errors) => {
+                eprintln!("{}", serde_json::to_string(&errors).unwrap());
+                std::process::exit(1);
+            }
+        },
     };
 }
 

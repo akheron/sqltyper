@@ -16,7 +16,7 @@ lazy_static! {
     static ref NUMBERED_PARAM: Regex = Regex::new(r"\$\d+").unwrap();
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Error {
     MixedParamStyles,
