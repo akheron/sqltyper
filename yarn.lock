@@ -1053,9 +1053,9 @@
   integrity sha512-qcUXuemtEu+E5wZSJHNxUXeCZhAfXKQ41D+duX+VYPde7xyEVZci+/oXKJL13tnRs9lR2pr4fod59GT6/X1/yQ==
 
 "@types/node@*", "@types/node@^18.0.3":
-  version "18.7.18"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-18.7.18.tgz#633184f55c322e4fb08612307c274ee6d5ed3154"
-  integrity sha512-m+6nTEOadJZuTPkKR/SYK3A2d7FZrgElol9UP1Kae90VVU4a6mxnPuLiIW1m4Cq4gZ/nWb9GrdVXJCoCazDAbg==
+  version "18.7.22"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-18.7.22.tgz#76f7401362ad63d9d7eefa7dcdfa5fcd9baddff3"
+  integrity sha512-TsmoXYd4zrkkKjJB0URF/mTIKPl+kVcbqClB2F/ykU7vil1BfWZVndOnpEIozPv4fURD28gyPFeIkW2G+KXOvw==
 
 "@types/prettier@^2.1.5":
   version "2.3.2"
@@ -1092,9 +1092,9 @@
     "@types/yargs-parser" "*"
 
 "@types/yargs@^17.0.0":
-  version "17.0.12"
-  resolved "https://registry.yarnpkg.com/@types/yargs/-/yargs-17.0.12.tgz#0745ff3e4872b4ace98616d4b7e37ccbd75f9526"
-  integrity sha512-Nz4MPhecOFArtm81gFQvQqdV7XYCrWKx5uUt6GNHredFHn1i2mtWqXTON7EPXMtNi1qjtjEM/VCHDhcHsAMLXQ==
+  version "17.0.13"
+  resolved "https://registry.yarnpkg.com/@types/yargs/-/yargs-17.0.13.tgz#34cced675ca1b1d51fcf4d34c3c6f0fa142a5c76"
+  integrity sha512-9sWaruZk2JGxIQU+IhI1fhPYRcQ0UuTNuKuCW9bR5fp7qi2Llf7WDzNa17Cy7TKnh3cdxDOiyTu6gaLS0eDatg==
   dependencies:
     "@types/yargs-parser" "*"
 
