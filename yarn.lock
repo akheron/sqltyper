@@ -1993,9 +1993,9 @@ form-data@^3.0.0:
     mime-types "^2.1.12"
 
 fp-ts@^2.5.3:
-  version "2.12.3"
-  resolved "https://registry.yarnpkg.com/fp-ts/-/fp-ts-2.12.3.tgz#d991b1e8467d325dadbb6b0ab9524f773e9c3c49"
-  integrity sha512-8m0XvW8kZbfnJOA4NvSVXu95mLbPf4LQGwQyqVukIYS4KzSNJiyKSmuZUmbVHteUi6MGkAJGPb0goPZqI+Tsqg==
+  version "2.13.0"
+  resolved "https://registry.yarnpkg.com/fp-ts/-/fp-ts-2.13.0.tgz#68825c2f1251c3fe6ff41a98eaa69599a3b2758a"
+  integrity sha512-3pkkmRDdA3CBQPDfr7vhNomiHOu7eQZDmGeFsD19gTKpUNy0eqvO3yN1LsSCenkDAXlqJSIDd6wtM7qqrR++UQ==
 
 fs.realpath@^1.0.0:
   version "1.0.0"
