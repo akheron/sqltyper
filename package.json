@@ -51,7 +51,7 @@
     "fp-ts": "^2.5.3",
     "node-watch": "^0.7.1",
     "packet-reader": "^1.0.0",
-    "ramda": "^0.28.0",
+    "ramda": "^0.29.0",
     "typescript": ">=3.8",
     "wrap-ansi": "^7.0.0",
     "yargs": "^17.0.0"
