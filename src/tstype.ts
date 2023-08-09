@@ -172,7 +172,7 @@ function tsStringLiteral(str: string): string {
     .createPrinter()
     .printNode(
       ts.EmitHint.Expression,
-      ts.createStringLiteral(str),
+      ts.factory.createStringLiteral(str),
       ts.createSourceFile('', '', ts.ScriptTarget.Latest)
     )
 }

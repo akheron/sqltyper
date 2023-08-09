@@ -52,7 +52,7 @@
     "node-watch": "^0.7.1",
     "packet-reader": "^1.0.0",
     "ramda": "^0.29.0",
-    "typescript": ">=3.8",
+    "typescript": ">=5.1.6",
     "wrap-ansi": "^7.0.0",
     "yargs": "^17.0.0"
   }
