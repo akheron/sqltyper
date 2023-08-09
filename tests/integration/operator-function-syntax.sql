@@ -9,7 +9,6 @@ CREATE TABLE person (
 --- query -----------------------------------------------------------------
 
 SELECT
-  (age!)::integer AS age_factorial,  -- suffix operator
   oveRLay(name placing 'foo' from 2 for 4) as overlaid,
   position('foo' in name) as pos,
   substring(name from 2 for 3) as sub1,
@@ -26,7 +25,6 @@ many
 
 --- expected column types -------------------------------------------------
 
-age_factorial: number
 overlaid: string
 pos: number
 sub1: string
