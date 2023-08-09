@@ -26,5 +26,4 @@ export function sequenceAIM<A>(ta: InferM.InferM<A>[]): InferM.InferM<A[]> {
 export const concat2 =
   <A>() =>
   (arr1: A[]) =>
-  (arr2: A[]): A[] =>
-    [...arr1, ...arr2]
+  (arr2: A[]): A[] => [...arr1, ...arr2]

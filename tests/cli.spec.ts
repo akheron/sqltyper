@@ -31,7 +31,7 @@ function recursiveDeleteTsFiles(dir: string) {
 }
 
 function removeGeneratedFiles() {
-  // eslint-disable-next-line @typescript-eslint/no-extra-semi
+  // eslint-disable-next-line no-extra-semi
   ;[sqlsDir, invalidSqlsDir].forEach(recursiveDeleteTsFiles)
   if (fs.existsSync(checkTs)) fs.unlinkSync(checkTs)
 }

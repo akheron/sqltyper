@@ -36,7 +36,10 @@ export function isParseError(e: any): e is ParseError {
 
 class ParseErrorImpl extends Error implements ParseError {
   private positions = new Map<number, Position>()
-  constructor(private source: string, private error: Failure) {
+  constructor(
+    private source: string,
+    private error: Failure
+  ) {
     super(error.message)
   }
   get offset(): number {
@@ -150,7 +153,11 @@ abstract class AbstractFailure implements Failure {
 
 class Expect extends AbstractFailure {
   public alias: string | null = null
-  constructor(context: Context, public what: string, public type: string) {
+  constructor(
+    context: Context,
+    public what: string,
+    public type: string
+  ) {
     super(context)
   }
   get message(): string {
@@ -162,7 +169,11 @@ class Expect extends AbstractFailure {
 }
 
 class NotFound extends AbstractFailure {
-  constructor(context: Context, public what: string, public name: string) {
+  constructor(
+    context: Context,
+    public what: string,
+    public name: string
+  ) {
     super(context)
   }
   get message(): string {
@@ -179,14 +190,20 @@ class ExpectEnd extends AbstractFailure {
   }
 }
 class CustomErr extends AbstractFailure {
-  constructor(context: Context, public message: string) {
+  constructor(
+    context: Context,
+    public message: string
+  ) {
     super(context)
   }
 }
 
 class ExpectOneOf extends AbstractFailure {
   public alias: string | null = null
-  constructor(context: Context, public errors: Failure[]) {
+  constructor(
+    context: Context,
+    public errors: Failure[]
+  ) {
     super(context)
   }
   get message(): string {
