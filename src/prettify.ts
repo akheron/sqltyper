@@ -4,7 +4,7 @@ export async function runPrettier(
 ): Promise<string> {
   let format, resolveConfig
   try {
-    // eslint-disable-next-line @typescript-eslint/no-extra-semi
+    // eslint-disable-next-line no-extra-semi
     ;({ format, resolveConfig } = require('prettier'))
   } catch (_err) {
     console.warn(
