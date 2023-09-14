@@ -32,7 +32,7 @@
   "devDependencies": {
     "@types/jest": "^27.0.1",
     "@types/node": "^20.3.1",
-    "@types/ramda": "^0.27.3",
+    "@types/ramda": "^0.29.4",
     "@types/wrap-ansi": "^3.0.0",
     "@types/yargs": "^17.0.0",
     "@typescript-eslint/eslint-plugin": "^6.3.0",
